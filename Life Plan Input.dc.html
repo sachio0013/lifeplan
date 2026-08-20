@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/organic-7b75d898-b361-4e3a-acbf-54d13e366431/styles.css">
+<script src="_ds/organic-7b75d898-b361-4e3a-acbf-54d13e366431/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&display=swap" rel="stylesheet">
+<style>
+body { margin: 0; background: var(--color-neutral-200); }
+a { color: var(--color-accent-700); }
+a:hover { color: var(--color-accent-800); }
+.zm { font-family: 'Zen Maru Gothic', var(--font-body); }
+.msr { font-family: 'Material Symbols Rounded'; font-weight: 400; font-style: normal; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; direction: ltr; -webkit-font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
+.fld { font-family: 'Zen Maru Gothic', var(--font-body); font-weight: 700; }
+.fld:focus { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.ix::-webkit-scrollbar { display: none; }
+</style>
+</helmet>
+
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412,892" style="margin:28px auto;display:block">
+<div class="zm" style="width:100%;height:100%;display:flex;flex-direction:column;background:var(--color-bg);box-sizing:border-box;color:var(--color-text);overflow:hidden">
+
+  <div style="flex-shrink:0;display:flex;align-items:center;height:56px;padding:0 18px;background:var(--color-bg)">
+    <div class="zm" style="font-size:19px;font-weight:900;letter-spacing:0.02em">ライフプラン</div>
+  </div>
+
+  <div ref="{{ scrollRef }}" onScroll="{{ onScroll }}" style="flex:1;overflow-y:auto;overflow-x:hidden;position:relative">
+
+    <div onClick="{{ openGraph }}" style="position:sticky;top:0;z-index:3;height:72px;box-sizing:border-box;padding:8px 18px 6px;background:{{ summaryBg }};cursor:pointer;display:flex;flex-direction:column;justify-content:center;gap:4px">
+      <sc-if value="{{ isWarning }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="msr" style="font-size:19px;color:var(--color-accent-800)">warning</span>
+          <span style="font-size:14px;font-weight:700;color:var(--color-accent-800)">52歳で預金が不足します</span>
+          <span style="font-size:16px;font-weight:900;color:var(--color-accent-800);margin-left:auto">−180万円</span>
+        </div>
+        <svg viewBox="0 0 340 32" width="100%" height="32" preserveAspectRatio="none" style="display:block">
+          <path d="{{ sparkArea }}" fill="var(--color-accent-300)" fill-opacity="0.55" />
+          <path d="{{ sparkLine }}" fill="none" stroke="var(--color-accent-800)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+        </svg>
+      </sc-if>
+      <sc-if value="{{ isNormal }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">終了時点の金融資産</span>
+          <span style="font-size:19px;font-weight:900;color:var(--color-text);margin-left:auto">1,240<span style="font-size:12px;font-weight:700;color:var(--color-neutral-700)"> 万円</span></span>
+        </div>
+        <svg viewBox="0 0 340 32" width="100%" height="32" preserveAspectRatio="none" style="display:block">
+          <path d="{{ sparkArea }}" fill="var(--color-accent-2-200)" fill-opacity="0.6" />
+          <path d="{{ sparkLine }}" fill="none" stroke="var(--color-accent-2-700)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+        </svg>
+      </sc-if>
+    </div>
+
+    <div class="ix" style="position:sticky;top:72px;z-index:2;display:flex;gap:6px;padding:8px 14px;background:var(--color-bg);border-bottom:1.5px solid var(--color-neutral-200);scrollbar-width:none">
+      <sc-for list="{{ indexItems }}" as="ix" hint-placeholder-count="4">
+        <div onClick="{{ ix.jump }}" style="flex:1;text-align:center;padding:8px 4px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;background:{{ ix.bg }};color:{{ ix.color }}">{{ ix.label }}</div>
+      </sc-for>
+    </div>
+
+    <div style="padding:0 16px 40px">
+
+      <div ref="{{ basicRef }}" style="padding-top:18px">
+        <div style="display:flex;align-items:center;gap:7px;padding:0 2px 10px">
+          <span class="msr" style="font-size:20px;color:var(--color-accent)">tune</span>
+          <span style="font-size:17px;font-weight:900">基本</span>
+        </div>
+
+        <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:12px">
+          <div style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700);margin-bottom:10px">シミュレーション終了年齢</div>
+          <div style="display:flex;align-items:baseline;gap:7px">
+            <input type="number" value="{{ endAge }}" onChange="{{ setEndAge }}" class="fld" style="width:74px;padding:7px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:20px;text-align:right;color:var(--color-text)" />
+            <span style="font-size:12.5px;font-weight:500;color:var(--color-neutral-700)">歳まで</span>
+          </div>
+        </div>
+
+        <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 6px;margin-bottom:12px">
+          <div style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700);margin-bottom:6px">前年末の金融資産</div>
+          <sc-for list="{{ assetRows }}" as="a" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--color-neutral-100)">
+              <span style="font-size:13.5px;font-weight:500">{{ a.label }}</span>
+              <span style="display:flex;align-items:baseline;gap:6px">
+                <input type="number" value="{{ a.value }}" onChange="{{ a.set }}" class="fld" style="width:88px;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:18px;text-align:right;color:var(--color-text)" />
+                <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700);width:30px">万円</span>
+              </span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 8px;margin-bottom:12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700)">家族構成</span>
+            <span style="font-size:11px;font-weight:500;color:var(--color-neutral-600)">最大4人</span>
+          </div>
+          <sc-for list="{{ familyRows }}" as="m" hint-placeholder-count="4">
+            <div style="padding:11px 0;border-top:1px solid var(--color-neutral-100)">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+                <input type="text" value="{{ m.name }}" onChange="{{ m.setName }}" class="fld" style="flex:1;min-width:0;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:15px;color:var(--color-text)" />
+                <span style="font-size:11px;font-weight:700;color:var(--color-accent-2-800);background:var(--color-accent-2-100);padding:3px 10px;border-radius:999px;white-space:nowrap">{{ m.relation }}</span>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:8px">
+                <input type="text" value="{{ m.birth }}" onChange="{{ m.setBirth }}" class="fld" style="width:110px;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:15px;color:var(--color-text)" />
+                <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-600)">{{ m.age }}歳</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div ref="{{ incomeRef }}" style="padding-top:16px">
+        <div style="display:flex;align-items:center;gap:7px;padding:0 2px 10px">
+          <span class="msr" style="font-size:20px;color:var(--color-accent)">payments</span>
+          <span style="font-size:17px;font-weight:900">収入</span>
+        </div>
+
+        <sc-for list="{{ incomeGroups }}" as="g" hint-placeholder-count="5">
+          <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 10px;margin-bottom:12px">
+            <div style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700);margin-bottom:2px">{{ g.label }}</div>
+            <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+              <div style="padding:11px 0 12px;border-top:1px solid var(--color-neutral-100)">
+                <div style="display:flex;align-items:baseline;gap:7px">
+                  <input type="number" value="{{ r.year }}" onChange="{{ r.setYear }}" class="fld" style="width:76px;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:18px;text-align:right;color:var(--color-text)" />
+                  <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">{{ g.yearSuffix }}</span>
+                  <span onClick="{{ r.remove }}" style="margin-left:auto;cursor:pointer;display:flex;align-items:center;padding:2px">
+                    <span class="msr" style="font-size:20px;color:var(--color-neutral-500)">delete</span>
+                  </span>
+                </div>
+                <div style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-top:3px">{{ r.ageHint }}</div>
+                <div style="display:flex;align-items:baseline;gap:7px;margin-top:9px">
+                  <input type="number" value="{{ r.amount }}" onChange="{{ r.setAmount }}" class="fld" style="width:92px;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:18px;text-align:right;color:var(--color-text)" />
+                  <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">万円</span>
+                  <sc-if value="{{ g.hasGrowth }}" hint-placeholder-val="{{ true }}">
+                    <input type="number" value="{{ r.growth }}" onChange="{{ r.setGrowth }}" class="fld" style="width:56px;margin-left:10px;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:18px;text-align:right;color:var(--color-text)" />
+                    <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">%</span>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ g.canAdd }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ g.add }}" style="display:flex;align-items:center;justify-content:center;gap:5px;padding:11px 0 6px;border-top:1px solid var(--color-neutral-100);color:var(--color-accent-700);font-size:13px;font-weight:700;cursor:pointer">
+                <span class="msr" style="font-size:18px">add</span>追加
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <div ref="{{ expenseRef }}" style="padding-top:16px">
+        <div style="display:flex;align-items:center;gap:7px;padding:0 2px 10px">
+          <span class="msr" style="font-size:20px;color:var(--color-accent)">shopping_basket</span>
+          <span style="font-size:17px;font-weight:900">支出</span>
+        </div>
+
+        <sc-for list="{{ expenseGroups }}" as="g" hint-placeholder-count="6">
+          <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 10px;margin-bottom:12px">
+            <div style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700);margin-bottom:2px">{{ g.label }}</div>
+            <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+              <div style="padding:11px 0 12px;border-top:1px solid var(--color-neutral-100)">
+                <div style="display:flex;align-items:baseline;gap:7px">
+                  <input type="number" value="{{ r.year }}" onChange="{{ r.setYear }}" class="fld" style="width:76px;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:18px;text-align:right;color:var(--color-text)" />
+                  <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">{{ g.yearSuffix }}</span>
+                  <span onClick="{{ r.remove }}" style="margin-left:auto;cursor:pointer;display:flex;align-items:center;padding:2px">
+                    <span class="msr" style="font-size:20px;color:var(--color-neutral-500)">delete</span>
+                  </span>
+                </div>
+                <div style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-top:3px">{{ r.ageHint }}</div>
+                <div style="display:flex;align-items:baseline;gap:7px;margin-top:9px">
+                  <input type="number" value="{{ r.amount }}" onChange="{{ r.setAmount }}" class="fld" style="width:92px;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:18px;text-align:right;color:var(--color-text)" />
+                  <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">万円</span>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ g.canAdd }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ g.add }}" style="display:flex;align-items:center;justify-content:center;gap:5px;padding:11px 0 6px;border-top:1px solid var(--color-neutral-100);color:var(--color-accent-700);font-size:13px;font-weight:700;cursor:pointer">
+                <span class="msr" style="font-size:18px">add</span>追加
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <div ref="{{ investRef }}" style="padding-top:16px">
+        <div style="display:flex;align-items:center;gap:7px;padding:0 2px 10px">
+          <span class="msr" style="font-size:20px;color:var(--color-accent)">savings</span>
+          <span style="font-size:17px;font-weight:900">投資</span>
+        </div>
+
+        <sc-for list="{{ investGroups }}" as="g" hint-placeholder-count="2">
+          <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 10px;margin-bottom:12px">
+            <div style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700);margin-bottom:2px">{{ g.label }}</div>
+            <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+              <div style="padding:11px 0 12px;border-top:1px solid var(--color-neutral-100)">
+                <div style="display:flex;align-items:baseline;gap:7px">
+                  <input type="number" value="{{ r.year }}" onChange="{{ r.setYear }}" class="fld" style="width:76px;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:18px;text-align:right;color:var(--color-text)" />
+                  <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">{{ g.yearSuffix }}</span>
+                  <span onClick="{{ r.remove }}" style="margin-left:auto;cursor:pointer;display:flex;align-items:center;padding:2px">
+                    <span class="msr" style="font-size:20px;color:var(--color-neutral-500)">delete</span>
+                  </span>
+                </div>
+                <div style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-top:3px">{{ r.ageHint }}</div>
+                <div style="display:flex;align-items:baseline;gap:7px;margin-top:9px">
+                  <input type="number" value="{{ r.amount }}" onChange="{{ r.setAmount }}" class="fld" style="width:92px;padding:5px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:18px;text-align:right;color:var(--color-text)" />
+                  <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">万円</span>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ g.canAdd }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ g.add }}" style="display:flex;align-items:center;justify-content:center;gap:5px;padding:11px 0 6px;border-top:1px solid var(--color-neutral-100);color:var(--color-accent-700);font-size:13px;font-weight:700;cursor:pointer">
+                <span class="msr" style="font-size:18px">add</span>追加
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-import>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:412,&quot;height&quot;:892},&quot;warning&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;サマリーバー&quot;}}">
+const HUSBAND_BIRTH = 1991, WIFE_BIRTH = 1991;
+
+const GROUP_DEFS = [
+  { key: 'salaryH', label: '給与（夫）', kind: 'change', hasGrowth: true },
+  { key: 'salaryW', label: '給与（妻）', kind: 'change', hasGrowth: true },
+  { key: 'salaryO', label: '給与（その他）', kind: 'change', hasGrowth: true },
+  { key: 'retire', label: '退職一時金', kind: 'lump', hasGrowth: false },
+  { key: 'pension', label: '公的年金', kind: 'change', hasGrowth: false },
+];
+
+const EXPENSE_DEFS = [
+  { key: 'living', label: '基本生活費', kind: 'change', hasGrowth: false },
+  { key: 'housing', label: '住宅費', kind: 'change', hasGrowth: false },
+  { key: 'education', label: '教育費', kind: 'change', hasGrowth: false },
+  { key: 'insurance', label: '保険料', kind: 'change', hasGrowth: false },
+  { key: 'car', label: '自動車関連費', kind: 'change', hasGrowth: false },
+  { key: 'otherExp', label: 'その他支出', kind: 'lump', hasGrowth: false },
+];
+
+const INVEST_DEFS = [
+  { key: 'nisaBuy', label: 'NISA 積立', kind: 'change', hasGrowth: false },
+  { key: 'idecoBuy', label: 'iDeCo 積立', kind: 'change', hasGrowth: false },
+];
+
+class Component extends DCLogic {
+  state = {
+    active: 'basic',
+    endAge: 90,
+    assets: { deposit: 500, nisa: 0, ideco: 0 },
+    family: [
+      { id: 1, name: '夫', relation: '世帯主', birth: '1991/01/01' },
+      { id: 2, name: '妻', relation: '配偶者', birth: '1991/01/01' },
+      { id: 3, name: '第一子', relation: '子供1', birth: '2022/01/01' },
+      { id: 4, name: '第二子', relation: '子供2', birth: '2024/01/01' },
+    ],
+    lists: {
+      salaryH: [
+        { id: 1, year: 2026, amount: 500, growth: 1.5 },
+        { id: 2, year: 2051, amount: 300, growth: 0 },
+        { id: 3, year: 2056, amount: 0, growth: 0 },
+      ],
+      salaryW: [
+        { id: 1, year: 2026, amount: 300, growth: 1.5 },
+        { id: 2, year: 2051, amount: 0, growth: 0 },
+      ],
+      salaryO: [],
+      retire: [{ id: 1, year: 2051, amount: 1500 }],
+      pension: [{ id: 1, year: 2056, amount: 290 }],
+      living: [
+        { id: 1, year: 2026, amount: 240 },
+        { id: 2, year: 2056, amount: 200 },
+      ],
+      housing: [
+        { id: 1, year: 2026, amount: 150 },
+        { id: 2, year: 2061, amount: 25 },
+      ],
+      education: [
+        { id: 1, year: 2028, amount: 30 },
+        { id: 2, year: 2040, amount: 120 },
+        { id: 3, year: 2047, amount: 0 },
+      ],
+      insurance: [{ id: 1, year: 2026, amount: 30 }],
+      car: [{ id: 1, year: 2026, amount: 20 }],
+      otherExp: [{ id: 1, year: 2046, amount: 100 }],
+      nisaBuy: [
+        { id: 1, year: 2026, amount: 60 },
+        { id: 2, year: 2051, amount: 0 },
+      ],
+      idecoBuy: [
+        { id: 1, year: 2026, amount: 27 },
+        { id: 2, year: 2051, amount: 0 },
+      ],
+    },
+    nextId: 90,
+  };
+
+  scrollEl = null;
+  anchors = {};
+
+  setScrollRef = (el) => { this.scrollEl = el; };
+  setAnchor = (key) => (el) => { this.anchors[key] = el; };
+
+  jumpTo(key) {
+    const el = this.anchors[key];
+    if (!el || !this.scrollEl) { this.setState({ active: key }); return; }
+    this.setState({ active: key });
+    this.scrollEl.scrollTop = Math.max(0, el.offsetTop - 118);
+  }
+
+  onScroll = () => {
+    if (!this.scrollEl) return;
+    const y = this.scrollEl.scrollTop;
+    let next = 'basic';
+    ['basic', 'income', 'expense', 'invest'].forEach(k => {
+      const el = this.anchors[k];
+      if (el && y >= Math.max(0, el.offsetTop - 140)) next = k;
+    });
+    if (next !== this.state.active) this.setState({ active: next });
+  };
+
+  setAsset(key, v) { this.setState(st => ({ assets: { ...st.assets, [key]: v } })); }
+  setFamilyField(id, field, v) {
+    this.setState(st => ({ family: st.family.map(m => m.id === id ? { ...m, [field]: v } : m) }));
+  }
+  setRowField(listKey, id, field, v) {
+    this.setState(st => ({ lists: { ...st.lists, [listKey]: st.lists[listKey].map(r => r.id === id ? { ...r, [field]: v } : r) } }));
+  }
+  removeRow(listKey, id) {
+    this.setState(st => ({ lists: { ...st.lists, [listKey]: st.lists[listKey].filter(r => r.id !== id) } }));
+  }
+  addRow(listKey, hasGrowth) {
+    this.setState(st => {
+      const list = st.lists[listKey];
+      if (list.length >= 5) return {};
+      const last = list[list.length - 1];
+      const row = { id: st.nextId, year: last ? last.year + 5 : 2026, amount: 0 };
+      if (hasGrowth) row.growth = 0;
+      return { lists: { ...st.lists, [listKey]: [...list, row] }, nextId: st.nextId + 1 };
+    });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const num = (e) => { const v = parseFloat(e.target.value); return isNaN(v) ? 0 : v; };
+    const thisYear = 2026;
+    const isWarning = !!this.props.warning;
+
+    const spark = (() => {
+      const w = 340, h = 32, n = 46;
+      const pts = [];
+      for (let i = 0; i < n; i++) {
+        const p = i / (n - 1);
+        const v = isWarning
+          ? 0.62 + 0.28 * Math.sin(p * 2.1) - 0.78 * Math.pow(p, 1.7)
+          : 0.20 + 0.68 * Math.pow(p, 1.3) - 0.10 * Math.sin(p * 4.8);
+        pts.push([p * w, h - Math.max(0.04, Math.min(0.96, v)) * (h - 5) - 2.5]);
+      }
+      let line = '';
+      pts.forEach((pt, i) => { line += (i === 0 ? 'M' : 'L') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1) + ' '; });
+      return { line, area: line + `L${w},${h} L0,${h} Z` };
+    })();
+
+    const assetRows = [
+      { key: 'deposit', label: '普通預金等', value: s.assets.deposit },
+      { key: 'nisa', label: 'NISA', value: s.assets.nisa },
+      { key: 'ideco', label: 'iDeCo', value: s.assets.ideco },
+    ].map(a => ({ ...a, set: (e) => this.setAsset(a.key, num(e)) }));
+
+    const familyRows = s.family.map(m => {
+      const by = parseInt(String(m.birth).slice(0, 4), 10);
+      return {
+        ...m,
+        age: Number.isFinite(by) ? thisYear - by : 0,
+        setName: (e) => this.setFamilyField(m.id, 'name', e.target.value),
+        setBirth: (e) => this.setFamilyField(m.id, 'birth', e.target.value),
+      };
+    });
+
+    const buildGroups = (defs) => defs.map(g => ({
+      label: g.label,
+      hasGrowth: g.hasGrowth,
+      yearSuffix: g.kind === 'lump' ? '年に' : '年から',
+      canAdd: (s.lists[g.key] || []).length < 5,
+      add: () => this.addRow(g.key, g.hasGrowth),
+      rows: (s.lists[g.key] || []).map(r => ({
+        year: r.year,
+        amount: r.amount,
+        growth: r.growth,
+        ageHint: `夫 ${r.year - HUSBAND_BIRTH}歳 ・ 妻 ${r.year - WIFE_BIRTH}歳`,
+        setYear: (e) => this.setRowField(g.key, r.id, 'year', num(e)),
+        setAmount: (e) => this.setRowField(g.key, r.id, 'amount', num(e)),
+        setGrowth: (e) => this.setRowField(g.key, r.id, 'growth', num(e)),
+        remove: () => this.removeRow(g.key, r.id),
+      })),
+    }));
+
+    const incomeGroups = buildGroups(GROUP_DEFS);
+    const expenseGroups = buildGroups(EXPENSE_DEFS);
+    const investGroups = buildGroups(INVEST_DEFS);
+
+    const indexItems = [
+      { key: 'basic', label: '基本' },
+      { key: 'income', label: '収入' },
+      { key: 'expense', label: '支出' },
+      { key: 'invest', label: '投資' },
+    ].map(it => {
+      const on = s.active === it.key;
+      return {
+        label: it.label,
+        bg: on ? 'var(--color-accent)' : 'var(--color-neutral-100)',
+        color: on ? '#fff' : 'var(--color-neutral-700)',
+        jump: () => this.jumpTo(it.key),
+      };
+    });
+
+    return {
+      isWarning, isNormal: !isWarning,
+      summaryBg: isWarning ? 'var(--color-accent-100)' : 'var(--color-bg)',
+      sparkLine: spark.line, sparkArea: spark.area,
+      openGraph: () => {},
+      scrollRef: this.setScrollRef,
+      basicRef: this.setAnchor('basic'),
+      incomeRef: this.setAnchor('income'),
+      expenseRef: this.setAnchor('expense'),
+      investRef: this.setAnchor('invest'),
+      expenseGroups, investGroups,
+      onScroll: this.onScroll,
+      indexItems,
+      endAge: s.endAge,
+      setEndAge: (e) => this.setState({ endAge: num(e) }),
+      assetRows, familyRows, incomeGroups,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

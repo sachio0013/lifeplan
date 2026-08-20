@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/organic-7b75d898-b361-4e3a-acbf-54d13e366431/styles.css">
+<script src="_ds/organic-7b75d898-b361-4e3a-acbf-54d13e366431/_ds_bundle.js"></script>
+<style>
+body { margin: 0; background: var(--color-neutral-200); }
+a { color: var(--color-accent-700); }
+a:hover { color: var(--color-accent-800); }
+.lp-in { font-family: var(--font-body); }
+.lp-in:focus { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.noscroll::-webkit-scrollbar { display: none; }
+</style>
+</helmet>
+
+<template id="__bundler_thumbnail">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#f5ead8"/><rect x="34" y="24" width="32" height="52" rx="7" fill="#c67139"/><path d="M40 60 L47 50 L53 55 L60 40" fill="none" stroke="#f5ead8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="60" cy="40" r="3" fill="#7a8a5e" stroke="#f5ead8" stroke-width="2"/></svg>
+</template>
+
+<section style="padding:40px;display:flex;flex-direction:column;gap:20px;font-family:var(--font-body)">
+  <div style="max-width:900px">
+    <div style="font-family:var(--font-heading);font-size:30px;color:var(--color-text)">メイン画面のデザイン案</div>
+    <div style="font-size:15px;color:var(--color-neutral-700);margin-top:8px;line-height:1.6">グラフ → 大分類タブ → 小項目 → 入力エリア、の3段構成で3パターン。<a href="#1a">1a</a> はやわらかいカード型、<a href="#1b">1b</a> は情報を整列させた明細型、<a href="#1c">1c</a> はアイコンタイル型です。</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+
+    <div id="1a" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="background:var(--color-accent);color:#fff;font-weight:700;font-size:13px;padding:3px 12px;border-radius:999px">1a</span>
+        <span style="font-family:var(--font-heading);font-size:17px;color:var(--color-text)">やわらかカード</span>
+      </div>
+      <div style="font-size:13px;color:var(--color-neutral-700);max-width:412px;line-height:1.5">丸いピルタブを横スクロール。小項目はサージのチップ。入力は1項目1カードでゆったり。</div>
+      <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412,892">
+        <div style="width:100%;height:100%;display:flex;flex-direction:column;background:var(--color-bg);box-sizing:border-box;font-family:var(--font-body);color:var(--color-text)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 0">
+            <div style="font-family:var(--font-heading);font-size:19px">ライフプラン</div>
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--color-accent-2-100);display:flex;align-items:center;justify-content:center;font-size:15px">🏠</div>
+          </div>
+          <div style="padding:8px 20px 0">
+            <div style="font-size:12px;color:var(--color-neutral-700)">54歳（2040年）時点の資産</div>
+            <div style="font-family:var(--font-heading);font-size:27px;margin-top:1px">2,480<span style="font-family:var(--font-body);font-size:13px;font-weight:600;color:var(--color-neutral-700)"> 万円</span>
+              <span style="display:inline-block;margin-left:8px;padding:2px 11px;border-radius:999px;font-size:11.5px;font-weight:700;background:var(--color-accent-2-100);color:var(--color-accent-2-800);vertical-align:middle">収支 +112</span>
+            </div>
+          </div>
+          <div style="padding:2px 14px 0">
+            <svg viewBox="0 0 360 104" width="100%" height="98" style="display:block">
+              <path d="{{ areaPath }}" fill="var(--color-accent-2-200)" fill-opacity="0.5" />
+              <path d="{{ linePath }}" fill="none" stroke="var(--color-accent-2-600)" stroke-width="2.75" stroke-linecap="round" />
+              <circle cx="{{ markerX }}" cy="{{ markerY }}" r="5.5" fill="#fff" stroke="var(--color-accent)" stroke-width="3" />
+            </svg>
+          </div>
+
+          <div class="noscroll" style="display:flex;gap:7px;overflow-x:auto;padding:10px 16px 8px;scrollbar-width:none">
+            <sc-for list="{{ tabsA }}" as="t" hint-placeholder-count="8">
+              <div onClick="{{ t.select }}" style="display:flex;align-items:center;gap:5px;padding:8px 14px;border-radius:999px;background:{{ t.bg }};color:{{ t.color }};font-size:13px;font-weight:700;white-space:nowrap;cursor:pointer;box-shadow:{{ t.shadow }}">
+                <span style="font-size:13px">{{ t.icon }}</span>{{ t.label }}
+              </div>
+            </sc-for>
+          </div>
+
+          <div class="noscroll" style="display:flex;gap:7px;overflow-x:auto;padding:0 16px 10px;scrollbar-width:none">
+            <sc-for list="{{ subsA }}" as="sb" hint-placeholder-count="3">
+              <div onClick="{{ sb.select }}" style="padding:6px 13px;border-radius:999px;border:1.5px solid {{ sb.border }};background:{{ sb.bg }};color:{{ sb.color }};font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer">{{ sb.label }}</div>
+            </sc-for>
+          </div>
+
+          <div style="flex:1;overflow:auto;padding:2px 16px 20px;display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ fieldsA }}" as="f" hint-placeholder-count="3">
+              <div style="background:#fff;border-radius:var(--radius-lg);padding:14px 16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:8px">
+                <div style="font-size:13px;font-weight:700;color:var(--color-text)">{{ f.label }}</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="number" value="{{ f.value }}" onChange="{{ f.set }}" class="lp-in" style="flex:1;padding:11px 16px;border:1.5px solid var(--color-neutral-200);border-radius:999px;font-size:17px;font-weight:700;text-align:right;background:var(--color-neutral-100);color:var(--color-text)" />
+                  <span style="font-size:12.5px;color:var(--color-neutral-700);width:44px">{{ f.unit }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <div id="1b" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="background:var(--color-accent);color:#fff;font-weight:700;font-size:13px;padding:3px 12px;border-radius:999px">1b</span>
+        <span style="font-family:var(--font-heading);font-size:17px;color:var(--color-text)">明細リスト</span>
+      </div>
+      <div style="font-size:13px;color:var(--color-neutral-700);max-width:412px;line-height:1.5">タブは下線式でスッキリ。小項目はセグメント。入力は1枚のカードに整列するので比較しやすい。</div>
+      <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412,892">
+        <div style="width:100%;height:100%;display:flex;flex-direction:column;background:var(--color-bg);box-sizing:border-box;font-family:var(--font-body);color:var(--color-text)">
+          <div style="background:var(--color-accent-2-100);padding:18px 20px 12px;border-bottom-left-radius:var(--radius-lg);border-bottom-right-radius:var(--radius-lg)">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-family:var(--font-heading);font-size:19px">ライフプラン</div>
+              <div style="width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:15px">🏠</div>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px">
+              <div style="font-family:var(--font-heading);font-size:26px">2,480<span style="font-family:var(--font-body);font-size:13px;font-weight:600;color:var(--color-accent-2-800)"> 万円</span></div>
+              <div style="font-size:11.5px;color:var(--color-accent-2-800);font-weight:700">54歳・収支 +112万円</div>
+            </div>
+            <svg viewBox="0 0 360 90" width="100%" height="86" style="display:block;margin-top:2px">
+              <path d="{{ areaPathB }}" fill="#fff" fill-opacity="0.55" />
+              <path d="{{ linePathB }}" fill="none" stroke="var(--color-accent-2-700)" stroke-width="2.75" stroke-linecap="round" />
+              <circle cx="{{ markerXB }}" cy="{{ markerYB }}" r="5.5" fill="#fff" stroke="var(--color-accent)" stroke-width="3" />
+            </svg>
+          </div>
+
+          <div class="noscroll" style="display:flex;gap:2px;overflow-x:auto;padding:6px 12px 0;scrollbar-width:none;border-bottom:1.5px solid var(--color-neutral-200)">
+            <sc-for list="{{ tabsB }}" as="t" hint-placeholder-count="8">
+              <div onClick="{{ t.select }}" style="padding:11px 12px 9px;font-size:13px;font-weight:700;color:{{ t.color }};border-bottom:3px solid {{ t.bar }};white-space:nowrap;cursor:pointer">{{ t.label }}</div>
+            </sc-for>
+          </div>
+
+          <div style="padding:12px 18px 8px">
+            <div style="display:flex;gap:4px;background:var(--color-neutral-100);padding:4px;border-radius:999px">
+              <sc-for list="{{ subsB }}" as="sb" hint-placeholder-count="3">
+                <div onClick="{{ sb.select }}" style="flex:1;text-align:center;padding:9px 6px;border-radius:999px;background:{{ sb.bg }};color:{{ sb.color }};font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer">{{ sb.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="flex:1;overflow:auto;padding:2px 18px 20px">
+            <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden">
+              <sc-for list="{{ fieldsB }}" as="f" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 16px;border-bottom:1px solid var(--color-neutral-100)">
+                  <span style="font-size:13.5px;color:var(--color-text);font-weight:600">{{ f.label }}</span>
+                  <span style="display:flex;align-items:baseline;gap:5px">
+                    <input type="number" value="{{ f.value }}" onChange="{{ f.set }}" class="lp-in" style="width:84px;padding:6px 2px;border:none;border-bottom:2px solid var(--color-accent-200);background:transparent;font-size:18px;font-weight:700;text-align:right;color:var(--color-text)" />
+                    <span style="font-size:11.5px;color:var(--color-neutral-700);width:40px">{{ f.unit }}</span>
+                  </span>
+                </div>
+              </sc-for>
+              <div style="padding:12px 16px;font-size:12px;color:var(--color-accent-700);font-weight:700;cursor:pointer">＋ 項目を追加</div>
+            </div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <div id="1c" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="background:var(--color-accent);color:#fff;font-weight:700;font-size:13px;padding:3px 12px;border-radius:999px">1c</span>
+        <span style="font-family:var(--font-heading);font-size:17px;color:var(--color-text)">アイコンタイル</span>
+      </div>
+      <div style="font-size:13px;color:var(--color-neutral-700);max-width:412px;line-height:1.5">大分類は下部のアイコンバー、小項目は丸アイコンのタイル。入力は±ボタン付きで指だけで調整できる。</div>
+      <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" hint-size="412,892">
+        <div style="width:100%;height:100%;display:flex;flex-direction:column;background:var(--color-bg);box-sizing:border-box;font-family:var(--font-body);color:var(--color-text)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 0">
+            <div style="font-family:var(--font-heading);font-size:19px">ライフプラン</div>
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--color-accent-2-100);display:flex;align-items:center;justify-content:center;font-size:15px">🏠</div>
+          </div>
+          <div style="padding:6px 20px 0">
+            <div style="font-size:12px;color:var(--color-neutral-700)">54歳（2040年）時点の資産</div>
+            <div style="font-family:var(--font-heading);font-size:27px;margin-top:1px">2,480<span style="font-family:var(--font-body);font-size:13px;font-weight:600;color:var(--color-neutral-700)"> 万円</span></div>
+          </div>
+          <div style="padding:2px 14px 0">
+            <svg viewBox="0 0 360 98" width="100%" height="92" style="display:block">
+              <path d="{{ areaPathC }}" fill="var(--color-accent-200)" fill-opacity="0.45" />
+              <path d="{{ linePathC }}" fill="none" stroke="var(--color-accent)" stroke-width="2.75" stroke-linecap="round" />
+              <circle cx="{{ markerXC }}" cy="{{ markerYC }}" r="5.5" fill="#fff" stroke="var(--color-accent-2-600)" stroke-width="3" />
+            </svg>
+          </div>
+
+          <div style="padding:8px 16px 4px;font-size:11.5px;font-weight:700;color:var(--color-neutral-700)">{{ groupLabelC }}のなかから選ぶ</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:0 16px 10px">
+            <sc-for list="{{ subsC }}" as="sb" hint-placeholder-count="3">
+              <div onClick="{{ sb.select }}" style="background:{{ sb.bg }};border:1.5px solid {{ sb.border }};border-radius:var(--radius-lg);padding:11px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer">
+                <div style="width:30px;height:30px;border-radius:50%;background:{{ sb.dotBg }};display:flex;align-items:center;justify-content:center;font-size:14px">{{ sb.icon }}</div>
+                <div style="font-size:11px;font-weight:700;color:{{ sb.color }};text-align:center;line-height:1.2">{{ sb.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="flex:1;overflow:auto;padding:2px 16px 14px;display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ fieldsC }}" as="f" hint-placeholder-count="3">
+              <div style="background:#fff;border-radius:var(--radius-lg);padding:12px 14px;box-shadow:var(--shadow-sm)">
+                <div style="font-size:12px;color:var(--color-neutral-700);font-weight:600;margin-bottom:8px">{{ f.label }}</div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div onClick="{{ f.dec }}" style="width:38px;height:38px;border-radius:50%;background:var(--color-neutral-100);color:var(--color-accent-700);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;cursor:pointer;flex-shrink:0">−</div>
+                  <div style="flex:1;text-align:center">
+                    <span style="font-family:var(--font-heading);font-size:22px;color:var(--color-text)">{{ f.value }}</span>
+                    <span style="font-size:11.5px;color:var(--color-neutral-700);margin-left:4px">{{ f.unit }}</span>
+                  </div>
+                  <div onClick="{{ f.inc }}" style="width:38px;height:38px;border-radius:50%;background:var(--color-accent-100);color:var(--color-accent-800);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;cursor:pointer;flex-shrink:0">＋</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(8,1fr);background:#fff;border-top:1px solid var(--color-neutral-200);flex-shrink:0">
+            <sc-for list="{{ tabsC }}" as="t" hint-placeholder-count="8">
+              <div onClick="{{ t.select }}" style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 10px;cursor:pointer;background:{{ t.bg }}">
+                <div style="font-size:16px;line-height:1">{{ t.icon }}</div>
+                <div style="font-size:8.5px;font-weight:700;color:{{ t.color }};white-space:nowrap">{{ t.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const GROUPS = [
+  { key: 'income', label: '収入', icon: '¥', subs: [
+    { label: '給与', icon: '💼', fields: [{ label: 'たかし 年収', value: 500, unit: '万円' }, { label: 'ゆき 年収', value: 300, unit: '万円' }, { label: '昇給率', value: 1, unit: '%/年' }] },
+    { label: '年金', icon: '🎋', fields: [{ label: '受給額', value: 180, unit: '万円/年' }, { label: '受給開始', value: 65, unit: '歳' }] },
+    { label: '退職金', icon: '🎁', fields: [{ label: '一時金', value: 800, unit: '万円' }, { label: '受取年齢', value: 60, unit: '歳' }] },
+  ]},
+  { key: 'living', label: '生活費', icon: '🍚', subs: [
+    { label: '基本', icon: '🍚', fields: [{ label: '食費・日用品', value: 156, unit: '万円/年' }, { label: '水道光熱費', value: 30, unit: '万円/年' }, { label: '通信費', value: 18, unit: '万円/年' }] },
+    { label: '変動費', icon: '🛍️', fields: [{ label: '被服・美容', value: 20, unit: '万円/年' }, { label: '交際費', value: 16, unit: '万円/年' }] },
+  ]},
+  { key: 'housing', label: '住宅費', icon: '🏠', subs: [
+    { label: 'ローン', icon: '🏠', fields: [{ label: '借入額', value: 3500, unit: '万円' }, { label: '返済期間', value: 35, unit: '年' }, { label: '金利', value: 1.2, unit: '%' }] },
+    { label: '賃貸', icon: '🔑', fields: [{ label: '月額家賃', value: 12, unit: '万円' }] },
+    { label: '維持費', icon: '🔧', fields: [{ label: '管理費・税', value: 15, unit: '万円/年' }, { label: '修繕積立', value: 10, unit: '万円/年' }] },
+  ]},
+  { key: 'education', label: '教育費', icon: '🎓', subs: [
+    { label: 'そら', icon: '🧒', fields: [{ label: '在学中の年間費用', value: 32, unit: '万円/年' }, { label: '大学入学時', value: 80, unit: '万円' }] },
+    { label: 'みお', icon: '👧', fields: [{ label: '在学中の年間費用', value: 22, unit: '万円/年' }, { label: '大学入学時', value: 80, unit: '万円' }] },
+    { label: '習い事', icon: '🎹', fields: [{ label: '月額', value: 2, unit: '万円' }] },
+  ]},
+  { key: 'insurance', label: '保険料', icon: '🛡️', subs: [
+    { label: '生命保険', icon: '🛡️', fields: [{ label: '年間保険料', value: 18, unit: '万円/年' }, { label: '保障額', value: 3000, unit: '万円' }] },
+    { label: '医療', icon: '🏥', fields: [{ label: '年間保険料', value: 8, unit: '万円/年' }] },
+    { label: 'その他', icon: '📄', fields: [{ label: '年間保険料', value: 4, unit: '万円/年' }] },
+  ]},
+  { key: 'car', label: '車', icon: '🚗', subs: [
+    { label: '購入', icon: '🚗', fields: [{ label: '購入費用', value: 250, unit: '万円' }, { label: '買い替え周期', value: 8, unit: '年' }] },
+    { label: '維持費', icon: '⛽', fields: [{ label: '年間維持費', value: 20, unit: '万円/年' }] },
+  ]},
+  { key: 'other', label: 'その他', icon: '🎈', subs: [
+    { label: '経常', icon: '🎈', fields: [{ label: '趣味・旅行', value: 20, unit: '万円/年' }] },
+    { label: '一時', icon: '💐', fields: [{ label: '結婚援助', value: 100, unit: '万円' }, { label: '発生年', value: 2046, unit: '年' }] },
+  ]},
+  { key: 'savings', label: '投資', icon: '🌱', subs: [
+    { label: '預金', icon: '🐷', fields: [{ label: '現在残高', value: 300, unit: '万円' }, { label: '年利', value: 0.1, unit: '%' }] },
+    { label: '教育資金', icon: '🎓', fields: [{ label: '現在残高', value: 100, unit: '万円' }, { label: '年間積立', value: 24, unit: '万円/年' }] },
+    { label: 'リタイア', icon: '🌱', fields: [{ label: '現在残高', value: 200, unit: '万円' }, { label: '年間積立', value: 36, unit: '万円/年' }, { label: '想定利回り', value: 3, unit: '%' }] },
+  ]},
+];
+
+function curve(w, h, seed) {
+  const pts = [];
+  const n = 40;
+  for (let i = 0; i < n; i++) {
+    const p = i / (n - 1);
+    const v = 0.18 + 0.72 * Math.pow(p, 1.35) - 0.14 * Math.sin(p * 5.2 + seed) * (1 - p * 0.4);
+    pts.push([p * w, h - v * h * 0.92 - h * 0.04]);
+  }
+  let line = '';
+  pts.forEach((pt, i) => { line += (i === 0 ? 'M' : 'L') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1) + ' '; });
+  const idx = Math.round(n * 0.55);
+  return { line, area: line + `L${w},${h} L0,${h} Z`, mx: pts[idx][0].toFixed(1), my: pts[idx][1].toFixed(1) };
+}
+
+class Component extends DCLogic {
+  state = { a: { g: 0, s: 0 }, b: { g: 1, s: 0 }, c: { g: 2, s: 0 }, vals: {} };
+
+  pick(opt, key, value) {
+    this.setState(st => ({ [opt]: { ...st[opt], ...(key === 'g' ? { g: value, s: 0 } : { s: value }) } }));
+  }
+  valueOf(gi, si, fi) {
+    const k = `${gi}.${si}.${fi}`;
+    return this.state.vals[k] !== undefined ? this.state.vals[k] : GROUPS[gi].subs[si].fields[fi].value;
+  }
+  setValue(gi, si, fi, v) {
+    this.setState(st => ({ vals: { ...st.vals, [`${gi}.${si}.${fi}`]: v } }));
+  }
+
+  build(opt, style) {
+    const sel = this.state[opt];
+    const gi = Math.min(sel.g, GROUPS.length - 1);
+    const group = GROUPS[gi];
+    const si = Math.min(sel.s, group.subs.length - 1);
+    const sub = group.subs[si];
+    const active = 'var(--color-accent)';
+
+    const tabs = GROUPS.map((g, i) => {
+      const on = i === gi;
+      if (style === 'pill') return { label: g.label, icon: g.icon, bg: on ? active : '#fff', color: on ? '#fff' : 'var(--color-neutral-700)', shadow: on ? 'none' : 'var(--shadow-sm)', select: () => this.pick(opt, 'g', i) };
+      if (style === 'underline') return { label: g.label, icon: g.icon, color: on ? 'var(--color-accent-700)' : 'var(--color-neutral-600)', bar: on ? active : 'transparent', select: () => this.pick(opt, 'g', i) };
+      return { label: g.label, icon: g.icon, color: on ? 'var(--color-accent-700)' : 'var(--color-neutral-600)', bg: on ? 'var(--color-accent-100)' : '#fff', select: () => this.pick(opt, 'g', i) };
+    });
+
+    const subs = group.subs.map((sb, i) => {
+      const on = i === si;
+      if (style === 'pill') return { label: sb.label, icon: sb.icon, bg: on ? 'var(--color-accent-2-600)' : 'transparent', border: on ? 'var(--color-accent-2-600)' : 'var(--color-neutral-300)', color: on ? '#fff' : 'var(--color-neutral-700)', select: () => this.pick(opt, 's', i) };
+      if (style === 'underline') return { label: sb.label, icon: sb.icon, bg: on ? '#fff' : 'transparent', color: on ? 'var(--color-accent-700)' : 'var(--color-neutral-700)', select: () => this.pick(opt, 's', i) };
+      return { label: sb.label, icon: sb.icon, bg: on ? 'var(--color-accent-2-100)' : '#fff', border: on ? 'var(--color-accent-2-500)' : 'var(--color-neutral-200)', dotBg: on ? '#fff' : 'var(--color-neutral-100)', color: on ? 'var(--color-accent-2-800)' : 'var(--color-neutral-700)', select: () => this.pick(opt, 's', i) };
+    });
+
+    const fields = sub.fields.map((f, i) => ({
+      label: f.label, unit: f.unit, value: this.valueOf(gi, si, i),
+      set: (e) => { const v = parseFloat(e.target.value); this.setValue(gi, si, i, isNaN(v) ? 0 : v); },
+      inc: () => this.setValue(gi, si, i, Math.round((this.valueOf(gi, si, i) + (f.value >= 100 ? 10 : 1)) * 10) / 10),
+      dec: () => this.setValue(gi, si, i, Math.max(0, Math.round((this.valueOf(gi, si, i) - (f.value >= 100 ? 10 : 1)) * 10) / 10)),
+    }));
+
+    return { tabs, subs, fields, groupLabel: group.label };
+  }
+
+  renderVals() {
+    const A = this.build('a', 'pill');
+    const B = this.build('b', 'underline');
+    const C = this.build('c', 'tile');
+    const cA = curve(360, 104, 0.4), cB = curve(360, 90, 0.4), cC = curve(360, 98, 0.4);
+    return {
+      linePath: cA.line, areaPath: cA.area, markerX: cA.mx, markerY: cA.my,
+      linePathB: cB.line, areaPathB: cB.area, markerXB: cB.mx, markerYB: cB.my,
+      linePathC: cC.line, areaPathC: cC.area, markerXC: cC.mx, markerYC: cC.my,
+      tabsA: A.tabs, subsA: A.subs, fieldsA: A.fields,
+      tabsB: B.tabs, subsB: B.subs, fieldsB: B.fields,
+      tabsC: C.tabs, subsC: C.subs, fieldsC: C.fields, groupLabelC: C.groupLabel,
+    };
+  }
+}
+
+</script>
+</body>
+</html>
