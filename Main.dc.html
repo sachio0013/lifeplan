@@ -22,7 +22,6 @@
   --color-accent-300: oklch(79% 0.09 45);
   --color-accent-700: oklch(49% 0.12 38);
   --color-accent-800: oklch(40% 0.10 35);
-  --color-accent-2: #7a8a5e;
   --color-accent-2-100: oklch(92% 0.025 120);
   --color-accent-2-200: oklch(86% 0.045 120);
   --color-accent-2-700: oklch(45% 0.06 115);
@@ -36,15 +35,23 @@
   --font-body: 'Figtree', system-ui, sans-serif;
   --radius-lg: 18px;
   --shadow-sm: 0 1px 3px rgba(32, 30, 29, 0.08), 0 1px 2px rgba(32, 30, 29, 0.06);
+  --fill-req: oklch(93% 0.045 75);
+  --fill-opt: oklch(95% 0.012 220);
 }
 body { margin: 0; background: var(--color-neutral-200); }
 a { color: var(--color-accent-700); }
 a:hover { color: var(--color-accent-800); }
 .zm { font-family: 'Zen Maru Gothic', var(--font-body); }
 .msr { font-family: 'Material Symbols Rounded'; font-weight: 400; font-style: normal; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; direction: ltr; -webkit-font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
-.fld { font-family: 'Zen Maru Gothic', var(--font-body); font-weight: 700; color: var(--color-text); background: transparent; border: none; border-bottom: 2px solid var(--color-accent-200); padding: 5px 2px; }
-.fld:focus { outline: 2px solid var(--color-accent); outline-offset: 1px; }
-.sel { font-family: 'Zen Maru Gothic', var(--font-body); font-weight: 700; font-size: 13px; color: var(--color-text); background: var(--color-neutral-100); border: none; border-radius: 999px; padding: 6px 10px; }
+.rq, .op {
+  font-family: 'Zen Maru Gothic', var(--font-body); font-weight: 700; color: var(--color-text);
+  border: none; border-radius: 8px; padding: 6px 9px; box-sizing: border-box;
+}
+.rq { background: var(--fill-req); }
+.op { background: var(--fill-opt); }
+.rq:focus, .op:focus { outline: 2px solid var(--color-accent); outline-offset: 0; }
+.rq::placeholder, .op::placeholder { color: var(--color-neutral-500); font-weight: 500; }
+.u { font-size: 11.5px; font-weight: 500; color: var(--color-neutral-700); }
 .ix::-webkit-scrollbar { display: none; }
 .btn { font-family: 'Zen Maru Gothic', var(--font-body); font-size: 11.5px; font-weight: 700; color: #fff; background: var(--color-accent); border: none; border-radius: 999px; padding: 5px 12px; cursor: pointer; }
 </style>
@@ -59,24 +66,25 @@ a:hover { color: var(--color-accent-800); }
   <div ref="{{ scrollRef }}" onScroll="{{ onScroll }}" style="flex:1;overflow-y:auto;overflow-x:hidden;position:relative">
 
     <div style="position:sticky;top:0;z-index:3;height:72px;box-sizing:border-box;padding:8px 18px 6px;background:{{ summaryBg }};cursor:pointer;display:flex;flex-direction:column;justify-content:center;gap:4px">
-      <sc-if value="{{ isDraft }}" hint-placeholder-val="{{ false }}">
-        <div style="display:flex;align-items:center;gap:7px">
-          <span class="msr" style="font-size:19px;color:var(--color-accent-800)">edit_note</span>
-          <span style="font-size:13.5px;font-weight:700;color:var(--color-accent-800)">必須項目があと{{ requiredLeft }}件</span>
-          <span style="font-size:11.5px;font-weight:700;color:var(--color-accent-800);margin-left:auto">入力すると試算できます</span>
+      <sc-if value="{{ isWarning }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="msr" style="font-size:19px;color:var(--color-accent-800)">warning</span>
+          <span style="font-size:14px;font-weight:700;color:var(--color-accent-800)">52歳で預金が不足します</span>
+          <span style="font-size:16px;font-weight:900;color:var(--color-accent-800);margin-left:auto">−180万円</span>
         </div>
-        <div style="height:6px;border-radius:999px;background:var(--color-accent-200);overflow:hidden">
-          <div style="height:100%;width:{{ requiredPct }};background:var(--color-accent);border-radius:999px"></div>
-        </div>
+        <svg viewBox="0 0 340 32" width="100%" height="32" preserveAspectRatio="none" style="display:block">
+          <path d="{{ warnArea }}" fill="var(--color-accent-300)" fill-opacity="0.55" />
+          <path d="{{ warnLine }}" fill="none" stroke="var(--color-accent-800)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+        </svg>
       </sc-if>
-      <sc-if value="{{ isReady }}" hint-placeholder-val="{{ true }}">
+      <sc-if value="{{ isNormal }}" hint-placeholder-val="{{ true }}">
         <div style="display:flex;align-items:baseline;gap:8px">
           <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">終了時点の金融資産</span>
           <span style="font-size:19px;font-weight:900;margin-left:auto">1,240<span style="font-size:12px;font-weight:700;color:var(--color-neutral-700)"> 万円</span></span>
         </div>
-        <svg viewBox="0 0 340 26" width="100%" height="26" preserveAspectRatio="none" style="display:block">
-          <path d="{{ sparkArea }}" fill="var(--color-accent-2-200)" fill-opacity="0.6" />
-          <path d="{{ sparkLine }}" fill="none" stroke="var(--color-accent-2-700)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+        <svg viewBox="0 0 340 32" width="100%" height="32" preserveAspectRatio="none" style="display:block">
+          <path d="{{ okArea }}" fill="var(--color-accent-2-200)" fill-opacity="0.6" />
+          <path d="{{ okLine }}" fill="none" stroke="var(--color-accent-2-700)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
         </svg>
       </sc-if>
     </div>
@@ -87,50 +95,51 @@ a:hover { color: var(--color-accent-800); }
       </sc-for>
     </div>
 
+    <div style="display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--color-bg)">
+      <span style="display:flex;align-items:center;gap:6px">
+        <span style="width:15px;height:15px;border-radius:4px;background:var(--fill-req)"></span>
+        <span style="font-size:11.5px;font-weight:700;color:var(--color-neutral-700)">必須入力</span>
+      </span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span style="width:15px;height:15px;border-radius:4px;background:var(--fill-opt)"></span>
+        <span style="font-size:11.5px;font-weight:700;color:var(--color-neutral-700)">任意入力</span>
+      </span>
+      <span style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-left:auto">必須だけで試算できます</span>
+    </div>
+
     <div style="padding:0 16px 40px">
 
-      <div ref="{{ basicRef }}" style="padding-top:16px">
+      <div ref="{{ basicRef }}" style="padding-top:6px">
         <div style="display:flex;align-items:center;gap:7px;padding:0 2px 10px">
           <span class="msr" style="font-size:20px;color:var(--color-accent)">tune</span>
           <span style="font-size:17px;font-weight:900">基本</span>
         </div>
 
         <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:12px">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
-            <span style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700)">シミュレーション期間</span>
-            <span style="font-size:10px;font-weight:700;color:#fff;background:var(--color-accent);padding:2px 7px;border-radius:999px">必須</span>
-          </div>
-          <div style="display:flex;align-items:baseline;gap:8px;padding-bottom:11px">
-            <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700);width:52px">開始日</span>
-            <input type="text" value="{{ startDate }}" onChange="{{ setStartDate }}" class="fld" style="width:120px;font-size:17px" />
-            <span style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-left:auto">当年1/1が基本</span>
-          </div>
-          <div style="display:flex;align-items:baseline;gap:8px;padding-top:11px;border-top:1px solid var(--color-neutral-100)">
-            <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700);width:52px">終了</span>
-            <span style="font-size:11px;font-weight:700;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:2px 7px;border-radius:999px">任意</span>
-            <input type="number" value="{{ endAge }}" onChange="{{ setEndAge }}" class="fld" style="width:58px;font-size:17px;text-align:right;margin-left:auto" />
-            <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">歳まで</span>
+          <div style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700);margin-bottom:11px">シミュレーション期間</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="u" style="width:52px">開始年</span>
+            <input type="number" value="{{ startYear }}" onChange="{{ setStartYear }}" class="rq" style="width:82px;font-size:17px;text-align:right" />
+            <span class="u">年から</span>
+            <input type="number" value="{{ endAge }}" onChange="{{ setEndAge }}" class="op" style="width:60px;font-size:17px;text-align:right;margin-left:auto" />
+            <span class="u">歳まで</span>
           </div>
         </div>
 
         <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 8px;margin-bottom:12px">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
-            <span style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700)">前年末の金融資産</span>
-            <span style="font-size:10px;font-weight:700;color:#fff;background:var(--color-accent);padding:2px 7px;border-radius:999px">必須</span>
-          </div>
+          <div style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700);margin-bottom:2px">前年末の金融資産</div>
           <sc-for list="{{ assetRows }}" as="a" hint-placeholder-count="3">
-            <div style="display:flex;align-items:center;gap:8px;padding:11px 0;border-top:1px solid var(--color-neutral-100)">
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--color-neutral-100)">
               <sc-if value="{{ a.fixed }}" hint-placeholder-val="{{ true }}">
                 <span style="font-size:13.5px;font-weight:500">{{ a.name }}</span>
               </sc-if>
               <sc-if value="{{ a.renamable }}" hint-placeholder-val="{{ false }}">
-                <input type="text" value="{{ a.name }}" onChange="{{ a.setName }}" class="fld" style="width:104px;font-size:13.5px;font-weight:500;border-bottom-style:dashed" />
+                <input type="text" value="{{ a.name }}" onChange="{{ a.setName }}" class="op" style="width:110px;font-size:13.5px" />
               </sc-if>
-              <input type="number" value="{{ a.amount }}" onChange="{{ a.setAmount }}" class="fld" style="width:82px;font-size:17px;text-align:right;margin-left:auto" />
-              <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700);width:28px">万円</span>
+              <input type="number" value="{{ a.amount }}" onChange="{{ a.setAmount }}" class="rq" style="width:86px;font-size:17px;text-align:right;margin-left:auto" />
+              <span class="u" style="width:28px">万円</span>
             </div>
           </sc-for>
-          <div style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);padding:9px 0 6px;border-top:1px solid var(--color-neutral-100)">投資資産の名称は自由に変更できます（投資セクションの見出しに反映）</div>
         </div>
 
         <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 8px;margin-bottom:12px">
@@ -141,29 +150,25 @@ a:hover { color: var(--color-accent-800); }
           <sc-for list="{{ familyRows }}" as="m" hint-placeholder-count="2">
             <div style="padding:11px 0;border-top:1px solid var(--color-neutral-100)">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-                <input type="text" value="{{ m.name }}" onChange="{{ m.setName }}" class="fld" style="flex:1;min-width:0;font-size:15px" />
-                <sc-if value="{{ m.isHead }}" hint-placeholder-val="{{ true }}">
-                  <span style="font-size:10px;font-weight:700;color:#fff;background:var(--color-accent);padding:2px 7px;border-radius:999px">必須</span>
-                </sc-if>
+                <input type="text" value="{{ m.name }}" onChange="{{ m.setName }}" class="{{ m.cls }}" style="flex:1;min-width:0;font-size:15px" />
                 <span onClick="{{ m.toggle }}" style="cursor:pointer;display:flex;align-items:center;padding:2px">
                   <span class="msr" style="font-size:20px;color:var(--color-neutral-500)">{{ m.chevron }}</span>
                 </span>
               </div>
-              <div style="display:flex;align-items:baseline;gap:8px">
-                <input type="text" value="{{ m.birth }}" onChange="{{ m.setBirth }}" class="fld" style="width:112px;font-size:14px" />
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="text" value="{{ m.birth }}" onChange="{{ m.setBirth }}" class="{{ m.cls }}" style="width:120px;font-size:14px" />
                 <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-600)">{{ m.ageLabel }}</span>
-                <span style="font-size:11px;font-weight:700;color:var(--color-accent-2-800);background:var(--color-accent-2-100);padding:3px 10px;border-radius:999px;margin-left:auto">{{ m.relation }}</span>
+                <span style="font-size:11px;font-weight:700;color:var(--color-accent-2-800);background:var(--color-accent-2-100);padding:4px 11px;border-radius:999px;margin-left:auto">{{ m.relation }}</span>
               </div>
               <sc-if value="{{ m.open }}" hint-placeholder-val="{{ false }}">
                 <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--color-neutral-200)">
-                  <span style="font-size:10.5px;font-weight:700;color:var(--color-neutral-600);width:100%">任意項目</span>
-                  <select value="{{ m.gender }}" onChange="{{ m.setGender }}" class="sel">
+                  <select value="{{ m.gender }}" onChange="{{ m.setGender }}" class="op" style="font-size:13px">
                     <option>男性</option><option>女性</option>
                   </select>
-                  <select value="{{ m.relation }}" onChange="{{ m.setRelation }}" class="sel">
-                    <option>世帯主</option><option>配偶者</option><option>子供１</option><option>子供２</option><option>子供３</option><option>子供４</option><option>親</option><option>その他</option>
+                  <select value="{{ m.relation }}" onChange="{{ m.setRelation }}" class="op" style="font-size:13px">
+                    <option>家族１</option><option>家族２</option><option>子供１</option><option>子供２</option><option>子供３</option><option>子供４</option><option>親</option><option>その他</option>
                   </select>
-                  <select value="{{ m.job }}" onChange="{{ m.setJob }}" class="sel">
+                  <select value="{{ m.job }}" onChange="{{ m.setJob }}" class="op" style="font-size:13px">
                     <option>会社員等</option><option>パート</option><option>自営業</option><option>専業主婦</option><option>学生</option><option>乳幼児</option><option>自由業</option><option>その他</option>
                   </select>
                 </div>
@@ -189,56 +194,58 @@ a:hover { color: var(--color-accent-800); }
 
         <sc-if value="{{ b.isGroup }}" hint-placeholder-val="{{ false }}">
           <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 10px;margin-bottom:12px">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:2px">
               <sc-if value="{{ b.renamable }}" hint-placeholder-val="{{ false }}">
-                <input type="text" value="{{ b.label }}" onChange="{{ b.setLabel }}" class="fld" style="width:104px;font-size:12.5px;color:var(--color-neutral-700);border-bottom-style:dashed" />
+                <input type="text" value="{{ b.label }}" onChange="{{ b.setLabel }}" class="op" style="width:104px;font-size:12.5px" />
               </sc-if>
               <sc-if value="{{ b.plainLabel }}" hint-placeholder-val="{{ true }}">
                 <span style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700)">{{ b.label }}</span>
-              </sc-if>
-              <sc-if value="{{ b.required }}" hint-placeholder-val="{{ false }}">
-                <span style="font-size:10px;font-weight:700;color:#fff;background:var(--color-accent);padding:2px 7px;border-radius:999px">必須</span>
               </sc-if>
               <span style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-left:auto">{{ b.countHint }}</span>
             </div>
 
             <sc-if value="{{ b.hasRate }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;align-items:baseline;gap:7px;padding:10px 0;border-top:1px solid var(--color-neutral-100)">
-                <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">想定利回り</span>
-                <input type="number" value="{{ b.rate }}" onChange="{{ b.setRate }}" class="fld" style="width:48px;font-size:16px;text-align:right" />
-                <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">％</span>
-                <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700);margin-left:12px">税率</span>
-                <select value="{{ b.tax }}" onChange="{{ b.setTax }}" class="sel">
+              <div style="display:flex;align-items:center;gap:7px;padding:10px 0;border-top:1px solid var(--color-neutral-100)">
+                <span class="u">想定利回り</span>
+                <input type="number" value="{{ b.rate }}" onChange="{{ b.setRate }}" class="rq" style="width:52px;font-size:16px;text-align:right" />
+                <span class="u">％</span>
+                <span class="u" style="margin-left:auto">税率</span>
+                <select value="{{ b.tax }}" onChange="{{ b.setTax }}" class="rq" style="font-size:13px">
                   <option>0%</option><option>20%</option>
                 </select>
               </div>
             </sc-if>
 
+            <sc-if value="{{ b.hasInflation }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:7px;padding:10px 0;border-top:1px solid var(--color-neutral-100)">
+                <span class="u">物価上昇率</span>
+                <input type="number" value="{{ b.inflation }}" onChange="{{ b.setInflation }}" class="rq" style="width:56px;font-size:16px;text-align:right;margin-left:auto" />
+                <span class="u">％</span>
+              </div>
+            </sc-if>
+
             <sc-for list="{{ b.rows }}" as="r" hint-placeholder-count="2">
               <div style="padding:11px 0 12px;border-top:1px solid var(--color-neutral-100)">
-                <div style="display:flex;align-items:baseline;gap:6px">
-                  <input type="number" value="{{ r.year }}" onChange="{{ r.setYear }}" class="fld" style="width:64px;font-size:17px;text-align:right" />
-                  <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">{{ b.yearSuffix }}</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input type="number" value="{{ r.year }}" onChange="{{ r.setYear }}" class="{{ r.cls }}" style="width:70px;font-size:17px;text-align:right" />
+                  <span class="u">{{ b.yearSuffix }}</span>
                   <sc-if value="{{ b.hasTo }}" hint-placeholder-val="{{ false }}">
-                    <input type="number" value="{{ r.toYear }}" onChange="{{ r.setToYear }}" class="fld" style="width:64px;font-size:17px;text-align:right;margin-left:4px" />
-                    <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">年まで</span>
-                  </sc-if>
-                  <sc-if value="{{ r.firstRequired }}" hint-placeholder-val="{{ false }}">
-                    <span style="font-size:10px;font-weight:700;color:var(--color-accent);border:1.5px solid var(--color-accent-200);padding:1px 6px;border-radius:999px;margin-left:6px">必須</span>
+                    <input type="number" value="{{ r.toYear }}" onChange="{{ r.setToYear }}" class="{{ r.cls }}" style="width:70px;font-size:17px;text-align:right;margin-left:2px" />
+                    <span class="u">年まで</span>
                   </sc-if>
                   <span onClick="{{ r.remove }}" style="margin-left:auto;cursor:pointer;display:flex;align-items:center;padding:2px">
                     <span class="msr" style="font-size:20px;color:var(--color-neutral-500)">delete</span>
                   </span>
                 </div>
-                <div style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-top:3px">{{ r.ageHint }}</div>
-                <div style="display:flex;align-items:baseline;gap:6px;margin-top:9px">
-                  <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">{{ b.amountPrefix }}</span>
-                  <input type="number" value="{{ r.amount }}" onChange="{{ r.setAmount }}" class="fld" style="width:82px;font-size:17px;text-align:right" />
-                  <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">万円</span>
+                <div style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-top:4px">{{ r.ageHint }}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:9px">
+                  <span class="u">{{ b.amountPrefix }}</span>
+                  <input type="number" value="{{ r.amount }}" onChange="{{ r.setAmount }}" class="{{ r.cls }}" style="width:88px;font-size:17px;text-align:right" />
+                  <span class="u">万円</span>
                   <sc-if value="{{ b.hasGrowth }}" hint-placeholder-val="{{ false }}">
-                    <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700);margin-left:10px">上昇率</span>
-                    <input type="number" value="{{ r.growth }}" onChange="{{ r.setGrowth }}" class="fld" style="width:46px;font-size:17px;text-align:right" />
-                    <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">％</span>
+                    <span class="u" style="margin-left:auto">上昇率</span>
+                    <input type="number" value="{{ r.growth }}" onChange="{{ r.setGrowth }}" class="{{ r.cls }}" style="width:52px;font-size:17px;text-align:right" />
+                    <span class="u">％</span>
                   </sc-if>
                 </div>
                 <sc-if value="{{ r.dup }}" hint-placeholder-val="{{ false }}">
@@ -248,11 +255,20 @@ a:hover { color: var(--color-accent-800); }
                     <button onClick="{{ r.merge }}" class="btn" style="margin-left:auto;flex-shrink:0">合算する</button>
                   </div>
                 </sc-if>
-                <sc-if value="{{ r.showMemo }}" hint-placeholder-val="{{ false }}">
-                  <input type="text" value="{{ r.memo }}" onChange="{{ r.setMemo }}" placeholder="備考" class="fld" style="width:100%;box-sizing:border-box;margin-top:9px;font-size:12px;font-weight:500;border-bottom-style:dotted" />
+                <sc-if value="{{ b.hasMemo }}" hint-placeholder-val="{{ false }}">
+                  <input type="text" value="{{ r.memo }}" onChange="{{ r.setMemo }}" placeholder="備考" class="op" style="width:100%;margin-top:9px;font-size:12px;font-weight:500" />
                 </sc-if>
               </div>
             </sc-for>
+
+            <sc-if value="{{ b.hasRetire }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:7px;padding:11px 0 4px;border-top:1px solid var(--color-neutral-100)">
+                <span class="msr" style="font-size:18px;color:var(--color-neutral-500)">work_history</span>
+                <input type="number" value="{{ b.retireAge }}" onChange="{{ b.setRetireAge }}" class="op" style="width:56px;font-size:17px;text-align:right;margin-left:auto" />
+                <span class="u">歳まで働く</span>
+              </div>
+              <div style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);padding-bottom:6px">{{ b.retireHint }}</div>
+            </sc-if>
 
             <sc-if value="{{ b.hasNetCalc }}" hint-placeholder-val="{{ false }}">
               <div style="border-top:1px solid var(--color-neutral-100);padding-top:10px">
@@ -263,21 +279,21 @@ a:hover { color: var(--color-accent-800); }
                 </div>
                 <sc-if value="{{ b.calcOpen }}" hint-placeholder-val="{{ true }}">
                   <div style="background:var(--color-neutral-100);border-radius:12px;padding:12px 13px;margin-top:10px">
-                    <div style="display:flex;align-items:baseline;gap:7px">
-                      <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700);width:64px">年収（額面）</span>
-                      <input type="number" value="{{ b.calcIncome }}" onChange="{{ b.setCalcIncome }}" class="fld" style="width:72px;font-size:17px;text-align:right;background:#fff;margin-left:auto" />
-                      <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">万円</span>
+                    <div style="display:flex;align-items:center;gap:7px">
+                      <span class="u" style="width:64px">年収（額面）</span>
+                      <input type="number" value="{{ b.calcIncome }}" onChange="{{ b.setCalcIncome }}" class="op" style="width:76px;font-size:17px;text-align:right;background:#fff;margin-left:auto" />
+                      <span class="u">万円</span>
                     </div>
-                    <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
-                      <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700);width:64px">扶養配偶者</span>
-                      <select value="{{ b.calcSpouse }}" onChange="{{ b.setCalcSpouse }}" class="sel" style="background:#fff;margin-left:auto">
+                    <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+                      <span class="u" style="width:64px">扶養配偶者</span>
+                      <select value="{{ b.calcSpouse }}" onChange="{{ b.setCalcSpouse }}" class="op" style="font-size:13px;background:#fff;margin-left:auto">
                         <option>なし</option><option>あり</option>
                       </select>
                     </div>
-                    <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
-                      <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700);width:64px">扶養の子</span>
-                      <input type="number" value="{{ b.calcKids }}" onChange="{{ b.setCalcKids }}" class="fld" style="width:44px;font-size:17px;text-align:right;background:#fff;margin-left:auto" />
-                      <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">人</span>
+                    <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+                      <span class="u" style="width:64px">扶養の子</span>
+                      <input type="number" value="{{ b.calcKids }}" onChange="{{ b.setCalcKids }}" class="op" style="width:48px;font-size:17px;text-align:right;background:#fff;margin-left:auto" />
+                      <span class="u">人</span>
                     </div>
                     <div style="display:flex;align-items:baseline;gap:8px;margin-top:12px;padding-top:11px;border-top:1px solid var(--color-neutral-200)">
                       <span style="font-size:11.5px;font-weight:700;color:var(--color-neutral-700)">手取り</span>
@@ -303,24 +319,43 @@ a:hover { color: var(--color-accent-800); }
         </sc-if>
 
         <sc-if value="{{ b.isCycle }}" hint-placeholder-val="{{ false }}">
-          <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 12px;margin-bottom:12px">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
-              <span style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700)">{{ b.label }}</span>
-              <span style="font-size:10px;font-weight:700;color:var(--color-neutral-600);background:var(--color-neutral-100);padding:2px 7px;border-radius:999px">周期</span>
+          <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:14px 16px 10px;margin-bottom:12px">
+            <div style="font-size:12.5px;font-weight:700;color:var(--color-neutral-700);margin-bottom:11px">{{ b.label }}</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <input type="number" value="{{ b.fromYear }}" onChange="{{ b.setFromYear }}" class="op" style="width:70px;font-size:17px;text-align:right" />
+              <span class="u">年から</span>
+              <input type="number" value="{{ b.every }}" onChange="{{ b.setEvery }}" class="op" style="width:48px;font-size:17px;text-align:right;margin-left:2px" />
+              <span class="u">年ごとに</span>
+              <input type="number" value="{{ b.untilAge }}" onChange="{{ b.setUntilAge }}" class="op" style="width:52px;font-size:17px;text-align:right;margin-left:auto" />
+              <span class="u">歳まで</span>
             </div>
-            <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
-              <input type="number" value="{{ b.fromYear }}" onChange="{{ b.setFromYear }}" class="fld" style="width:64px;font-size:17px;text-align:right" />
-              <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">年から</span>
-              <input type="number" value="{{ b.every }}" onChange="{{ b.setEvery }}" class="fld" style="width:42px;font-size:17px;text-align:right;margin-left:4px" />
-              <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">年ごとに</span>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:10px">
+              <span class="u">1回あたり</span>
+              <input type="number" value="{{ b.amount }}" onChange="{{ b.setAmount }}" class="op" style="width:88px;font-size:17px;text-align:right;margin-left:auto" />
+              <span class="u">万円</span>
             </div>
-            <div style="display:flex;align-items:baseline;gap:6px;margin-top:10px">
-              <input type="number" value="{{ b.amount }}" onChange="{{ b.setAmount }}" class="fld" style="width:82px;font-size:17px;text-align:right" />
-              <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">万円</span>
-              <input type="number" value="{{ b.untilAge }}" onChange="{{ b.setUntilAge }}" class="fld" style="width:46px;font-size:17px;text-align:right;margin-left:10px" />
-              <span style="font-size:11.5px;font-weight:500;color:var(--color-neutral-700)">歳まで</span>
+            <div onClick="{{ b.toggleDetail }}" style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:11px 0 0;margin-top:10px;border-top:1px solid var(--color-neutral-100)">
+              <span class="msr" style="font-size:18px;color:var(--color-accent-700)">tune</span>
+              <span style="font-size:12px;font-weight:700;color:var(--color-accent-700)">回ごとに金額を変える</span>
+              <span class="msr" style="font-size:18px;color:var(--color-neutral-500);margin-left:auto">{{ b.detailChevron }}</span>
             </div>
-            <div style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-top:10px;padding-top:9px;border-top:1px solid var(--color-neutral-100)">{{ b.preview }}</div>
+            <sc-if value="{{ b.detailOpen }}" hint-placeholder-val="{{ true }}">
+              <div style="margin-top:8px">
+                <sc-for list="{{ b.occurrences }}" as="o" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--color-neutral-100)">
+                    <span style="font-size:13px;font-weight:700">{{ o.year }}年</span>
+                    <span style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600)">{{ o.ageHint }}</span>
+                    <input type="number" value="{{ o.amount }}" onChange="{{ o.setAmount }}" class="op" style="width:72px;font-size:15px;text-align:right;margin-left:auto" />
+                    <span class="u">万円</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div style="display:flex;align-items:baseline;gap:8px;padding:10px 0 4px;border-top:1px solid var(--color-neutral-100);margin-top:8px">
+              <span style="font-size:11.5px;font-weight:700;color:var(--color-neutral-700)">{{ b.countLabel }}</span>
+              <span style="font-size:15px;font-weight:900;margin-left:auto">{{ b.total }}</span>
+              <span style="font-size:11px;font-weight:700;color:var(--color-neutral-700)">万円</span>
+            </div>
           </div>
         </sc-if>
 
@@ -331,17 +366,23 @@ a:hover { color: var(--color-accent-800); }
               <span style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-left:auto">{{ b.birthLabel }}</span>
             </div>
             <sc-for list="{{ b.stages }}" as="s" hint-placeholder-count="4">
-              <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--color-neutral-100)">
-                <span style="flex:1;min-width:0">
-                  <select value="{{ s.stage }}" onChange="{{ s.setStage }}" class="sel" style="max-width:100%">
+              <div style="padding:10px 0;border-top:1px solid var(--color-neutral-100)">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <select value="{{ s.stage }}" onChange="{{ s.setStage }}" class="op" style="font-size:13px;flex:1;min-width:0">
                     <sc-for list="{{ s.options }}" as="o" hint-placeholder-count="2">
                       <option>{{ o }}</option>
                     </sc-for>
                   </select>
-                  <span style="display:block;font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-top:4px">{{ s.span }}</span>
-                </span>
-                <input type="number" value="{{ s.amount }}" onChange="{{ s.setAmount }}" class="fld" style="width:56px;font-size:16px;text-align:right" />
-                <span style="font-size:11px;font-weight:500;color:var(--color-neutral-700)">万円</span>
+                  <input type="number" value="{{ s.amount }}" onChange="{{ s.setAmount }}" class="op" style="width:62px;font-size:16px;text-align:right" />
+                  <span class="u">万円</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+                  <input type="number" value="{{ s.from }}" onChange="{{ s.setFrom }}" class="op" style="width:70px;font-size:15px;text-align:right" />
+                  <span class="u">年から</span>
+                  <input type="number" value="{{ s.to }}" onChange="{{ s.setTo }}" class="op" style="width:70px;font-size:15px;text-align:right" />
+                  <span class="u">年まで</span>
+                  <span style="font-size:10.5px;font-weight:500;color:var(--color-neutral-600);margin-left:auto">{{ s.sub }}</span>
+                </div>
               </div>
             </sc-for>
             <div style="display:flex;align-items:baseline;gap:8px;padding:10px 0 4px;border-top:1px solid var(--color-neutral-100)">
@@ -362,8 +403,8 @@ a:hover { color: var(--color-accent-800); }
 </div>
 
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":892},"state":{"editor":"enum","options":["必須がまだ残っている","必須が埋まっている"],"default":"必須がまだ残っている","tsType":"string","section":"サマリーバー"},"showMemo":{"editor":"boolean","default":false,"tsType":"boolean","section":"表示"}}'>
-const REL = ['世帯主', '配偶者', '子供１', '子供２', '子供３', '子供４', '親', 'その他'];
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":892},"warning":{"editor":"boolean","default":false,"tsType":"boolean","section":"サマリーバー"}}'>
+const REL = ['家族１', '家族２', '子供１', '子供２', '子供３', '子供４', '親', 'その他'];
 
 // 教育費の単価表（入力シート T138:V153 と同じ）
 const EDU_UNIT = {
@@ -398,18 +439,15 @@ function bracket(table, v) {
 function takeHome(income, hasSpouse, kids) {
   if (!(income > 0)) return { net: 0, social: 0, tax: 0, ratio: 0 };
   const sd = bracket(DEDUCT_SALARY, income);
-  const salaryDeduct = income * sd[1] + sd[2];
-  const gross = income - salaryDeduct;
+  const gross = income - (income * sd[1] + sd[2]);
   const social = income * 0.155;
   const basic = bracket(DEDUCT_BASIC, gross)[1];
   const spouse = hasSpouse ? 38 : 0;
   const dependents = kids * 38;
-  const life = 5;
-  const taxable = Math.max(0, gross - social - basic - spouse - dependents - life);
+  const taxable = Math.max(0, gross - social - basic - spouse - dependents - 5);
   const ti = bracket(TAX_INCOME, taxable);
   const incomeTax = Math.max(0, taxable * ti[1] + ti[2]);
-  const residentBase = Math.max(0, gross - social - basic - spouse - dependents - 2.8);
-  const residentTax = residentBase * 0.1 + 1;
+  const residentTax = Math.max(0, gross - social - basic - spouse - dependents - 2.8) * 0.1 + 1;
   const tax = incomeTax + residentTax;
   const net = income - social - tax;
   return {
@@ -421,10 +459,11 @@ function takeHome(income, hasSpouse, kids) {
 class Component extends DCLogic {
   state = {
     active: 'basic',
-    startDate: '2026/01/01',
+    startYear: 2026,
     endAge: 90,
     openMember: 0,
     openCalc: 0,
+    carDetailOpen: false,
     calc: { income: 600, spouse: 'なし', kids: 0 },
     assets: [
       { id: 1, name: '普通預金等', fixed: true, amount: 500 },
@@ -432,31 +471,34 @@ class Component extends DCLogic {
       { id: 3, name: 'iDeCo', fixed: false, amount: 0, rate: 3, tax: '0%' },
     ],
     family: [
-      { id: 1, name: '夫', gender: '男性', relation: '世帯主', birth: '1991/01/01', job: '会社員等' },
-      { id: 2, name: '妻', gender: '女性', relation: '配偶者', birth: '1991/01/01', job: '会社員等' },
+      { id: 1, name: '夫', gender: '男性', relation: '家族１', birth: '1991/01/01', job: '会社員等' },
+      { id: 2, name: '妻', gender: '女性', relation: '家族２', birth: '1991/01/01', job: '会社員等' },
       { id: 3, name: '第一子', gender: '男性', relation: '子供１', birth: '2022/05/20', job: '乳幼児' },
     ],
     edu: { 3: ['保育園0～3歳', '保育園4～6歳', '小学校（公）', '中学校（公）', '高校（公）', '大学（私文）', '大学院'] },
     eduAmount: {},
+    eduSpan: {},
     salaries: [
-      { id: 1, who: '夫', rows: [{ id: 1, year: 2026, amount: 500, growth: 1.5 }, { id: 2, year: 2051, amount: 300, growth: 0 }] },
-      { id: 2, who: '妻', rows: [{ id: 1, year: 2026, amount: 300, growth: 1.5 }] },
+      { id: 1, who: '家族１', retireAge: 65, rows: [{ id: 1, year: 2026, amount: 500, growth: 1.5 }, { id: 2, year: 2051, amount: 300, growth: 0 }] },
+      { id: 2, who: '家族２', retireAge: 60, rows: [{ id: 3, year: 2026, amount: 300, growth: 1.5 }] },
     ],
     lump: [{ id: 1, year: 2051, amount: 1500, memo: '退職金' }],
     corpPension: [],
-    privPension: [{ id: 1, year: 2056, toYear: 2065, amount: 40, memo: '' }],
+    privPension: [],
     pubPension: [{ id: 1, year: 2056, amount: 290, memo: '' }],
-    living: [{ id: 1, year: 2026, amount: 360, growth: 0.5, memo: '' }, { id: 2, year: 2056, amount: 300, memo: '' }],
-    housing: [{ id: 1, year: 2026, amount: 100, memo: '' }, { id: 2, year: 2027, amount: 202, memo: '' }],
+    living: [{ id: 1, year: 2026, amount: 360, memo: '' }, { id: 2, year: 2056, amount: 300, memo: '' }],
+    inflation: 0.5,
+    housing: [{ id: 1, year: 2026, amount: 100, memo: '賃貸' }, { id: 2, year: 2027, amount: 202, memo: '住宅ローン＋管理費' }],
     housingLump: [{ id: 1, year: 2027, amount: 500, memo: '頭金' }],
     insurance: [{ id: 1, year: 2026, amount: 20, memo: '' }],
     carCost: [{ id: 1, year: 2026, amount: 15, memo: '' }],
     carBuy: { fromYear: 2030, every: 10, amount: 300, untilAge: 75 },
+    carBuyOverride: {},
     otherFlow: [{ id: 1, year: 2030, amount: 30, memo: '趣味' }, { id: 2, year: 2030, amount: 20, memo: '旅行' }],
     otherLump: [],
     invest: {
-      2: { add: [{ id: 1, year: 2026, toYear: 2051, amount: 60, memo: '' }], out: [{ id: 1, year: 2061, toYear: 2081, amount: 150, memo: '' }] },
-      3: { add: [{ id: 1, year: 2026, toYear: 2051, amount: 27, memo: '' }], out: [] },
+      2: { add: [{ id: 1, year: 2026, toYear: 2051, amount: 60, memo: '' }], out: [{ id: 2, year: 2061, toYear: 2081, amount: 150, memo: '' }] },
+      3: { add: [{ id: 3, year: 2026, toYear: 2051, amount: 0, memo: '' }], out: [{ id: 4, year: 2061, toYear: 2081, amount: 0, memo: '' }] },
     },
     nextId: 500,
   };
@@ -469,7 +511,7 @@ class Component extends DCLogic {
   jumpTo(key) {
     const el = this.anchors[key];
     this.setState({ active: key });
-    if (el && this.scrollEl) this.scrollEl.scrollTop = Math.max(0, el.offsetTop - 118);
+    if (el && this.scrollEl) this.scrollEl.scrollTop = Math.max(0, el.offsetTop - 152);
   }
 
   onScroll = () => {
@@ -478,7 +520,7 @@ class Component extends DCLogic {
     let next = 'basic';
     ['basic', 'income', 'pension', 'expense', 'invest'].forEach(k => {
       const el = this.anchors[k];
-      if (el && y >= Math.max(0, el.offsetTop - 140)) next = k;
+      if (el && y >= Math.max(0, el.offsetTop - 174)) next = k;
     });
     if (next !== this.state.active) this.setState({ active: next });
   };
@@ -491,21 +533,34 @@ class Component extends DCLogic {
     return { y: Number.isFinite(y) ? y : 0, m: Number.isFinite(m) ? m : 1, d: Number.isFinite(d) ? d : 1 };
   }
 
-  startYear() { return this.parseDate(this.state.startDate).y || 2026; }
-  headBirthYear() { return this.parseDate(this.state.family[0].birth).y || 1991; }
+  baseBirthYear() { return this.parseDate(this.state.family[0].birth).y || 1991; }
+
+  spark(warning) {
+    const w = 340, h = 32, n = 46, pts = [];
+    for (let i = 0; i < n; i++) {
+      const p = i / (n - 1);
+      const v = warning
+        ? 0.62 + 0.28 * Math.sin(p * 2.1) - 0.78 * Math.pow(p, 1.7)
+        : 0.20 + 0.68 * Math.pow(p, 1.3) - 0.10 * Math.sin(p * 4.8);
+      pts.push([p * w, h - Math.max(0.04, Math.min(0.96, v)) * (h - 5) - 2.5]);
+    }
+    let line = '';
+    pts.forEach((pt, i) => { line += (i === 0 ? 'M' : 'L') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1) + ' '; });
+    return { line, area: line + 'L' + w + ',' + h + ' L0,' + h + ' Z' };
+  }
 
   setListField(key, id, field, v) {
     this.setState(st => ({ [key]: st[key].map(r => r.id === id ? { ...r, [field]: v } : r) }));
   }
   removeFrom(key, id) { this.setState(st => ({ [key]: st[key].filter(r => r.id !== id) })); }
-  addTo(key, max, seed) {
+  addTo(key, max, opts) {
     this.setState(st => {
       const list = st[key];
       if (list.length >= max) return {};
       const last = list[list.length - 1];
-      const from = last ? (last.toYear ? last.toYear + 1 : last.year + 5) : this.startYear();
+      const from = last ? (last.toYear ? last.toYear + 1 : last.year + 5) : st.startYear;
       const base = { id: st.nextId, year: from, amount: 0, memo: '' };
-      if (seed.hasTo) base.toYear = from + 4;
+      if (opts.hasTo) base.toYear = from + 4;
       return { [key]: [...list, base], nextId: st.nextId + 1 };
     });
   }
@@ -525,7 +580,7 @@ class Component extends DCLogic {
   }
 
   buildRows(key, list, opts) {
-    const by = this.headBirthYear();
+    const by = this.baseBirthYear();
     const counts = {};
     list.forEach(r => { counts[r.year] = (counts[r.year] || 0) + 1; });
     const seen = {};
@@ -534,13 +589,12 @@ class Component extends DCLogic {
       const dup = !!opts.dupCheck && counts[r.year] > 1 && seen[r.year] > 1;
       return {
         year: r.year, toYear: r.toYear, amount: r.amount, growth: r.growth, memo: r.memo,
-        showMemo: !!this.props.showMemo && !!opts.memo,
-        firstRequired: !!opts.requiredFirst && i === 0,
+        cls: (opts.requiredFirst && i === 0) ? 'rq' : 'op',
         dup,
         merge: () => this.mergeDup(key, r.id),
         ageHint: r.year ? (opts.hasTo
-          ? '世帯主 ' + (r.year - by) + '歳 〜 ' + (r.toYear - by) + '歳（' + (r.toYear - r.year + 1) + '年間）'
-          : '世帯主 ' + (r.year - by) + '歳') : '',
+          ? '家族１ ' + (r.year - by) + '歳 〜 ' + (r.toYear - by) + '歳（' + (r.toYear - r.year + 1) + '年間）'
+          : '家族１ ' + (r.year - by) + '歳') : '',
         setYear: (e) => this.setListField(key, r.id, 'year', this.num(e)),
         setToYear: (e) => this.setListField(key, r.id, 'toYear', this.num(e)),
         setAmount: (e) => this.setListField(key, r.id, 'amount', this.num(e)),
@@ -557,8 +611,11 @@ class Component extends DCLogic {
     return {
       isGroup: true, isHeader: false, isCycle: false, isEdu: false,
       label, plainLabel: true, renamable: false,
-      required: !!opts.requiredFirst,
-      hasTo: !!opts.hasTo, hasGrowth: !!opts.hasGrowth, hasRate: false, hasNetCalc: false,
+      hasTo: !!opts.hasTo, hasGrowth: false, hasRate: false, hasNetCalc: false, hasRetire: false,
+      hasInflation: !!opts.inflation,
+      inflation: this.state.inflation,
+      setInflation: (e) => this.setState({ inflation: this.num(e) }),
+      hasMemo: !!opts.memo,
       yearSuffix: opts.lump ? '年に' : '年から',
       amountPrefix: opts.hasTo ? '年間' : '',
       countHint: list.length + ' / ' + max + '行',
@@ -571,21 +628,10 @@ class Component extends DCLogic {
 
   renderVals() {
     const s = this.state;
-    const sy = this.startYear();
-    const by = this.headBirthYear();
-    const isDraft = this.props.state !== '必須が埋まっている';
-
-    const spark = (() => {
-      const w = 340, h = 26, n = 40, pts = [];
-      for (let i = 0; i < n; i++) {
-        const p = i / (n - 1);
-        const v = 0.20 + 0.68 * Math.pow(p, 1.3) - 0.10 * Math.sin(p * 4.8);
-        pts.push([p * w, h - Math.max(0.04, Math.min(0.96, v)) * (h - 5) - 2.5]);
-      }
-      let line = '';
-      pts.forEach((pt, i) => { line += (i === 0 ? 'M' : 'L') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1) + ' '; });
-      return { line, area: line + 'L' + w + ',' + h + ' L0,' + h + ' Z' };
-    })();
+    const sy = s.startYear;
+    const by = this.baseBirthYear();
+    const isWarning = !!this.props.warning;
+    const ok = this.spark(false), warn = this.spark(true);
 
     const assetRows = s.assets.map(a => ({
       name: a.name, amount: a.amount, fixed: a.fixed, renamable: !a.fixed,
@@ -598,8 +644,8 @@ class Component extends DCLogic {
       const early = d.m < 4 || (d.m === 4 && d.d === 1);
       return {
         name: m.name, birth: m.birth, gender: m.gender, relation: m.relation, job: m.job,
+        cls: i === 0 ? 'rq' : 'op',
         ageLabel: d.y ? (sy - d.y) + '歳' + (early ? '・早生まれ' : '') : '',
-        isHead: i === 0,
         open: s.openMember === m.id,
         chevron: s.openMember === m.id ? 'expand_less' : 'expand_more',
         toggle: () => this.setState(st => ({ openMember: st.openMember === m.id ? 0 : m.id })),
@@ -622,14 +668,20 @@ class Component extends DCLogic {
     s.salaries.forEach((sal, si) => {
       const list = sal.rows;
       const th = takeHome(s.calc.income, s.calc.spouse === 'あり', s.calc.kids);
+      const member = s.family.find(m => m.relation === sal.who);
+      const mBirth = member ? this.parseDate(member.birth).y : by;
       blocks.push({
         isGroup: true, isHeader: false, isCycle: false, isEdu: false,
         label: sal.who, plainLabel: false, renamable: true,
-        required: si === 0, hasTo: false, hasGrowth: true, hasRate: false,
+        hasTo: false, hasGrowth: true, hasRate: false, hasInflation: false, hasMemo: false,
         yearSuffix: '年から', amountPrefix: '',
         countHint: list.length + ' / 8行',
         hint: false, hintText: '',
         setLabel: (e) => this.setListField('salaries', sal.id, 'who', e.target.value),
+        hasRetire: true,
+        retireAge: sal.retireAge,
+        retireHint: (mBirth + sal.retireAge) + '年以降の収入は0として計算します',
+        setRetireAge: (e) => this.setListField('salaries', sal.id, 'retireAge', this.num(e)),
         hasNetCalc: true,
         calcOpen: s.openCalc === sal.id,
         calcChevron: s.openCalc === sal.id ? 'expand_less' : 'expand_more',
@@ -641,10 +693,10 @@ class Component extends DCLogic {
         setCalcKids: (e) => this.setCalc('kids', this.num(e)),
         applyCalc: () => this.applyTakeHome(sal.id, th.net),
         rows: list.map((r, i) => ({
-          year: r.year, amount: r.amount, growth: r.growth,
-          showMemo: false, dup: false,
-          firstRequired: si === 0 && i === 0,
-          ageHint: '世帯主 ' + (r.year - by) + '歳',
+          year: r.year, amount: r.amount, growth: r.growth, memo: '',
+          cls: (si === 0 && i === 0) ? 'rq' : 'op',
+          dup: false,
+          ageHint: '家族１ ' + (r.year - by) + '歳',
           setYear: (e) => this.setSalaryField(sal.id, r.id, 'year', this.num(e)),
           setAmount: (e) => this.setSalaryField(sal.id, r.id, 'amount', this.num(e)),
           setGrowth: (e) => this.setSalaryField(sal.id, r.id, 'growth', this.num(e)),
@@ -658,11 +710,11 @@ class Component extends DCLogic {
     blocks.push(header('pension', 'account_balance', '年金・退職金'));
     blocks.push(this.group('lump', '退職一時金・その他一時収入', { max: 3, lump: true, memo: true, hintText: '不動産売却や親からの援助もここへ' }));
     blocks.push(this.group('corpPension', '企業年金', { max: 5, hasTo: true, memo: true }));
-    blocks.push(this.group('privPension', '個人年金・保険など', { max: 5, hasTo: true, memo: true }));
-    blocks.push(this.group('pubPension', '公的年金', { max: 5, requiredFirst: true, dupCheck: true, memo: true, hintText: '世帯主が65歳＝' + (by + 65) + '年／70歳＝' + (by + 70) + '年' }));
+    blocks.push(this.group('privPension', '個人年金・保険など', { max: 5, hasTo: true, memo: true, hintText: '備考に契約名を書いておくと、あとで見返したときに分かります' }));
+    blocks.push(this.group('pubPension', '公的年金', { max: 5, requiredFirst: true, dupCheck: true, memo: true, hintText: '家族１が65歳＝' + (by + 65) + '年／70歳＝' + (by + 70) + '年' }));
 
     blocks.push(header('expense', 'shopping_basket', '支出'));
-    blocks.push(this.group('living', '基本生活費', { max: 5, requiredFirst: true, hasGrowth: true, dupCheck: true, memo: true, hintText: '住宅費・教育費・保険料・自動車費・その他を除いた経常支出' }));
+    blocks.push(this.group('living', '基本生活費', { max: 5, requiredFirst: true, inflation: true, dupCheck: true, memo: true, hintText: '住宅費・教育費・保険料・自動車費・その他を除いた経常支出' }));
     blocks.push(this.group('housing', '住宅費', { max: 5, requiredFirst: true, dupCheck: true, memo: true, hintText: '家賃／ローン／修繕・管理費／固定資産税の合計' }));
     blocks.push(this.group('housingLump', '住宅費一時金（頭金など）', { max: 3, lump: true, memo: true }));
 
@@ -672,16 +724,7 @@ class Component extends DCLogic {
 
     blocks.push(this.group('insurance', '保険料', { max: 7, requiredFirst: true, dupCheck: true, memo: true }));
     blocks.push(this.group('carCost', '自動車の維持費', { max: 5, dupCheck: true, memo: true, hintText: '税金・保険・車検・駐車場・整備の年額' }));
-    blocks.push({
-      isCycle: true, isGroup: false, isHeader: false, isEdu: false,
-      label: '自動車の購入費',
-      fromYear: s.carBuy.fromYear, every: s.carBuy.every, amount: s.carBuy.amount, untilAge: s.carBuy.untilAge,
-      preview: this.cyclePreview(),
-      setFromYear: (e) => this.setCar('fromYear', this.num(e)),
-      setEvery: (e) => this.setCar('every', Math.max(1, this.num(e))),
-      setAmount: (e) => this.setCar('amount', this.num(e)),
-      setUntilAge: (e) => this.setCar('untilAge', this.num(e)),
-    });
+    blocks.push(this.carBlock());
     blocks.push(this.group('otherFlow', 'その他の経常支出', { max: 5, dupCheck: true, memo: true, hintText: '同じ年は1行にまとめます（趣味と旅行なら合算して1行）' }));
     blocks.push(this.group('otherLump', 'その他の一時支出', { max: 5, lump: true, memo: true }));
 
@@ -706,16 +749,15 @@ class Component extends DCLogic {
     });
 
     return {
-      isDraft, isReady: !isDraft,
-      summaryBg: isDraft ? 'var(--color-accent-100)' : 'var(--color-bg)',
-      requiredLeft: 3, requiredPct: '76%',
-      sparkLine: spark.line, sparkArea: spark.area,
+      isWarning, isNormal: !isWarning,
+      summaryBg: isWarning ? 'var(--color-accent-100)' : 'var(--color-bg)',
+      okLine: ok.line, okArea: ok.area, warnLine: warn.line, warnArea: warn.area,
       scrollRef: this.setScrollRef,
       basicRef: this.setAnchor('basic'),
       onScroll: this.onScroll,
       indexItems, blocks,
-      startDate: s.startDate,
-      setStartDate: (e) => this.setState({ startDate: e.target.value }),
+      startYear: sy,
+      setStartYear: (e) => this.setState({ startYear: this.num(e) }),
       endAge: s.endAge,
       setEndAge: (e) => this.setState({ endAge: this.num(e) }),
       assetRows, familyRows,
@@ -727,28 +769,65 @@ class Component extends DCLogic {
     };
   }
 
+  carBlock() {
+    const s = this.state, c = s.carBuy, by = this.baseBirthYear();
+    const endYear = by + c.untilAge;
+    const years = [];
+    for (let y = c.fromYear; y <= endYear && years.length < 12; y += c.every) years.push(y);
+    let total = 0;
+    const occurrences = years.map(y => {
+      const amount = s.carBuyOverride[y] === undefined ? c.amount : s.carBuyOverride[y];
+      total += amount;
+      return {
+        year: y, amount,
+        ageHint: '家族１ ' + (y - by) + '歳',
+        setAmount: (e) => this.setCarOverride(y, this.num(e)),
+      };
+    });
+    return {
+      isCycle: true, isGroup: false, isHeader: false, isEdu: false,
+      label: '自動車の購入費',
+      fromYear: c.fromYear, every: c.every, amount: c.amount, untilAge: c.untilAge,
+      occurrences, total,
+      countLabel: years.length + '回の合計',
+      detailOpen: s.carDetailOpen,
+      detailChevron: s.carDetailOpen ? 'expand_less' : 'expand_more',
+      toggleDetail: () => this.setState(st => ({ carDetailOpen: !st.carDetailOpen })),
+      setFromYear: (e) => this.setCar('fromYear', this.num(e)),
+      setEvery: (e) => this.setCar('every', Math.max(1, this.num(e))),
+      setAmount: (e) => this.setCar('amount', this.num(e)),
+      setUntilAge: (e) => this.setCar('untilAge', this.num(e)),
+    };
+  }
+  setCarOverride(year, v) {
+    this.setState(st => ({ carBuyOverride: { ...st.carBuyOverride, [year]: v } }));
+  }
+
   eduBlock(child, sy) {
     const d = this.parseDate(child.birth);
     const early = d.m < 4 || (d.m === 4 && d.d === 1);
     const k = early ? 0 : 1;
     const picks = this.state.edu[child.id] || EDU_STAGES.map(st => st.options[0]);
     const over = this.state.eduAmount[child.id] || {};
+    const spans = this.state.eduSpan[child.id] || {};
     const stages = [];
     let total = 0;
     EDU_STAGES.forEach((st, i) => {
-      const rawFrom = d.y + st.from[k];
-      const rawTo = d.y + st.to[k];
-      if (!d.y || rawTo < sy) return;
-      const from = Math.max(rawFrom, sy);
+      const auto = { from: Math.max(d.y + st.from[k], sy), to: d.y + st.to[k] };
+      const span = spans[i] || auto;
+      if (!d.y || auto.to < sy) return;
       const stage = picks[i] || st.options[0];
       const amount = over[i] === undefined ? EDU_UNIT[stage] : over[i];
-      total += amount * (rawTo - from + 1);
+      const years = Math.max(0, span.to - span.from + 1);
+      total += amount * years;
       stages.push({
-        stage, options: st.options,
-        span: from + '〜' + rawTo + '年（' + (rawTo - from + 1) + '年間）',
-        amount,
+        stage, options: st.options, amount,
+        from: span.from, to: span.to,
+        sub: years + '年間・計' + (amount * years) + '万円',
         setStage: (e) => this.setEduStage(child.id, i, e.target.value),
         setAmount: (e) => this.setEduAmount(child.id, i, this.num(e)),
+        setFrom: (e) => this.setEduSpan(child.id, i, 'from', this.num(e), auto),
+        setTo: (e) => this.setEduSpan(child.id, i, 'to', this.num(e), auto),
       });
     });
     return {
@@ -756,9 +835,7 @@ class Component extends DCLogic {
       label: child.name + 'の教育費',
       birthLabel: child.birth + (early ? '・早生まれ' : ''),
       stages, total,
-      note: early
-        ? '4/1以前生まれのため、就学年を1年早めて計算しています'
-        : '生年月日から在学年を、段階の選択から相場の金額を自動で入れています',
+      note: '年も金額も自動で入りますが、進路に合わせて書き換えられます',
     };
   }
 
@@ -774,12 +851,20 @@ class Component extends DCLogic {
   setEduAmount(cid, i, v) {
     this.setState(st => ({ eduAmount: { ...st.eduAmount, [cid]: { ...(st.eduAmount[cid] || {}), [i]: v } } }));
   }
+  setEduSpan(cid, i, field, v, auto) {
+    this.setState(st => {
+      const forChild = { ...(st.eduSpan[cid] || {}) };
+      forChild[i] = { ...(forChild[i] || auto), [field]: v };
+      return { eduSpan: { ...st.eduSpan, [cid]: forChild } };
+    });
+  }
 
   investBlock(asset, kind, label, list, withRate) {
     return {
       isGroup: true, isHeader: false, isCycle: false, isEdu: false,
       label, plainLabel: true, renamable: false,
-      required: withRate, hasTo: true, hasGrowth: false, hasRate: withRate, hasNetCalc: false,
+      hasTo: true, hasGrowth: false, hasRate: withRate, hasNetCalc: false, hasRetire: false,
+      hasInflation: false, hasMemo: true,
       rate: asset.rate, tax: asset.tax,
       yearSuffix: '年から', amountPrefix: '年間',
       countHint: list.length + ' / 5行',
@@ -790,15 +875,6 @@ class Component extends DCLogic {
       canAdd: list.length < 5,
       add: () => this.addInvestRow(asset.id, kind),
     };
-  }
-
-  cyclePreview() {
-    const c = this.state.carBuy, by = this.headBirthYear();
-    const endYear = by + c.untilAge;
-    const years = [];
-    for (let y = c.fromYear; y <= endYear && years.length < 8; y += c.every) years.push(y);
-    if (!years.length) return '対象となる年がありません';
-    return years.join('・') + '年（' + years.length + '回・計' + (years.length * c.amount) + '万円）';
   }
 
   setCar(field, v) { this.setState(st => ({ carBuy: { ...st.carBuy, [field]: v } })); }
@@ -824,18 +900,18 @@ class Component extends DCLogic {
       salaries: st.salaries.map(s => {
         if (s.id !== sid || s.rows.length >= 8) return s;
         const last = s.rows[s.rows.length - 1];
-        return { ...s, rows: [...s.rows, { id: st.nextId, year: last ? last.year + 5 : this.startYear(), amount: 0, growth: 0 }] };
+        return { ...s, rows: [...s.rows, { id: st.nextId, year: last ? last.year + 5 : st.startYear, amount: 0, growth: 0 }] };
       }),
       nextId: st.nextId + 1,
     }));
   }
 
   buildInvestRows(aid, kind, list) {
-    const by = this.headBirthYear();
+    const by = this.baseBirthYear();
     return list.map(r => ({
       year: r.year, toYear: r.toYear, amount: r.amount, memo: r.memo,
-      showMemo: !!this.props.showMemo, firstRequired: false, dup: false,
-      ageHint: '世帯主 ' + (r.year - by) + '歳 〜 ' + (r.toYear - by) + '歳（' + (r.toYear - r.year + 1) + '年間・計' + ((r.toYear - r.year + 1) * r.amount) + '万円）',
+      cls: 'op', dup: false,
+      ageHint: '家族１ ' + (r.year - by) + '歳 〜 ' + (r.toYear - by) + '歳（' + (r.toYear - r.year + 1) + '年間・計' + ((r.toYear - r.year + 1) * r.amount) + '万円）',
       setYear: (e) => this.setInvestField(aid, kind, r.id, 'year', this.num(e)),
       setToYear: (e) => this.setInvestField(aid, kind, r.id, 'toYear', this.num(e)),
       setAmount: (e) => this.setInvestField(aid, kind, r.id, 'amount', this.num(e)),
@@ -860,7 +936,7 @@ class Component extends DCLogic {
       const iv = st.invest[aid];
       if (iv[kind].length >= 5) return {};
       const last = iv[kind][iv[kind].length - 1];
-      const from = last ? last.toYear + 1 : this.startYear();
+      const from = last ? last.toYear + 1 : st.startYear;
       return {
         invest: { ...st.invest, [aid]: { ...iv, [kind]: [...iv[kind], { id: st.nextId, year: from, toYear: from + 4, amount: 0, memo: '' }] } },
         nextId: st.nextId + 1,

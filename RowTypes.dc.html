@@ -28,6 +28,7 @@
   --color-neutral-500: oklch(64% 0.018 65);
   --color-neutral-600: oklch(54% 0.017 60);
   --color-neutral-700: oklch(44% 0.015 55);
+  --fill-opt: oklch(95% 0.012 220);
   --font-body: 'Figtree', system-ui, sans-serif;
   --radius-lg: 18px;
   --shadow-sm: 0 1px 3px rgba(32, 30, 29, 0.08), 0 1px 2px rgba(32, 30, 29, 0.06);
@@ -37,7 +38,7 @@ a { color: var(--color-accent-700); }
 a:hover { color: var(--color-accent-800); }
 .zm { font-family: 'Zen Maru Gothic', var(--font-body); }
 .msr { font-family: 'Material Symbols Rounded'; font-weight: 400; font-style: normal; line-height: 1; display: inline-block; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
-.f { font-family: 'Zen Maru Gothic', var(--font-body); font-weight: 700; color: var(--color-text); border-bottom: 2px solid var(--color-accent-200); padding: 3px 2px; display: inline-block; text-align: right; }
+.f { font-family: 'Zen Maru Gothic', var(--font-body); font-weight: 700; color: var(--color-text); background: var(--fill-opt); border-radius: 8px; padding: 5px 9px; display: inline-block; text-align: right; box-sizing: border-box; }
 .u { font-size: 11.5px; font-weight: 500; color: var(--color-neutral-700); }
 </style>
 </helmet>
@@ -87,7 +88,7 @@ a:hover { color: var(--color-accent-800); }
         <span class="f" style="width:60px;font-size:17px">2051</span><span class="u">年まで</span>
         <span class="u" style="margin-left:8px">年間</span><span class="f" style="width:64px;font-size:17px">60</span><span class="u">万円</span>
       </div>
-      <div style="font-size:11px;font-weight:500;color:var(--color-neutral-600);margin-top:6px">世帯主 35歳 〜 60歳（26年間）</div>
+      <div style="font-size:11px;font-weight:500;color:var(--color-neutral-600);margin-top:6px">家族１ 35歳 〜 60歳（26年間）</div>
       <div style="font-size:11.5px;font-weight:500;color:var(--color-neutral-600);margin-top:14px;padding-top:12px;border-top:1px solid var(--color-neutral-100);line-height:1.7">企業年金／個人年金・保険／投資の積立／投資の現金化</div>
       <div style="display:flex;gap:9px;background:var(--color-accent-100);border-radius:12px;padding:12px 14px;margin-top:12px">
         <span class="msr" style="font-size:18px;color:var(--color-accent-800);flex-shrink:0">lightbulb</span>
@@ -107,8 +108,8 @@ a:hover { color: var(--color-accent-800); }
         <span class="f" style="width:64px;font-size:17px;margin-left:8px">300</span><span class="u">万円</span>
         <span class="f" style="width:42px;font-size:17px;margin-left:8px">75</span><span class="u">歳まで</span>
       </div>
-      <div style="font-size:11px;font-weight:500;color:var(--color-neutral-600);margin-top:6px">2030・2040・2050・2060年（4回）</div>
-      <div style="font-size:11.5px;font-weight:500;color:var(--color-neutral-600);margin-top:14px;padding-top:12px;border-top:1px solid var(--color-neutral-100);line-height:1.7">自動車の買い替え。1行の入力から複数年に自動展開する唯一の型</div>
+      <div style="font-size:11px;font-weight:500;color:var(--color-neutral-600);margin-top:6px">2030・2040・2050・2060年（4回）。回ごとに金額を変えられる</div>
+      <div style="font-size:11.5px;font-weight:500;color:var(--color-neutral-600);margin-top:14px;padding-top:12px;border-top:1px solid var(--color-neutral-100);line-height:1.7">自動車の買い替え。1行の入力から複数年に自動展開する唯一の型。展開して回ごとに金額を変えることもできる</div>
     </div>
 
   </div>

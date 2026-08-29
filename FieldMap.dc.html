@@ -28,6 +28,8 @@
   --color-neutral-300: oklch(84% 0.017 70);
   --color-neutral-600: oklch(54% 0.017 60);
   --color-neutral-700: oklch(44% 0.015 55);
+  --fill-req: oklch(93% 0.045 75);
+  --fill-opt: oklch(95% 0.012 220);
   --font-body: 'Figtree', system-ui, sans-serif;
   --radius-lg: 18px;
   --shadow-sm: 0 1px 3px rgba(32, 30, 29, 0.08), 0 1px 2px rgba(32, 30, 29, 0.06);
@@ -37,8 +39,8 @@ a { color: var(--color-accent-700); }
 a:hover { color: var(--color-accent-800); }
 .zm { font-family: 'Zen Maru Gothic', var(--font-body); }
 .msr { font-family: 'Material Symbols Rounded'; font-weight: 400; font-style: normal; line-height: 1; display: inline-block; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
-.req { font-size: 10px; font-weight: 700; color: #fff; background: var(--color-accent); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
-.opt { font-size: 10px; font-weight: 700; color: var(--color-neutral-700); background: var(--color-neutral-200); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.req { font-size: 10px; font-weight: 700; color: var(--color-text); background: var(--fill-req); padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
+.opt { font-size: 10px; font-weight: 700; color: var(--color-neutral-700); background: var(--fill-opt); padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
 .auto { font-size: 10px; font-weight: 700; color: var(--color-accent-2-800); background: var(--color-accent-2-100); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 .nm { font-size: 12.5px; font-weight: 700; }
 .dt { font-size: 11px; font-weight: 500; color: var(--color-neutral-600); }
@@ -48,7 +50,7 @@ a:hover { color: var(--color-accent-800); }
 <div class="zm" style="width:720px;min-height:1180px;box-sizing:border-box;padding:30px 30px 36px;background:var(--color-bg);color:var(--color-text)">
 
   <div style="font-size:22px;font-weight:900;letter-spacing:0.02em">入力項目マップ｜必須と任意</div>
-  <div style="font-size:12.5px;font-weight:500;color:var(--color-neutral-700);margin-top:8px;line-height:1.75">Excel入力シートは色で必須／任意を区別している（凡例：黄＝必須入力、青＝入力可能）。全セルを分類すると<b>必須は22セルだけ</b>で、残りはすべて任意。この比率がそのまま画面設計の指針になる。</div>
+  <div style="font-size:12.5px;font-weight:500;color:var(--color-neutral-700);margin-top:8px;line-height:1.75">Excel入力シートは色で必須／任意を区別している（凡例：必須入力／入力可能）。全セルを分類すると<b>必須は22セルだけ</b>で、残りはすべて任意。この比率がそのまま画面設計の指針になる。</div>
 
   <div style="display:flex;gap:10px;margin-top:18px">
     <div style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:999px;padding:8px 14px;box-shadow:var(--shadow-sm)">
@@ -112,7 +114,7 @@ class Component extends DCLogic {
         {
           icon: 'tune', title: '０. 基本', meta: '必須5',
           items: [
-            mk('開始日', R, '当年1/1が既定。以降の「開始年」は全部ここから導出'),
+            mk('開始年', R, '当年が既定。各セクションの開始年は全部ここから導出'),
             mk('終了年齢', O, '既定90歳'),
             mk('普通預金等の残高', R, '前年末時点。名称は固定'),
             mk('投資資産の残高 ×2', R, 'NISA・iDeCo枠。0でも可'),
@@ -124,23 +126,23 @@ class Component extends DCLogic {
           items: [
             mk('家族1の氏名', R, '18歳以上'),
             mk('家族1の生年月日', R, '年齢と各種の既定年を導出する基準'),
-            mk('性別・続柄・職業', O, '選択式'),
+            mk('性別・続柄・職業', O, '続柄は家族１〜／子供１〜／親／その他'),
             mk('家族2〜6', O, '続柄が「子供」の人だけ教育費の対象になる'),
           ],
         },
         {
           icon: 'payments', title: '２. 給与収入等', meta: '対象者3枠・各8行',
           items: [
-            mk('対象者の名称', R, '1人目のみ必須。夫／妻／その他を自由に改名'),
+            mk('対象者の名称', R, '1人目のみ必須。自由に改名できる'),
             mk('1行目の手取額・上昇率', R, '可処分所得で入力'),
-            mk('2行目以降', O, '再雇用や退職での減額を段階で表現'),
+            mk('2行目以降・何歳まで働くか', O, '退職年齢を入れると以降は自動で0になる'),
             mk('変更年', A, '1行目は開始年、追加行は前行+5年'),
           ],
         },
         {
           icon: 'account_balance', title: '３. 年金・退職金', meta: '必須1',
           items: [
-            mk('公的年金 1行目', R, '既定は世帯主65歳の年'),
+            mk('公的年金 1行目', R, '既定は家族１が65歳の年'),
             mk('退職一時金・その他一時収入', O, '一時型・3行'),
             mk('企業年金', O, '期間型・5行'),
             mk('個人年金・保険など', O, '期間型・5行'),
@@ -149,7 +151,7 @@ class Component extends DCLogic {
         {
           icon: 'shopping_basket', title: '４. 支出', meta: '必須5',
           items: [
-            mk('基本生活費 1行目＋物価上昇率', R, '住宅・教育・保険・自動車・その他を除いた全額'),
+            mk('基本生活費 1行目＋物価上昇率', R, '上昇率はグループに1つだけ'),
             mk('住宅費 1行目', R, '家賃／ローン／修繕／固定資産税の合計'),
             mk('保険料 1行目', R, ''),
             mk('教育費', O, '子供ごと7段階。生年月日と段階の選択だけで年も金額も決まる'),
@@ -176,6 +178,9 @@ class Component extends DCLogic {
         { n: '7', title: '教育費はExcelの自動化をそのまま移植した', body: '生年月日から在学年を算出（4/1以前生まれは1年前倒し）、段階の選択から相場の金額をひく。ここはExcelが既に完成しているので、変えずに写す。' },
         { n: '8', title: '同じ年の重複を検知して合算を提案する', body: '変更型は同じ年に2行あると壊れる。Excelは注意書きで利用者に守らせているが、アプリなら検知してワンタップで1行にまとめられる。' },
         { n: '9', title: '手取額の計算を給与欄に埋め込んだ', body: 'Excelは別シートで計算して手で転記する作り。額面・扶養を入れると手取りが出て、そのまま1行目に反映できる。' },
+        { n: '10', title: '必須と任意を入力欄の背景色で示した', body: 'Excelと同じ考え方。上部に凡例を置いたので、各項目の「必須」バッジは要らなくなり、下線の書き分けも消えて一種類になった。' },
+        { n: '11', title: '続柄から世帯主・配偶者をなくした', body: '家族１・家族２にした。配偶者がいない世帯も多く、続柄の言葉が前提を固定してしまうため。子供だけは教育費の対象を決めるので残す。' },
+        { n: '12', title: '自動車の購入費を回ごとに変えられるようにした', body: '毎回同じ金額とは限らない。展開すると各回の金額を個別に書き換えられる（Excelの行グループ化と同じ）。' },
       ],
     };
   }
