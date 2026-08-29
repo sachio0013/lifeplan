@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&display=swap" rel="stylesheet">
+<style>
+:root {
+  --color-bg: #f5ead8;
+  --color-text: #201e1d;
+  --color-accent: #c67139;
+  --color-accent-100: oklch(93% 0.035 45);
+  --color-accent-200: oklch(87% 0.06 45);
+  --color-accent-700: oklch(49% 0.12 38);
+  --color-accent-800: oklch(40% 0.10 35);
+  --color-accent-2-100: oklch(92% 0.025 120);
+  --color-accent-2-800: oklch(37% 0.05 112);
+  --color-neutral-100: oklch(96% 0.01 70);
+  --color-neutral-200: oklch(91% 0.015 70);
+  --color-neutral-500: oklch(64% 0.018 65);
+  --color-neutral-600: oklch(54% 0.017 60);
+  --color-neutral-700: oklch(44% 0.015 55);
+  --font-body: 'Figtree', system-ui, sans-serif;
+  --radius-lg: 18px;
+  --shadow-sm: 0 1px 3px rgba(32, 30, 29, 0.08), 0 1px 2px rgba(32, 30, 29, 0.06);
+}
+body { margin: 0; background: var(--color-neutral-200); }
+a { color: var(--color-accent-700); }
+a:hover { color: var(--color-accent-800); }
+.zm { font-family: 'Zen Maru Gothic', var(--font-body); }
+.msr { font-family: 'Material Symbols Rounded'; font-weight: 400; font-style: normal; line-height: 1; display: inline-block; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
+.f { font-family: 'Zen Maru Gothic', var(--font-body); font-weight: 700; color: var(--color-text); border-bottom: 2px solid var(--color-accent-200); padding: 3px 2px; display: inline-block; text-align: right; }
+.u { font-size: 11.5px; font-weight: 500; color: var(--color-neutral-700); }
+</style>
+</helmet>
+
+<div class="zm" style="width:560px;min-height:900px;box-sizing:border-box;padding:28px 26px 34px;background:var(--color-bg);color:var(--color-text)">
+
+  <div style="font-size:22px;font-weight:900;letter-spacing:0.02em">行エディタの4つの型</div>
+  <div style="font-size:12.5px;font-weight:500;color:var(--color-neutral-700);margin-top:8px;line-height:1.75">現行設計は「◯年から △万円」の1型しか持っていない。Excel入力シートを読み解くと、実際には性質の違う4つの型が使われている。ここを分けないと、企業年金・積立投資・自動車の買い替えが表現できない。</div>
+
+  <div style="display:flex;flex-direction:column;gap:14px;margin-top:24px">
+
+    <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:18px 20px">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span style="font-size:11px;font-weight:900;color:#fff;background:var(--color-accent);width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center">1</span>
+        <span style="font-size:15px;font-weight:900">変更型</span>
+        <span style="font-size:11px;font-weight:700;color:var(--color-accent-2-800);background:var(--color-accent-2-100);padding:3px 10px;border-radius:999px;margin-left:auto">その年から金額が変わる</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:7px;margin-top:16px">
+        <span class="f" style="width:60px;font-size:17px">2026</span><span class="u">年から</span>
+        <span class="f" style="width:74px;font-size:17px;margin-left:8px">500</span><span class="u">万円</span>
+        <span class="u" style="margin-left:10px">上昇率</span><span class="f" style="width:42px;font-size:17px">1.5</span><span class="u">％</span>
+      </div>
+      <div style="font-size:11.5px;font-weight:500;color:var(--color-neutral-600);margin-top:14px;padding-top:12px;border-top:1px solid var(--color-neutral-100);line-height:1.7">給与／基本生活費／住宅費／保険料／自動車維持費／公的年金／その他経常支出<br>上昇率を持つのは給与と基本生活費のみ（生活費は物価上昇率）</div>
+    </div>
+
+    <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:18px 20px">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span style="font-size:11px;font-weight:900;color:#fff;background:var(--color-accent);width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center">2</span>
+        <span style="font-size:15px;font-weight:900">一時型</span>
+        <span style="font-size:11px;font-weight:700;color:var(--color-accent-2-800);background:var(--color-accent-2-100);padding:3px 10px;border-radius:999px;margin-left:auto">その年だけ発生する</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:7px;margin-top:16px">
+        <span class="f" style="width:60px;font-size:17px">2051</span><span class="u">年に</span>
+        <span class="f" style="width:74px;font-size:17px;margin-left:8px">1500</span><span class="u">万円</span>
+      </div>
+      <div style="font-size:11.5px;font-weight:500;color:var(--color-neutral-600);margin-top:14px;padding-top:12px;border-top:1px solid var(--color-neutral-100);line-height:1.7">退職一時金／不動産売却・親からの援助／住宅の頭金／その他一時支出</div>
+    </div>
+
+    <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:18px 20px;border:2px solid var(--color-accent-200)">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span style="font-size:11px;font-weight:900;color:#fff;background:var(--color-accent);width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center">3</span>
+        <span style="font-size:15px;font-weight:900">期間型</span>
+        <span style="font-size:11px;font-weight:700;color:#fff;background:var(--color-accent);padding:3px 10px;border-radius:999px;margin-left:auto">現行設計に無い</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:7px;margin-top:16px;flex-wrap:wrap">
+        <span class="f" style="width:60px;font-size:17px">2026</span><span class="u">年から</span>
+        <span class="f" style="width:60px;font-size:17px">2051</span><span class="u">年まで</span>
+        <span class="u" style="margin-left:8px">年間</span><span class="f" style="width:64px;font-size:17px">60</span><span class="u">万円</span>
+      </div>
+      <div style="font-size:11px;font-weight:500;color:var(--color-neutral-600);margin-top:6px">世帯主 35歳 〜 60歳（26年間）</div>
+      <div style="font-size:11.5px;font-weight:500;color:var(--color-neutral-600);margin-top:14px;padding-top:12px;border-top:1px solid var(--color-neutral-100);line-height:1.7">企業年金／個人年金・保険／投資の積立／投資の現金化</div>
+      <div style="display:flex;gap:9px;background:var(--color-accent-100);border-radius:12px;padding:12px 14px;margin-top:12px">
+        <span class="msr" style="font-size:18px;color:var(--color-accent-800);flex-shrink:0">lightbulb</span>
+        <div style="font-size:11.5px;font-weight:500;color:var(--color-accent-800);line-height:1.7">Excelでは期間が重なるとおかしくなるため、利用者が空白期間を「0万円」で手埋めするルールになっている。アプリでは<b>次の行の開始年を前の行の翌年に自動で置く</b>ことで、この落とし穴ごと無くせる。</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);padding:18px 20px;border:2px solid var(--color-accent-200)">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span style="font-size:11px;font-weight:900;color:#fff;background:var(--color-accent);width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center">4</span>
+        <span style="font-size:15px;font-weight:900">周期型</span>
+        <span style="font-size:11px;font-weight:700;color:#fff;background:var(--color-accent);padding:3px 10px;border-radius:999px;margin-left:auto">現行設計に無い</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:7px;margin-top:16px;flex-wrap:wrap">
+        <span class="f" style="width:60px;font-size:17px">2030</span><span class="u">年から</span>
+        <span class="f" style="width:42px;font-size:17px">10</span><span class="u">年ごとに</span>
+        <span class="f" style="width:64px;font-size:17px;margin-left:8px">300</span><span class="u">万円</span>
+        <span class="f" style="width:42px;font-size:17px;margin-left:8px">75</span><span class="u">歳まで</span>
+      </div>
+      <div style="font-size:11px;font-weight:500;color:var(--color-neutral-600);margin-top:6px">2030・2040・2050・2060年（4回）</div>
+      <div style="font-size:11.5px;font-weight:500;color:var(--color-neutral-600);margin-top:14px;padding-top:12px;border-top:1px solid var(--color-neutral-100);line-height:1.7">自動車の買い替え。1行の入力から複数年に自動展開する唯一の型</div>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":560,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

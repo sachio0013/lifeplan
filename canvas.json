@@ -1,6 +1,8 @@
 {
   "artboards": [
-    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 412, "h": 892 }
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 412, "h": 892, "title": "入力画面（再設計）" },
+    { "file": "FieldMap.dc.html", "x": 500, "y": 0, "w": 720, "h": 1180, "title": "入力項目マップ" },
+    { "file": "RowTypes.dc.html", "x": 1300, "y": 0, "w": 560, "h": 900, "title": "行エディタの4型" }
   ],
-  "launch": { "view": "focused", "file": "Main.dc.html" }
+  "launch": { "view": "canvas" }
 }
