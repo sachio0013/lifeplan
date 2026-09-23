@@ -1,0 +1,666 @@
+<title>ライフプラン入力</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5ead8;
+  --surface: #ffffff;
+  --text: #201e1d;
+  --text-muted: #736a63;
+  --text-faint: #9a9088;
+  --accent: #c67139;
+  --accent-ink: #6b3a1c;
+  --accent-soft: #f3ddc4;
+  --sage: #6f7f56;
+  --sage-soft: #e2e8d4;
+  --line: #ece2d0;
+  --fill-req: #f6e3ae;
+  --fill-req-ink: #6b5116;
+  --fill-opt: #e6ebf1;
+  --fill-opt-ink: #45505c;
+  --shadow: 0 1px 3px rgba(32,26,18,.08), 0 1px 2px rgba(32,26,18,.05);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #211c16;
+    --surface: #2b241c;
+    --text: #f2e9dc;
+    --text-muted: #b7aa9b;
+    --text-faint: #85786b;
+    --accent: #e0925a;
+    --accent-ink: #ffd9b8;
+    --accent-soft: #4a3420;
+    --sage: #a3b581;
+    --sage-soft: #333c26;
+    --line: #3c3427;
+    --fill-req: #4d3d18;
+    --fill-req-ink: #f0d488;
+    --fill-opt: #2a323b;
+    --fill-opt-ink: #c7d2dc;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #211c16;
+  --surface: #2b241c;
+  --text: #f2e9dc;
+  --text-muted: #b7aa9b;
+  --text-faint: #85786b;
+  --accent: #e0925a;
+  --accent-ink: #ffd9b8;
+  --accent-soft: #4a3420;
+  --sage: #a3b581;
+  --sage-soft: #333c26;
+  --line: #3c3427;
+  --fill-req: #4d3d18;
+  --fill-req-ink: #f0d488;
+  --fill-opt: #2a323b;
+  --fill-opt-ink: #c7d2dc;
+  --shadow: 0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: 'Zen Maru Gothic', 'Figtree', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+#shell { max-width: 480px; margin: 0 auto; height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+.msr { font-family: 'Material Symbols Rounded'; font-weight: 400; font-style: normal; line-height: 1; display: inline-block; white-space: nowrap; font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; }
+#topbar { flex-shrink: 0; display: flex; align-items: center; height: 52px; padding: env(safe-area-inset-top, 0px) 18px 0; font-size: 18px; font-weight: 900; letter-spacing: .02em; }
+#scroll { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; -webkit-overflow-scrolling: touch; }
+#summary { position: sticky; top: 0; z-index: 3; padding: 8px 18px 6px; background: var(--bg); display: flex; flex-direction: column; gap: 4px; }
+#summary .row { display: flex; align-items: baseline; gap: 8px; }
+#summary .lbl { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+#summary .amt { font-size: 19px; font-weight: 900; margin-left: auto; }
+#summary .unit { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+#tabs { position: sticky; top: 52px; z-index: 2; display: flex; gap: 5px; padding: 8px 12px; background: var(--bg); border-bottom: 1.5px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+#tabs::-webkit-scrollbar { display: none; }
+.tab { flex: 1; text-align: center; padding: 8px 2px; border-radius: 999px; font-size: 12.5px; font-weight: 700; cursor: pointer; background: var(--fill-opt); color: var(--fill-opt-ink); white-space: nowrap; }
+.tab.on { background: var(--accent); color: #fff; }
+#legend { display: flex; align-items: center; gap: 14px; padding: 10px 18px; font-size: 11px; font-weight: 500; color: var(--text-muted); }
+#legend .chip { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--text-muted); }
+#legend .sw { width: 15px; height: 15px; border-radius: 4px; }
+#content { padding: 0 16px 44px; }
+h2.sec { display: flex; align-items: center; gap: 7px; padding: 18px 2px 10px; margin: 0; font-size: 17px; font-weight: 900; }
+h2.sec .msr { font-size: 20px; color: var(--accent); }
+.card { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); padding: 14px 16px 10px; margin-bottom: 12px; }
+.card .ttl { font-size: 12.5px; font-weight: 700; color: var(--text-muted); margin-bottom: 2px; }
+.card .cnt { font-size: 10.5px; font-weight: 500; color: var(--text-faint); margin-left: auto; }
+.card .head { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; }
+.divide { border-top: 1px solid var(--line); }
+.rq, .op {
+  font-family: inherit; font-weight: 700; color: var(--text); border: none; border-radius: 8px; padding: 6px 9px;
+}
+.rq { background: var(--fill-req); }
+.op { background: var(--fill-opt); }
+.rq:focus, .op:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+select.rq, select.op { -webkit-appearance: none; appearance: none; }
+.u { font-size: 11.5px; font-weight: 500; color: var(--text-muted); }
+.hint { font-size: 10.5px; font-weight: 500; color: var(--text-faint); padding: 9px 0 4px; }
+.badge { font-size: 11px; font-weight: 700; color: var(--accent-ink); background: var(--sage-soft); padding: 4px 11px; border-radius: 999px; }
+.rowline { padding: 11px 0 12px; }
+.rowtop { display: flex; align-items: center; gap: 6px; }
+.rowamt { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+.ageh { font-size: 10.5px; font-weight: 500; color: var(--text-faint); margin-top: 4px; }
+.del { cursor: pointer; display: flex; align-items: center; padding: 2px; margin-left: auto; color: var(--text-faint); background: none; border: none; }
+.addwrap { display: flex; justify-content: center; padding: 10px 0 4px; }
+.addbtn { width: 44px; height: 44px; padding: 0; border: none; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.addbtn .msr { font-size: 24px; }
+.btn { font-family: inherit; font-size: 11.5px; font-weight: 700; color: #fff; background: var(--accent); border: none; border-radius: 999px; padding: 8px 12px; cursor: pointer; width: 100%; margin-top: 11px; }
+.dup { display: flex; align-items: center; gap: 8px; background: var(--accent-soft); border-radius: 12px; padding: 9px 11px; margin-top: 10px; }
+.dup .msr { font-size: 17px; color: var(--accent-ink); flex-shrink: 0; }
+.dup .txt { font-size: 11px; font-weight: 700; color: var(--accent-ink); line-height: 1.5; }
+.memo { width: 100%; margin-top: 9px; font-size: 12px; font-weight: 500; }
+input[type=number] { text-align: right; }
+input, select { font-size: 15px; }
+input::placeholder { color: var(--text-faint); font-weight: 500; }
+.calc { border-top: 1px solid var(--line); padding-top: 10px; }
+.calc .open { display: flex; align-items: center; gap: 6px; cursor: pointer; background: none; border: none; padding: 0; font: inherit; width: 100%; text-align: left; }
+.calc .open span.lbl { font-size: 12px; font-weight: 700; color: var(--accent); }
+.calc .msr.chev { font-size: 18px; color: var(--text-faint); margin-left: auto; }
+.calcbox { background: var(--fill-opt); border-radius: 12px; padding: 12px 13px; margin-top: 10px; }
+.calcrow { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
+.calcrow:first-child { margin-top: 0; }
+.calcresult { display: flex; align-items: baseline; gap: 8px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
+.retire { display: flex; align-items: center; gap: 7px; padding: 11px 0 4px; border-top: 1px solid var(--line); }
+.retire .msr { font-size: 18px; color: var(--text-faint); }
+.member { padding: 11px 0; }
+.member .n1 { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.member .n2 { display: flex; align-items: center; gap: 8px; }
+.member .expand { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.chev-btn { cursor: pointer; display: flex; align-items: center; padding: 2px; background: none; border: none; color: var(--text-faint); }
+.cyc-occ { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.edu-stage { padding: 10px 0; border-top: 1px solid var(--line); }
+.edu-total { display: flex; align-items: baseline; gap: 8px; padding: 10px 0 4px; border-top: 1px solid var(--line); }
+footer.done { text-align: center; font-size: 11.5px; font-weight: 500; color: var(--text-faint); padding: 18px 0 0; }
+</style>
+
+<div id="shell">
+  <div id="topbar">ライフプラン</div>
+  <div id="scroll">
+    <div id="summary"></div>
+    <div id="tabs"></div>
+    <div id="legend">
+      <span class="chip"><span class="sw" style="background:var(--fill-req)"></span>必須入力</span>
+      <span class="chip"><span class="sw" style="background:var(--fill-opt)"></span>任意入力</span>
+      <span style="margin-left:auto">必須だけで試算できます</span>
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+var REL = ['家族１','家族２','子供１','子供２','子供３','子供４','親','その他'];
+
+var EDU_UNIT = {
+  '保育園0～3歳': 50, '保育園4～6歳': 30, '幼稚園（私）': 35, '幼稚園（公）': 20,
+  '小学校（公）': 35, '小学校（私）': 185, '中学校（公）': 55, '中学校（私）': 160,
+  '高校（公）': 60, '高校（私）': 105,
+  '大学（国公）': 65, '大学（私文）': 105, '大学（理）': 140, '大学（薬）': 180, '大学（医歯）': 400,
+  '大学院': 100
+};
+var EDU_STAGES = [
+  { options: ['保育園0～3歳'], from: [0,0], to: [2,3] },
+  { options: ['保育園4～6歳','幼稚園（私）','幼稚園（公）'], from: [3,4], to: [5,6] },
+  { options: ['小学校（公）','小学校（私）'], from: [6,7], to: [11,12] },
+  { options: ['中学校（公）','中学校（私）'], from: [12,13], to: [14,15] },
+  { options: ['高校（公）','高校（私）'], from: [15,16], to: [17,18] },
+  { options: ['大学（国公）','大学（私文）','大学（理）','大学（薬）','大学（医歯）'], from: [18,19], to: [21,22] },
+  { options: ['大学院'], from: [22,23], to: [23,24] }
+];
+
+var DEDUCT_SALARY = [[851,0,195],[661,0.1,110],[361,0.2,44],[191,0.3,8]];
+var DEDUCT_BASIC = [[2501,0],[2451,16],[2401,32],[2351,48],[656,58],[490,63],[337,68],[133,88],[0,95]];
+var TAX_INCOME = [[4001,0.45,-479.6],[1801,0.4,-279.6],[901,0.33,-153.6],[696,0.23,-63.6],[331,0.2,-42.75],[196,0.1,-9.75],[0,0.05,0]];
+
+function bracket(table, v) {
+  for (var i = 0; i < table.length; i++) if (v >= table[i][0]) return table[i];
+  return table[table.length - 1];
+}
+function takeHome(income, hasSpouse, kids) {
+  if (!(income > 0)) return { net: 0, social: 0, tax: 0, ratio: 0 };
+  var sd = bracket(DEDUCT_SALARY, income);
+  var gross = income - (income * sd[1] + sd[2]);
+  var social = income * 0.155;
+  var basic = bracket(DEDUCT_BASIC, gross)[1];
+  var spouse = hasSpouse ? 38 : 0;
+  var dependents = kids * 38;
+  var taxable = Math.max(0, gross - social - basic - spouse - dependents - 5);
+  var ti = bracket(TAX_INCOME, taxable);
+  var incomeTax = Math.max(0, taxable * ti[1] + ti[2]);
+  var residentTax = Math.max(0, gross - social - basic - spouse - dependents - 2.8) * 0.1 + 1;
+  var tax = incomeTax + residentTax;
+  var net = income - social - tax;
+  return { net: Math.round(net), social: Math.round(social), tax: Math.round(tax * 10) / 10, ratio: Math.round(net / income * 1000) / 10 };
+}
+
+// ---------- state ----------
+var state = {
+  active: 'basic',
+  startYear: 2026,
+  endAge: 90,
+  openMember: 0,
+  openCalc: 0,
+  carDetailOpen: false,
+  calc: { income: 600, spouse: 'なし', kids: 0 },
+  assets: [
+    { id: 1, name: '普通預金等', fixed: true, amount: 500 },
+    { id: 2, name: 'NISA', fixed: false, amount: 0, rate: 3, tax: '0%' },
+    { id: 3, name: 'iDeCo', fixed: false, amount: 0, rate: 3, tax: '0%' }
+  ],
+  family: [
+    { id: 1, name: '夫', gender: '男性', relation: '家族１', birth: '1991/01/01', job: '会社員等' },
+    { id: 2, name: '妻', gender: '女性', relation: '家族２', birth: '1991/01/01', job: '会社員等' },
+    { id: 3, name: '第一子', gender: '男性', relation: '子供１', birth: '2022/05/20', job: '乳幼児' }
+  ],
+  edu: { 3: ['保育園0～3歳','保育園4～6歳','小学校（公）','中学校（公）','高校（公）','大学（私文）','大学院'] },
+  eduAmount: {}, eduSpan: {},
+  salaries: [
+    { id: 1, who: '家族１', retireAge: 65, rows: [{ id: 1, year: 2026, amount: 500, growth: 1.5 }, { id: 2, year: 2051, amount: 300, growth: 0 }] },
+    { id: 2, who: '家族２', retireAge: 60, rows: [{ id: 3, year: 2026, amount: 300, growth: 1.5 }] }
+  ],
+  lump: [{ id: 1, year: 2051, amount: 1500, memo: '退職金' }],
+  corpPension: [], privPension: [],
+  pubPension: [{ id: 1, year: 2056, amount: 290, memo: '' }],
+  living: [{ id: 1, year: 2026, amount: 360, memo: '' }, { id: 2, year: 2056, amount: 300, memo: '' }],
+  inflation: 0.5,
+  housing: [{ id: 1, year: 2026, amount: 100, memo: '賃貸' }, { id: 2, year: 2027, amount: 202, memo: '住宅ローン＋管理費' }],
+  housingLump: [{ id: 1, year: 2027, amount: 500, memo: '頭金' }],
+  insurance: [{ id: 1, year: 2026, amount: 20, memo: '' }],
+  carCost: [{ id: 1, year: 2026, amount: 15, memo: '' }],
+  carBuy: { fromYear: 2030, every: 10, amount: 300, untilAge: 75 },
+  carBuyOverride: {},
+  otherFlow: [{ id: 1, year: 2030, amount: 30, memo: '趣味' }, { id: 2, year: 2030, amount: 20, memo: '旅行' }],
+  otherLump: [],
+  invest: {
+    2: { add: [{ id: 1, year: 2026, toYear: 2051, amount: 60, memo: '' }], out: [{ id: 2, year: 2061, toYear: 2081, amount: 150, memo: '' }] },
+    3: { add: [{ id: 3, year: 2026, toYear: 2051, amount: 0, memo: '' }], out: [{ id: 4, year: 2061, toYear: 2081, amount: 0, memo: '' }] }
+  },
+  nextId: 500
+};
+
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function parseDate(s) {
+  var p = String(s).split('/');
+  var y = parseInt(p[0],10), m = parseInt(p[1],10), d = parseInt(p[2],10);
+  return { y: isFinite(y)?y:0, m: isFinite(m)?m:1, d: isFinite(d)?d:1 };
+}
+function baseBirthYear() { return parseDate(state.family[0].birth).y || 1991; }
+function nid() { return state.nextId++; }
+
+function spark(warning) {
+  var w = 340, h = 32, n = 46, pts = [];
+  for (var i = 0; i < n; i++) {
+    var p = i / (n - 1);
+    var v = warning
+      ? 0.62 + 0.28 * Math.sin(p * 2.1) - 0.78 * Math.pow(p, 1.7)
+      : 0.20 + 0.68 * Math.pow(p, 1.3) - 0.10 * Math.sin(p * 4.8);
+    pts.push([p * w, h - Math.max(0.04, Math.min(0.96, v)) * (h - 5) - 2.5]);
+  }
+  var line = '';
+  pts.forEach(function(pt,i){ line += (i===0?'M':'L') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1) + ' '; });
+  return { line: line, area: line + 'L'+w+','+h+' L0,'+h+' Z' };
+}
+
+// ---------- mutators ----------
+function setField(key, id, field, val) { var l = state[key]; for (var i=0;i<l.length;i++) if (l[i].id===id) l[i][field]=val; render(); }
+function setNumField(key, id, field, raw) { var v = parseFloat(raw); setField(key, id, field, isNaN(v)?0:v); }
+function removeRow(key, id) { state[key] = state[key].filter(function(r){ return r.id!==id; }); render(); }
+function addRow(key, max, hasTo) {
+  var list = state[key];
+  if (list.length >= max) return;
+  var last = list[list.length-1];
+  var from = last ? (last.toYear ? last.toYear+1 : last.year+5) : state.startYear;
+  var row = { id: nid(), year: from, amount: 0, memo: '' };
+  if (hasTo) row.toYear = from + 4;
+  list.push(row); render();
+}
+function mergeDup(key, id) {
+  var list = state[key];
+  var row = null, first = null;
+  for (var i=0;i<list.length;i++) { if (list[i].id===id) row=list[i]; }
+  if (!row) return;
+  for (i=0;i<list.length;i++) { if (list[i].year===row.year && list[i].id!==id) { first=list[i]; break; } }
+  if (!first) return;
+  first.amount += row.amount;
+  first.memo = [first.memo, row.memo].filter(Boolean).join('、');
+  state[key] = list.filter(function(r){ return r.id!==id; });
+  render();
+}
+function setStartYear(v) { state.startYear = parseFloat(v)||0; render(); }
+function setEndAge(v) { state.endAge = parseFloat(v)||0; render(); }
+function toggleMember(id) { state.openMember = state.openMember===id ? 0 : id; render(); }
+function addFamily() {
+  if (state.family.length >= 6) return;
+  state.family.push({ id: nid(), name: '', gender: '男性', relation: REL[Math.min(state.family.length,7)], birth: '', job: '会社員等' });
+  render();
+}
+function toggleCalc(sid) { state.openCalc = state.openCalc===sid ? 0 : sid; render(); }
+function setCalc(field, v) { state.calc[field] = (field==='kids') ? (parseFloat(v)||0) : v; render(); }
+function applyCalc(sid, net) {
+  var sal = state.salaries.filter(function(s){return s.id===sid;})[0];
+  if (sal && sal.rows[0]) sal.rows[0].amount = net;
+  state.openCalc = 0; render();
+}
+function setSalaryLabel(sid, v) { var s=state.salaries.filter(function(x){return x.id===sid;})[0]; if(s) s.who=v; render(); }
+function setRetireAge(sid, v) { var s=state.salaries.filter(function(x){return x.id===sid;})[0]; if(s) s.retireAge=parseFloat(v)||0; render(); }
+function setSalaryField(sid, rid, field, raw) {
+  var s = state.salaries.filter(function(x){return x.id===sid;})[0]; if(!s) return;
+  var r = s.rows.filter(function(x){return x.id===rid;})[0]; if(!r) return;
+  r[field] = parseFloat(raw)||0; render();
+}
+function removeSalaryRow(sid, rid) { var s=state.salaries.filter(function(x){return x.id===sid;})[0]; if(s) s.rows=s.rows.filter(function(r){return r.id!==rid;}); render(); }
+function addSalaryRow(sid) {
+  var s = state.salaries.filter(function(x){return x.id===sid;})[0]; if(!s || s.rows.length>=8) return;
+  var last = s.rows[s.rows.length-1];
+  s.rows.push({ id: nid(), year: last?last.year+5:state.startYear, amount:0, growth:0 }); render();
+}
+function setInflation(v) { state.inflation = parseFloat(v)||0; render(); }
+function setCar(field, v) { state.carBuy[field] = parseFloat(v)||0; render(); }
+function toggleCarDetail() { state.carDetailOpen = !state.carDetailOpen; render(); }
+function setCarOverride(year, v) { state.carBuyOverride[year] = parseFloat(v)||0; render(); }
+function setAssetRate(aid, v) { var a=state.assets.filter(function(x){return x.id===aid;})[0]; if(a) a.rate=parseFloat(v)||0; render(); }
+function setAssetTax(aid, v) { var a=state.assets.filter(function(x){return x.id===aid;})[0]; if(a) a.tax=v; render(); }
+function setInvestField(aid, kind, rid, field, raw) {
+  var iv = state.invest[aid]; if(!iv) return;
+  var r = iv[kind].filter(function(x){return x.id===rid;})[0]; if(!r) return;
+  r[field] = parseFloat(raw)||0; render();
+}
+function setInvestMemo(aid, kind, rid, v) {
+  var iv = state.invest[aid]; var r = iv[kind].filter(function(x){return x.id===rid;})[0]; if(r){ r.memo=v; render(); }
+}
+function removeInvestRow(aid, kind, rid) { var iv=state.invest[aid]; iv[kind]=iv[kind].filter(function(r){return r.id!==rid;}); render(); }
+function addInvestRow(aid, kind) {
+  var iv = state.invest[aid]; if (iv[kind].length>=5) return;
+  var last = iv[kind][iv[kind].length-1];
+  var from = last ? last.toYear+1 : state.startYear;
+  iv[kind].push({ id: nid(), year: from, toYear: from+4, amount:0, memo:'' }); render();
+}
+function setEduStage(cid, i, v) {
+  var cur = (state.edu[cid] || EDU_STAGES.map(function(s){return s.options[0];})).slice();
+  cur[i] = v; state.edu[cid] = cur;
+  var amt = state.eduAmount[cid] || {}; delete amt[i]; state.eduAmount[cid] = amt;
+  render();
+}
+function setEduAmount(cid, i, v) { var m = state.eduAmount[cid] || {}; m[i]=parseFloat(v)||0; state.eduAmount[cid]=m; render(); }
+function setEduSpan(cid, i, field, v, autoFrom, autoTo) {
+  var m = state.eduSpan[cid] || {};
+  var cur = m[i] || { from: autoFrom, to: autoTo };
+  cur = { from: cur.from, to: cur.to }; cur[field] = parseFloat(v)||0;
+  m[i] = cur; state.eduSpan[cid] = m; render();
+}
+function jumpTo(key) {
+  state.active = key; render();
+  var el = document.getElementById('sec-' + key);
+  var sc = document.getElementById('scroll');
+  if (el && sc) sc.scrollTop = Math.max(0, el.offsetTop - 4);
+}
+function setFamilyField(id, field, v) { setField('family', id, field, v); }
+
+// ---------- row/group renderers ----------
+function rowsHTML(key, list, opts) {
+  var by = baseBirthYear();
+  var counts = {};
+  list.forEach(function(r){ counts[r.year]=(counts[r.year]||0)+1; });
+  var seen = {};
+  return list.map(function(r,i){
+    seen[r.year] = (seen[r.year]||0)+1;
+    var dup = !!opts.dupCheck && counts[r.year]>1 && seen[r.year]>1;
+    var cls = (opts.requiredFirst && i===0) ? 'rq' : 'op';
+    var ageHint = r.year ? (opts.hasTo
+      ? '家族１ '+(r.year-by)+'歳 〜 '+(r.toYear-by)+'歳（'+(r.toYear-r.year+1)+'年間）'
+      : '家族１ '+(r.year-by)+'歳') : '';
+    return '<div class="rowline divide">'
+      + '<div class="rowtop">'
+      + '<input type="number" class="'+cls+'" style="width:70px" value="'+r.year+'" onchange="setNumField(\''+key+'\','+r.id+',\'year\',this.value)">'
+      + '<span class="u">'+opts.yearSuffix+'</span>'
+      + (opts.hasTo ? '<input type="number" class="'+cls+'" style="width:70px;margin-left:2px" value="'+r.toYear+'" onchange="setNumField(\''+key+'\','+r.id+',\'toYear\',this.value)"><span class="u">年まで</span>' : '')
+      + '<button class="del" onclick="removeRow(\''+key+'\','+r.id+')" aria-label="削除"><span class="msr" style="font-size:20px">delete</span></button>'
+      + '</div>'
+      + (ageHint ? '<div class="ageh">'+ageHint+'</div>' : '')
+      + '<div class="rowamt">'
+      + '<span class="u">'+opts.amountPrefix+'</span>'
+      + '<input type="number" class="'+cls+'" style="width:88px" value="'+r.amount+'" onchange="setNumField(\''+key+'\','+r.id+',\'amount\',this.value)">'
+      + '<span class="u">万円</span>'
+      + (opts.hasGrowth ? '<span class="u" style="margin-left:auto">上昇率</span><input type="number" class="'+cls+'" style="width:52px" value="'+(r.growth||0)+'" onchange="setNumField(\''+key+'\','+r.id+',\'growth\',this.value)"><span class="u">％</span>' : '')
+      + '</div>'
+      + (dup ? '<div class="dup"><span class="msr">merge</span><span class="txt">'+r.year+'年の行が重複しています</span><button class="btn" style="width:auto;margin:0;margin-left:auto" onclick="mergeDup(\''+key+'\','+r.id+')">合算する</button></div>' : '')
+      + (opts.memo ? '<input type="text" class="op memo" placeholder="備考" value="'+esc(r.memo||'')+'" onchange="setField(\''+key+'\','+r.id+',\'memo\',this.value)">' : '')
+      + '</div>';
+  }).join('');
+}
+
+function groupCard(key, label, opts) {
+  var list = state[key] || [];
+  var max = opts.max || 5;
+  var html = '<div class="card">'
+    + '<div class="head"><span class="ttl">'+esc(label)+'</span><span class="cnt">'+list.length+' / '+max+'行</span></div>'
+    + (opts.inflation ? '<div class="rowtop divide" style="padding:10px 0"><span class="u">物価上昇率</span><input type="number" class="rq" style="width:56px;margin-left:auto" value="'+state.inflation+'" onchange="setInflation(this.value)"><span class="u">％</span></div>' : '')
+    + rowsHTML(key, list, opts)
+    + (list.length < max ? '<div class="addwrap divide"><button class="addbtn" aria-label="行を追加" onclick="addRow(\''+key+'\','+max+','+(!!opts.hasTo)+')"><span class="msr">add</span></button></div>' : '')
+    + (opts.hintText ? '<div class="hint divide">'+esc(opts.hintText)+'</div>' : '')
+    + '</div>';
+  return html;
+}
+
+function salaryCard(sal, idx) {
+  var by = baseBirthYear();
+  var member = state.family.filter(function(m){return m.relation===sal.who;})[0];
+  var mBirth = member ? parseDate(member.birth).y : by;
+  var th = takeHome(state.calc.income, state.calc.spouse==='あり', state.calc.kids);
+  var rows = sal.rows.map(function(r,i){
+    var cls = (idx===0 && i===0) ? 'rq' : 'op';
+    return '<div class="rowline divide">'
+      + '<div class="rowtop">'
+      + '<input type="number" class="'+cls+'" style="width:70px" value="'+r.year+'" onchange="setSalaryField('+sal.id+','+r.id+',\'year\',this.value)">'
+      + '<span class="u">年から</span>'
+      + '<button class="del" onclick="removeSalaryRow('+sal.id+','+r.id+')" aria-label="削除"><span class="msr" style="font-size:20px">delete</span></button>'
+      + '</div>'
+      + '<div class="ageh">家族１ '+(r.year-by)+'歳</div>'
+      + '<div class="rowamt">'
+      + '<input type="number" class="'+cls+'" style="width:88px" value="'+r.amount+'" onchange="setSalaryField('+sal.id+','+r.id+',\'amount\',this.value)">'
+      + '<span class="u">万円</span>'
+      + '<span class="u" style="margin-left:auto">上昇率</span>'
+      + '<input type="number" class="'+cls+'" style="width:52px" value="'+(r.growth||0)+'" onchange="setSalaryField('+sal.id+','+r.id+',\'growth\',this.value)"><span class="u">％</span>'
+      + '</div></div>';
+  }).join('');
+  var calcOpen = state.openCalc === sal.id;
+  return '<div class="card">'
+    + '<div class="head"><input type="text" class="op" style="width:104px;font-size:12.5px" value="'+esc(sal.who)+'" onchange="setSalaryLabel('+sal.id+',this.value)"><span class="cnt">'+sal.rows.length+' / 8行</span></div>'
+    + rows
+    + (sal.rows.length < 8 ? '<div class="addwrap divide"><button class="addbtn" aria-label="行を追加" onclick="addSalaryRow('+sal.id+')"><span class="msr">add</span></button></div>' : '')
+    + '<div class="retire"><span class="msr">work_history</span><input type="number" class="op" style="width:56px;margin-left:auto" value="'+sal.retireAge+'" onchange="setRetireAge('+sal.id+',this.value)"><span class="u">歳まで働く</span></div>'
+    + '<div class="hint" style="padding-bottom:6px">'+(mBirth+sal.retireAge)+'年以降の収入は0として計算します</div>'
+    + '<div class="calc">'
+    + '<button class="open" onclick="toggleCalc('+sal.id+')"><span class="msr" style="color:var(--accent);font-size:18px">calculate</span><span class="lbl">額面から手取りを計算</span><span class="msr chev">'+(calcOpen?'expand_less':'expand_more')+'</span></button>'
+    + (calcOpen ? (
+        '<div class="calcbox">'
+        + '<div class="calcrow"><span class="u" style="width:64px">年収（額面）</span><input type="number" class="op" style="width:76px;background:var(--surface);margin-left:auto" value="'+state.calc.income+'" onchange="setCalc(\'income\',this.value)"><span class="u">万円</span></div>'
+        + '<div class="calcrow"><span class="u" style="width:64px">扶養配偶者</span><select class="op" style="background:var(--surface);margin-left:auto" onchange="setCalc(\'spouse\',this.value)">'
+          + '<option'+(state.calc.spouse==='なし'?' selected':'')+'>なし</option><option'+(state.calc.spouse==='あり'?' selected':'')+'>あり</option></select></div>'
+        + '<div class="calcrow"><span class="u" style="width:64px">扶養の子</span><input type="number" class="op" style="width:48px;background:var(--surface);margin-left:auto" value="'+state.calc.kids+'" onchange="setCalc(\'kids\',this.value)"><span class="u">人</span></div>'
+        + '<div class="calcresult"><span class="u" style="font-weight:700">手取り</span><span style="font-size:20px;font-weight:900;color:var(--accent-ink);margin-left:auto">'+th.net+'</span><span class="u" style="font-weight:700">万円</span></div>'
+        + '<div class="u" style="margin-top:5px">社会保険料 '+th.social+'万円・税 '+th.tax+'万円を差引（手取り率 '+th.ratio+'％）</div>'
+        + '<button class="btn" onclick="applyCalc('+sal.id+','+th.net+')">1行目の手取額に反映する</button>'
+        + '</div>'
+      ) : '')
+    + '</div></div>';
+}
+
+function eduCard(child) {
+  var d = parseDate(child.birth);
+  var early = d.m < 4 || (d.m===4 && d.d===1);
+  var k = early ? 0 : 1;
+  var sy = state.startYear;
+  var picks = state.edu[child.id] || EDU_STAGES.map(function(s){return s.options[0];});
+  var over = state.eduAmount[child.id] || {};
+  var spans = state.eduSpan[child.id] || {};
+  var stagesHtml = '', total = 0;
+  EDU_STAGES.forEach(function(st, i) {
+    var autoFrom = Math.max(d.y + st.from[k], sy);
+    var autoTo = d.y + st.to[k];
+    if (!d.y || autoTo < sy) return;
+    var span = spans[i] || { from: autoFrom, to: autoTo };
+    var stage = picks[i] || st.options[0];
+    var amount = over[i] === undefined ? EDU_UNIT[stage] : over[i];
+    var years = Math.max(0, span.to - span.from + 1);
+    total += amount * years;
+    var opts = st.options.map(function(o){ return '<option'+(o===stage?' selected':'')+'>'+o+'</option>'; }).join('');
+    stagesHtml += '<div class="edu-stage">'
+      + '<div class="rowtop">'
+      + '<select class="op" style="flex:1;min-width:0" onchange="setEduStage('+child.id+','+i+',this.value)">'+opts+'</select>'
+      + '<input type="number" class="op" style="width:62px" value="'+amount+'" onchange="setEduAmount('+child.id+','+i+',this.value)">'
+      + '<span class="u">万円</span></div>'
+      + '<div class="rowtop" style="margin-top:8px">'
+      + '<input type="number" class="op" style="width:70px;font-size:14px" value="'+span.from+'" onchange="setEduSpan('+child.id+','+i+',\'from\',this.value,'+autoFrom+','+autoTo+')"><span class="u">年から</span>'
+      + '<input type="number" class="op" style="width:70px;font-size:14px" value="'+span.to+'" onchange="setEduSpan('+child.id+','+i+',\'to\',this.value,'+autoFrom+','+autoTo+')"><span class="u">年まで</span>'
+      + '<span class="u" style="margin-left:auto">'+years+'年間・計'+(amount*years)+'万円</span>'
+      + '</div></div>';
+  });
+  return '<div class="card">'
+    + '<div class="head"><span class="ttl">'+esc(child.name)+'の教育費</span><span class="cnt">'+esc(child.birth)+(early?'・早生まれ':'')+'</span></div>'
+    + stagesHtml
+    + '<div class="edu-total"><span class="u" style="font-weight:700">在学中の合計</span><span style="font-size:15px;font-weight:900;margin-left:auto">'+total+'</span><span class="u" style="font-weight:700">万円</span></div>'
+    + '<div class="hint" style="padding-bottom:4px">年も金額も自動で入りますが、進路に合わせて書き換えられます</div>'
+    + '</div>';
+}
+
+function carCard() {
+  var c = state.carBuy, by = baseBirthYear();
+  var endYear = by + c.untilAge;
+  var years = [];
+  for (var y = c.fromYear; y <= endYear && years.length < 12; y += c.every) years.push(y);
+  var total = 0;
+  var occHtml = years.map(function(y){
+    var amount = state.carBuyOverride[y] === undefined ? c.amount : state.carBuyOverride[y];
+    total += amount;
+    return '<div class="cyc-occ"><span style="font-size:13px;font-weight:700">'+y+'年</span><span class="u">家族１ '+(y-by)+'歳</span>'
+      + '<input type="number" class="op" style="width:72px;font-size:15px;margin-left:auto" value="'+amount+'" onchange="setCarOverride('+y+',this.value)"><span class="u">万円</span></div>';
+  }).join('');
+  return '<div class="card">'
+    + '<div class="ttl" style="margin-bottom:11px">自動車の購入費</div>'
+    + '<div class="rowtop" style="flex-wrap:wrap">'
+    + '<input type="number" class="op" style="width:70px" value="'+c.fromYear+'" onchange="setCar(\'fromYear\',this.value)"><span class="u">年から</span>'
+    + '<input type="number" class="op" style="width:48px;margin-left:2px" value="'+c.every+'" onchange="setCar(\'every\',this.value)"><span class="u">年ごとに</span>'
+    + '<input type="number" class="op" style="width:52px;margin-left:auto" value="'+c.untilAge+'" onchange="setCar(\'untilAge\',this.value)"><span class="u">歳まで</span>'
+    + '</div>'
+    + '<div class="rowtop" style="margin-top:10px"><span class="u">1回あたり</span><input type="number" class="op" style="width:88px;margin-left:auto" value="'+c.amount+'" onchange="setCar(\'amount\',this.value)"><span class="u">万円</span></div>'
+    + '<button class="open divide" style="display:flex;align-items:center;gap:6px;cursor:pointer;background:none;border:none;font:inherit;width:100%;text-align:left;padding:11px 0 0;margin-top:10px" onclick="toggleCarDetail()">'
+      + '<span class="msr" style="color:var(--accent);font-size:18px">tune</span><span class="lbl" style="font-size:12px;font-weight:700;color:var(--accent)">回ごとに金額を変える</span><span class="msr chev">'+(state.carDetailOpen?'expand_less':'expand_more')+'</span></button>'
+    + (state.carDetailOpen ? '<div style="margin-top:8px">'+occHtml+'</div>' : '')
+    + '<div class="edu-total" style="margin-top:8px"><span class="u" style="font-weight:700">'+years.length+'回の合計</span><span style="font-size:15px;font-weight:900;margin-left:auto">'+total+'</span><span class="u" style="font-weight:700">万円</span></div>'
+    + '</div>';
+}
+
+function investCard(asset, kind, label, withRate) {
+  var iv = state.invest[asset.id] || { add: [], out: [] };
+  var list = iv[kind];
+  var by = baseBirthYear();
+  var rows = list.map(function(r){
+    return '<div class="rowline divide">'
+      + '<div class="rowtop">'
+      + '<input type="number" class="op" style="width:70px" value="'+r.year+'" onchange="setInvestField('+asset.id+',\''+kind+'\','+r.id+',\'year\',this.value)"><span class="u">年から</span>'
+      + '<input type="number" class="op" style="width:70px;margin-left:2px" value="'+r.toYear+'" onchange="setInvestField('+asset.id+',\''+kind+'\','+r.id+',\'toYear\',this.value)"><span class="u">年まで</span>'
+      + '<button class="del" onclick="removeInvestRow('+asset.id+',\''+kind+'\','+r.id+')" aria-label="削除"><span class="msr" style="font-size:20px">delete</span></button>'
+      + '</div>'
+      + '<div class="ageh">家族１ '+(r.year-by)+'歳 〜 '+(r.toYear-by)+'歳（'+(r.toYear-r.year+1)+'年間・計'+((r.toYear-r.year+1)*r.amount)+'万円）</div>'
+      + '<div class="rowamt"><span class="u">年間</span><input type="number" class="op" style="width:88px" value="'+r.amount+'" onchange="setInvestField('+asset.id+',\''+kind+'\','+r.id+',\'amount\',this.value)"><span class="u">万円</span></div>'
+      + '<input type="text" class="op memo" placeholder="備考" value="'+esc(r.memo||'')+'" onchange="setInvestMemo('+asset.id+',\''+kind+'\','+r.id+',this.value)">'
+      + '</div>';
+  }).join('');
+  return '<div class="card">'
+    + '<div class="head"><span class="ttl">'+esc(label)+'</span><span class="cnt">'+list.length+' / 5行</span></div>'
+    + (withRate ? '<div class="rowtop divide" style="padding:10px 0">'
+        + '<span class="u">想定利回り</span><input type="number" class="rq" style="width:52px" value="'+asset.rate+'" onchange="setAssetRate('+asset.id+',this.value)"><span class="u">％</span>'
+        + '<span class="u" style="margin-left:auto">税率</span><select class="rq" onchange="setAssetTax('+asset.id+',this.value)">'
+        + '<option'+(asset.tax==='0%'?' selected':'')+'>0%</option><option'+(asset.tax==='20%'?' selected':'')+'>20%</option></select></div>' : '')
+    + rows
+    + (list.length < 5 ? '<div class="addwrap divide"><button class="addbtn" aria-label="行を追加" onclick="addInvestRow('+asset.id+',\''+kind+'\')"><span class="msr">add</span></button></div>' : '')
+    + (withRate ? '<div class="hint divide">「＋」を押すと前の行の翌年から始まります（期間が重なりません）</div>' : '')
+    + '</div>';
+}
+
+function basicHTML() {
+  var assetsHtml = state.assets.map(function(a){
+    return '<div class="rowtop divide" style="padding:10px 0">'
+      + (a.fixed ? '<span style="font-size:13.5px;font-weight:500">'+esc(a.name)+'</span>'
+                 : '<input type="text" class="op" style="width:110px;font-size:13.5px" value="'+esc(a.name)+'" onchange="setField(\'assets\','+a.id+',\'name\',this.value)">')
+      + '<input type="number" class="rq" style="width:86px;margin-left:auto" value="'+a.amount+'" onchange="setNumField(\'assets\','+a.id+',\'amount\',this.value)"><span class="u" style="width:28px">万円</span>'
+      + '</div>';
+  }).join('');
+  var by0 = state.family[0] ? parseDate(state.family[0].birth) : {y:0};
+  var familyHtml = state.family.map(function(m,i){
+    var d = parseDate(m.birth);
+    var early = d.m<4 || (d.m===4 && d.d===1);
+    var ageLabel = d.y ? (state.startYear-d.y)+'歳'+(early?'・早生まれ':'') : '';
+    var cls = i===0 ? 'rq':'op';
+    var open = state.openMember===m.id;
+    var expandHtml = open ? (
+      '<div class="expand">'
+      + '<select class="op" onchange="setFamilyField('+m.id+',\'gender\',this.value)"><option'+(m.gender==='男性'?' selected':'')+'>男性</option><option'+(m.gender==='女性'?' selected':'')+'>女性</option></select>'
+      + '<select class="op" onchange="setFamilyField('+m.id+',\'relation\',this.value)">' + REL.map(function(r){return '<option'+(r===m.relation?' selected':'')+'>'+r+'</option>';}).join('') + '</select>'
+      + '<select class="op" onchange="setFamilyField('+m.id+',\'job\',this.value)">' + ['会社員等','パート','自営業','専業主婦','学生','乳幼児','自由業','その他'].map(function(j){return '<option'+(j===m.job?' selected':'')+'>'+j+'</option>';}).join('') + '</select>'
+      + '</div>'
+    ) : '';
+    return '<div class="member divide">'
+      + '<div class="n1"><input type="text" class="'+cls+'" style="flex:1;min-width:0;font-size:15px" value="'+esc(m.name)+'" onchange="setFamilyField('+m.id+',\'name\',this.value)">'
+      + '<button class="chev-btn" onclick="toggleMember('+m.id+')" aria-label="詳細"><span class="msr" style="font-size:20px">'+(open?'expand_less':'expand_more')+'</span></button></div>'
+      + '<div class="n2"><input type="text" class="'+cls+'" style="width:120px;font-size:14px" value="'+esc(m.birth)+'" onchange="setFamilyField('+m.id+',\'birth\',this.value)"><span class="u">'+ageLabel+'</span><span class="badge" style="margin-left:auto">'+esc(m.relation)+'</span></div>'
+      + expandHtml + '</div>';
+  }).join('');
+  return '<h2 class="sec" id="sec-basic"><span class="msr">tune</span>基本</h2>'
+    + '<div class="card">'
+    + '<div class="ttl" style="margin-bottom:11px">シミュレーション期間</div>'
+    + '<div class="rowtop"><span class="u" style="width:52px">開始年</span>'
+    + '<input type="number" class="rq" style="width:82px" value="'+state.startYear+'" onchange="setStartYear(this.value)"><span class="u">年から</span>'
+    + '<input type="number" class="op" style="width:60px;margin-left:auto" value="'+state.endAge+'" onchange="setEndAge(this.value)"><span class="u">歳まで</span></div>'
+    + '</div>'
+    + '<div class="card"><div class="ttl">前年末の金融資産</div>' + assetsHtml + '</div>'
+    + '<div class="card"><div class="head"><span class="ttl">家族構成</span><span class="cnt">最大6人</span></div>'
+    + familyHtml
+    + (state.family.length<6 ? '<div class="addwrap divide"><button class="addbtn" aria-label="家族を追加" onclick="addFamily()"><span class="msr">add</span></button></div>' : '')
+    + '</div>';
+}
+
+// ---------- main render ----------
+function render() {
+  var scEl = document.getElementById('scroll');
+  var savedTop = scEl ? scEl.scrollTop : 0;
+  var by = baseBirthYear();
+
+  // summary
+  var sp = spark(false);
+  document.getElementById('summary').innerHTML =
+    '<div class="row"><span class="lbl">終了時点の金融資産</span><span class="amt">1,240<span class="unit"> 万円</span></span></div>'
+    + '<svg viewBox="0 0 340 32" width="100%" height="32" preserveAspectRatio="none" style="display:block">'
+    + '<path d="'+sp.area+'" fill="var(--sage-soft)" fill-opacity=".8"/>'
+    + '<path d="'+sp.line+'" fill="none" stroke="var(--sage)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'
+    + '</svg>';
+
+  // tabs
+  var tabDefs = [['basic','基本'],['income','収入'],['pension','年金'],['expense','支出'],['invest','投資']];
+  document.getElementById('tabs').innerHTML = tabDefs.map(function(t){
+    return '<div class="tab'+(state.active===t[0]?' on':'')+'" onclick="jumpTo(\''+t[0]+'\')">'+t[1]+'</div>';
+  }).join('');
+
+  var html = basicHTML();
+
+  // income
+  html += '<h2 class="sec" id="sec-income"><span class="msr">payments</span>収入</h2>';
+  state.salaries.forEach(function(sal, i){ html += salaryCard(sal, i); });
+
+  // pension
+  html += '<h2 class="sec" id="sec-pension"><span class="msr">account_balance</span>年金・退職金</h2>';
+  html += groupCard('lump','退職一時金・その他一時収入',{max:3,yearSuffix:'年に',amountPrefix:'',memo:true,hintText:'不動産売却や親からの援助もここへ'});
+  html += groupCard('corpPension','企業年金',{max:5,hasTo:true,yearSuffix:'年から',amountPrefix:'年間',memo:true});
+  html += groupCard('privPension','個人年金・保険など',{max:5,hasTo:true,yearSuffix:'年から',amountPrefix:'年間',memo:true,hintText:'備考に契約名を書いておくと、あとで見返したときに分かります'});
+  html += groupCard('pubPension','公的年金',{max:5,requiredFirst:true,dupCheck:true,yearSuffix:'年から',amountPrefix:'',memo:true,hintText:'家族１が65歳＝'+(by+65)+'年／70歳＝'+(by+70)+'年'});
+
+  // expense
+  html += '<h2 class="sec" id="sec-expense"><span class="msr">shopping_basket</span>支出</h2>';
+  html += groupCard('living','基本生活費',{max:5,requiredFirst:true,inflation:true,dupCheck:true,yearSuffix:'年から',amountPrefix:'',memo:true,hintText:'住宅費・教育費・保険料・自動車費・その他を除いた経常支出'});
+  html += groupCard('housing','住宅費',{max:5,requiredFirst:true,dupCheck:true,yearSuffix:'年から',amountPrefix:'',memo:true,hintText:'家賃／ローン／修繕・管理費／固定資産税の合計'});
+  html += groupCard('housingLump','住宅費一時金（頭金など）',{max:3,yearSuffix:'年に',amountPrefix:'',memo:true});
+  state.family.filter(function(m){ return String(m.relation).indexOf('子供')===0; }).forEach(function(child){ html += eduCard(child); });
+  html += groupCard('insurance','保険料',{max:7,requiredFirst:true,dupCheck:true,yearSuffix:'年から',amountPrefix:'',memo:true});
+  html += groupCard('carCost','自動車の維持費',{max:5,dupCheck:true,yearSuffix:'年から',amountPrefix:'',memo:true,hintText:'税金・保険・車検・駐車場・整備の年額'});
+  html += carCard();
+  html += groupCard('otherFlow','その他の経常支出',{max:5,dupCheck:true,yearSuffix:'年から',amountPrefix:'',memo:true,hintText:'同じ年は1行にまとめます（趣味と旅行なら合算して1行）'});
+  html += groupCard('otherLump','その他の一時支出',{max:5,yearSuffix:'年に',amountPrefix:'',memo:true});
+
+  // invest
+  html += '<h2 class="sec" id="sec-invest"><span class="msr">savings</span>投資</h2>';
+  state.assets.filter(function(a){ return !a.fixed; }).forEach(function(a){
+    html += investCard(a, 'add', a.name+'へ積立', true);
+    html += investCard(a, 'out', a.name+'の現金化', false);
+  });
+
+  html += '<footer class="done">入力はここまでです。おつかれさまでした。</footer>';
+
+  document.getElementById('content').innerHTML = html;
+  if (scEl) scEl.scrollTop = savedTop;
+}
+
+// expose handlers used by inline attributes
+window.setField = setField; window.setNumField = setNumField; window.removeRow = removeRow;
+window.addRow = addRow; window.mergeDup = mergeDup; window.setStartYear = setStartYear;
+window.setEndAge = setEndAge; window.toggleMember = toggleMember; window.addFamily = addFamily;
+window.toggleCalc = toggleCalc; window.setCalc = setCalc; window.applyCalc = applyCalc;
+window.setSalaryLabel = setSalaryLabel; window.setRetireAge = setRetireAge; window.setSalaryField = setSalaryField;
+window.removeSalaryRow = removeSalaryRow; window.addSalaryRow = addSalaryRow; window.setInflation = setInflation;
+window.setCar = setCar; window.toggleCarDetail = toggleCarDetail; window.setCarOverride = setCarOverride;
+window.setAssetRate = setAssetRate; window.setAssetTax = setAssetTax; window.setInvestField = setInvestField;
+window.setInvestMemo = setInvestMemo; window.removeInvestRow = removeInvestRow; window.addInvestRow = addInvestRow;
+window.setEduStage = setEduStage; window.setEduAmount = setEduAmount; window.setEduSpan = setEduSpan;
+window.jumpTo = jumpTo; window.setFamilyField = setFamilyField;
+
+render();
+</script>
