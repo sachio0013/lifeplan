@@ -54,6 +54,8 @@ a:hover { color: var(--color-accent-800); }
 .u { font-size: 11.5px; font-weight: 500; color: var(--color-neutral-700); }
 .ix::-webkit-scrollbar { display: none; }
 .btn { font-family: 'Zen Maru Gothic', var(--font-body); font-size: 11.5px; font-weight: 700; color: #fff; background: var(--color-accent); border: none; border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.addbtn { width: 44px; height: 44px; padding: 0; border: none; border-radius: 999px; background: var(--color-accent-100); color: var(--color-accent-700); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.addbtn:hover { background: var(--color-accent-200); }
 </style>
 </helmet>
 
@@ -176,8 +178,10 @@ a:hover { color: var(--color-accent-800); }
             </div>
           </sc-for>
           <sc-if value="{{ canAddFamily }}" hint-placeholder-val="{{ true }}">
-            <div onClick="{{ addFamily }}" style="display:flex;align-items:center;justify-content:center;gap:5px;padding:11px 0 6px;border-top:1px solid var(--color-neutral-100);color:var(--color-accent-700);font-size:13px;font-weight:700;cursor:pointer">
-              <span class="msr" style="font-size:18px">add</span>家族を追加
+            <div style="display:flex;justify-content:center;padding:10px 0 4px;border-top:1px solid var(--color-neutral-100)">
+              <button onClick="{{ addFamily }}" class="addbtn" aria-label="家族を追加">
+                <span class="msr" style="font-size:24px">add</span>
+              </button>
             </div>
           </sc-if>
         </div>
@@ -308,8 +312,10 @@ a:hover { color: var(--color-accent-800); }
             </sc-if>
 
             <sc-if value="{{ b.canAdd }}" hint-placeholder-val="{{ true }}">
-              <div onClick="{{ b.add }}" style="display:flex;align-items:center;justify-content:center;gap:5px;padding:11px 0 6px;border-top:1px solid var(--color-neutral-100);color:var(--color-accent-700);font-size:13px;font-weight:700;cursor:pointer">
-                <span class="msr" style="font-size:18px">add</span>追加
+              <div style="display:flex;justify-content:center;padding:10px 0 4px;border-top:1px solid var(--color-neutral-100)">
+                <button onClick="{{ b.add }}" class="addbtn" aria-label="行を追加">
+                  <span class="msr" style="font-size:24px">add</span>
+                </button>
               </div>
             </sc-if>
             <sc-if value="{{ b.hint }}" hint-placeholder-val="{{ false }}">
@@ -868,7 +874,7 @@ class Component extends DCLogic {
       rate: asset.rate, tax: asset.tax,
       yearSuffix: '年から', amountPrefix: '年間',
       countHint: list.length + ' / 5行',
-      hint: withRate, hintText: '「追加」すると前の行の翌年から始まります（期間が重なりません）',
+      hint: withRate, hintText: '「＋」を押すと前の行の翌年から始まります（期間が重なりません）',
       setRate: (e) => this.setListField('assets', asset.id, 'rate', this.num(e)),
       setTax: (e) => this.setListField('assets', asset.id, 'tax', e.target.value),
       rows: this.buildInvestRows(asset.id, kind, list),
