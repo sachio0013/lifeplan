@@ -37,7 +37,8 @@
   function pct(v) { return num(String(v).replace('%', '')) / 100; }
 
   function parseDate(s) {
-    var p = String(s == null ? '' : s).split('/');
+    // 「1990/04/01」（Excelと同じ）と「1990-04-01」（日付入力欄の値）のどちらも受け付ける
+    var p = String(s == null ? '' : s).split(/[\/-]/);
     var y = parseInt(p[0], 10), m = parseInt(p[1], 10), d = parseInt(p[2], 10);
     return { y: isFinite(y) ? y : 0, m: isFinite(m) ? m : 1, d: isFinite(d) ? d : 1 };
   }
@@ -306,6 +307,140 @@
     };
   }
 
+  // ---- 入力の確認 ----
+
+  function isDate(s) {
+    var m = /^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/.exec(String(s == null ? '' : s).trim());
+    if (!m) return false;
+    var y = +m[1], mo = +m[2], d = +m[3];
+    var dt = new Date(y, mo - 1, d);
+    return y >= 1900 && y <= 2100 && dt.getMonth() === mo - 1 && dt.getDate() === d;
+  }
+
+  // 計算できない入力や、入れても計算に使われない入力を探す。
+  // at は画面上の場所（'start'、'fam:<id>'、'row:<項目>:<id>' など）、field はその中の欄。
+  // level は 'error'（結果が正しくならない）か 'warn'（計算はするが、意図と違いそう）。
+  function validate(state) {
+    var out = [];
+    function add(at, field, level, msg) { out.push({ at: at, field: field, level: level, msg: msg }); }
+
+    var sy = num(state.startYear);
+    var fam = state.family || [];
+    if (!(sy >= 1990 && sy <= 2100 && sy === Math.floor(sy))) {
+      add('start', 'start', 'error', '開始年は1990〜2100の西暦で入れてください');
+      return out;
+    }
+
+    fam.forEach(function (m, i) {
+      var at = 'fam:' + m.id;
+      if (!m.birth) {
+        if (i === 0) add(at, 'birth', 'error', '家族１の生年月日は必須です（年齢と期間の計算に使います）');
+        return;
+      }
+      if (!isDate(m.birth)) { add(at, 'birth', 'error', '生年月日が正しい日付になっていません'); return; }
+      var b = parseDate(m.birth).y;
+      if (i === 0 && b > sy) add(at, 'birth', 'error', '家族１が開始年より後に生まれています');
+      else if (i === 0 && sy - b < 18) add(at, 'birth', 'warn', '家族１は開始年に' + (sy - b) + '歳です。家計の中心になる人を家族１にします');
+    });
+
+    var by = baseBirthYear(state);
+    var endAge = num(state.endAge);
+    var age0 = sy - by;
+    if (endAge <= age0) { add('start', 'endAge', 'error', '終了年齢は、開始年の家族１の年齢（' + age0 + '歳）より上にしてください'); return out; }
+    if (endAge > 120) { add('start', 'endAge', 'error', '終了年齢は120歳までで入れてください'); return out; }
+    var ey = by + endAge;
+    var outside = '計算期間（' + sy + '〜' + ey + '年）の外なので、計算に入りません';
+
+    function rate(at, field, v) {
+      if (Math.abs(num(v)) > 10) add(at, field, 'warn', num(v) + '％はとても大きな率です。1.5％なら「1.5」と入れます');
+    }
+    function amount(at, r) {
+      if (num(r.amount) < 0) add(at, 'amount', 'warn', 'マイナスの金額になっています');
+    }
+    function noYear(at, r) {
+      if (num(r.year)) return false;
+      add(at, 'year', 'error', '年を入れてください');
+      return true;
+    }
+    // 期間型（から〜まで）
+    function range(at, r) {
+      if (noYear(at, r)) return;
+      amount(at, r);
+      var a = num(r.year), b = num(r.toYear);
+      if (!b) add(at, 'toYear', 'error', '「まで」の年を入れてください');
+      else if (b < a) add(at, 'toYear', 'error', '「まで」の年が「から」の年より前です');
+      else if (b < sy || a > ey) add(at, 'year', 'warn', outside);
+    }
+
+    ['lump', 'housingLump', 'otherLump'].forEach(function (key) {
+      (state[key] || []).forEach(function (r) {
+        var at = 'row:' + key + ':' + r.id;
+        if (noYear(at, r)) return;
+        amount(at, r);
+        if (num(r.year) < sy || num(r.year) > ey) add(at, 'year', 'warn', outside);
+      });
+    });
+    ['pubPension', 'insurance', 'carCost', 'otherFlow', 'living', 'housing'].forEach(function (key) {
+      var anchoredKey = key === 'living' || key === 'housing';
+      (state[key] || []).forEach(function (r, i) {
+        var at = 'row:' + key + ':' + r.id;
+        amount(at, r);
+        if (anchoredKey && i === 0) return;
+        if (noYear(at, r)) return;
+        if (num(r.year) > ey) add(at, 'year', 'warn', outside);
+        // 2行目以降は開始年より後の年にする（基本生活費は開始年ちょうども使われない）
+        else if (anchoredKey && (key === 'living' ? num(r.year) <= sy : num(r.year) < sy)) {
+          add(at, 'year', 'warn', '開始年' + (key === 'living' ? '以前' : 'より前') + 'の行は使われません。開始年の金額は1行目に入れます');
+        }
+      });
+    });
+    ['corpPension', 'privPension'].forEach(function (key) {
+      (state[key] || []).forEach(function (r) { range('row:' + key + ':' + r.id, r); });
+    });
+
+    (state.salaries || []).forEach(function (s) {
+      (s.rows || []).forEach(function (r, i) {
+        var at = 'salrow:' + s.id + ':' + r.id;
+        amount(at, r);
+        rate(at, 'growth', r.growth);
+        if (i === 0 || noYear(at, r)) return;
+        if (num(r.year) <= sy) add(at, 'year', 'warn', '開始年以前の行は使われません。開始年の金額は1行目に入れます');
+        else if (num(r.year) > ey) add(at, 'year', 'warn', outside);
+      });
+      var retire = num(s.retireAge);
+      var mb = birthYearOf(state, s.memberId);
+      if (retire && mb && mb + retire <= sy) {
+        add('sal:' + s.id, 'retire', 'warn', '開始年にはもう' + (sy - mb) + '歳なので、給与はずっと0になります');
+      }
+    });
+
+    rate('infl', 'inflation', state.inflation);
+    rate('deprate', 'depositRate', state.depositRate);
+    (state.assets || []).forEach(function (a) {
+      if (num(a.amount) < 0) add('asset:' + a.id, 'amount', 'warn', 'マイナスの金額になっています');
+      if (!a.fixed) rate('rate:' + a.id, 'rate', a.rate);
+    });
+    Object.keys(state.invest || {}).forEach(function (aid) {
+      ['add', 'out'].forEach(function (kind) {
+        (state.invest[aid][kind] || []).forEach(function (r) { range('inv:' + aid + ':' + kind + ':' + r.id, r); });
+      });
+    });
+
+    children(state).forEach(function (c) {
+      eduPlan(state, c).forEach(function (st) {
+        if (st.to < st.from) add('edu:' + c.id + ':' + st.index, 'to', 'error', '「まで」の年が「から」の年より前です');
+      });
+    });
+
+    var car = state.carBuy || {};
+    if (num(car.fromYear) && num(car.every) < 1) add('car', 'every', 'error', '買い替えの間隔は1年以上で入れてください');
+    else if (num(car.fromYear) && num(car.untilAge) && by + num(car.untilAge) < num(car.fromYear)) {
+      add('car', 'untilAge', 'warn', '家族１が' + num(car.untilAge) + '歳になるのは' + (by + num(car.untilAge)) + '年なので、一度も購入しません');
+    }
+
+    return out;
+  }
+
   // 手取額の簡易計算（手取額計算シートと同じ考え方。会社員・年収150〜1000万円程度向け）
   var DEDUCT_SALARY = [[851, 0, 195], [661, 0.1, 110], [361, 0.2, 44], [191, 0.3, 8]];
   var DEDUCT_BASIC = [[2501, 0], [2451, 16], [2401, 32], [2351, 48], [656, 58], [490, 63], [337, 68], [133, 88], [0, 95]];
@@ -341,7 +476,7 @@
 
   return {
     EDU_UNIT: EDU_UNIT, EDU_STAGES: EDU_STAGES,
-    parseDate: parseDate, isEarlyBorn: isEarlyBorn, baseBirthYear: baseBirthYear,
+    parseDate: parseDate, isDate: isDate, validate: validate, isEarlyBorn: isEarlyBorn, baseBirthYear: baseBirthYear,
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
     eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
     compute: compute, takeHome: takeHome

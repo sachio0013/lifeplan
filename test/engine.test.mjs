@@ -157,3 +157,48 @@ for (const file of scenarioFiles) {
     assert.deepEqual(bad.slice(0, 40), [], `${bad.length}件の不一致`);
   });
 }
+
+// 入力の確認
+const at = (list) => list.map((i) => `${i.at}/${i.field}/${i.level}`);
+
+test('サンプル入力には確認が必要な箇所が無い', () => {
+  assert.deepEqual(E.validate(sample()), []);
+});
+
+test('生年月日は「/」でも「-」でも読め、ありえない日付は知らせる', () => {
+  assert.deepEqual(E.parseDate('1990-04-01'), { y: 1990, m: 4, d: 1 });
+  assert.equal(E.isDate('1990/4/1'), true);
+  assert.equal(E.isDate('1990-02-30'), false);
+  const s = sample();
+  s.family[0].birth = '';
+  assert.deepEqual(at(E.validate(s)), ['fam:1/birth/error']);
+  s.family[0].birth = '1991/13/01';
+  assert.deepEqual(at(E.validate(s)), ['fam:1/birth/error']);
+});
+
+test('終了年齢が今の年齢以下なら知らせ、計算する年が無くても落ちない', () => {
+  const s = sample();
+  s.endAge = 30;
+  assert.deepEqual(at(E.validate(s)), ['start/endAge/error']);
+  const r = E.compute(s);
+  assert.equal(r.years.length, 0);
+  assert.equal(r.endTotal, 0);
+});
+
+test('期間の逆転・期間外・使われない行・大きすぎる率を知らせる', () => {
+  const s = sample();
+  s.invest[2].add[0].toYear = 2020;          // まで ＜ から
+  s.lump[0].year = 2100;                      // 計算期間（〜2081年）の外
+  s.living[1].year = 2026;                    // 2行目が開始年ちょうど → 使われない
+  s.salaries[0].rows[0].growth = 15;          // 15％
+  s.salaries[1].retireAge = 30;               // 開始年にはもう35歳
+  s.carBuy.untilAge = 30;                     // 一度も買わない
+  assert.deepEqual(at(E.validate(s)).sort(), [
+    'car/untilAge/warn',
+    'inv:2:add:1/toYear/error',
+    'row:living:2/year/warn',
+    'row:lump:1/year/warn',
+    'sal:2/retire/warn',
+    'salrow:1:1/growth/warn',
+  ]);
+});

@@ -128,7 +128,17 @@ input::placeholder { color: var(--text-faint); font-weight: 500; }
 .dup { display: flex; align-items: center; gap: 8px; background: var(--accent-soft); border-radius: 12px; padding: 9px 11px; margin-top: 10px; }
 .dup .ic { color: var(--accent-ink); }
 .dup .txt { font-size: 11px; font-weight: 700; color: var(--accent-ink); line-height: 1.5; }
-.memo { width: 100%; margin-top: 9px; font-size: 13px; font-weight: 500; }
+.memo { width: 100%; margin-top: 9px; font-weight: 500; }
+input.date { width: 158px; padding-right: 6px; font-variant-numeric: tabular-nums; }
+
+/* 入力の確認 */
+.rq.bad, .op.bad { box-shadow: inset 0 0 0 2px var(--neg); }
+.vmsg { display: flex; align-items: flex-start; gap: 6px; margin-top: 8px; padding: 7px 10px; border-radius: 10px; font-size: 11.5px; font-weight: 700; line-height: 1.5; }
+.vmsg .ic { margin-top: 1px; }
+.vmsg.error { background: var(--neg-soft); color: var(--neg); }
+.vmsg.warn { background: var(--accent-soft); color: var(--accent-ink); }
+.vbanner { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; padding: 9px 10px 9px 12px; border-radius: 14px; background: var(--neg-soft); color: var(--neg); font-size: 12.5px; font-weight: 700; }
+.vbanner .btn { margin-left: auto; padding: 7px 14px; background: var(--neg); color: var(--surface); }
 .toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; background: none; border: none; padding: 10px 0 2px; width: 100%; text-align: left; min-height: 40px; }
 .toggle .lbl { font-size: 12px; font-weight: 700; color: var(--accent); }
 .toggle .lead { color: var(--accent); }

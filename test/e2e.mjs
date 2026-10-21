@@ -130,6 +130,44 @@ await page.waitForTimeout(150);
 const resetVal = await page.inputValue('#f-living-1-amt');
 check('「サンプルの内容に戻す」で初期値に戻る', resetVal === '360', `基本生活費=${resetVal}`);
 
+// iPhoneは16px未満の入力欄をタップすると画面を拡大してしまうので、全部16px以上にしておく
+await page.tap('#tabs .tab[data-k="basic"]');
+await page.locator('#content .member button.del').first().tap();
+await page.waitForTimeout(150);
+const small = await page.$$eval('#content input, #content select', (els) => els
+  .filter((e) => e.offsetParent && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => e.id || e.className));
+check('入力欄・選択欄の文字がすべて16px以上（iPhoneで拡大されない）', small.length === 0, small.slice(0, 5).join(', '));
+
+// 生年月日は日付の選択欄。選び終えて欄を離れたら反映される
+const birthType = await page.getAttribute('#f-fam-3-birth', 'type');
+const birthVal = await page.inputValue('#f-fam-3-birth');
+await page.fill('#f-fam-3-birth', '2022-04-01');
+await page.locator('#f-fam-3-birth').blur();
+await page.waitForTimeout(150);
+const eduHead = await page.locator('#content .card', { hasText: '第一子の教育費' }).locator('.cnt').textContent();
+check('生年月日は日付の選択欄で、変えると教育費（早生まれ）に反映される', birthType === 'date' && birthVal === '2022-01-01' && /2022\/04\/01・早生まれ/.test(eduHead), `type=${birthType} value=${birthVal} → ${eduHead}`);
+
+// 入力の確認：終了年齢を今の年齢より下にすると、欄の下とページ上部で知らせ、CF表も落ちない
+await page.fill('#f-endage', '30');
+await page.press('#f-endage', 'Tab');
+await page.waitForTimeout(150);
+const banner = await page.locator('.vbanner').textContent().catch(() => '');
+const msg = await page.locator('#sec-basic + .card .vmsg').textContent().catch(() => '');
+const sumBad = await page.textContent('#summary');
+await page.tap('#seg-cf');
+await page.waitForTimeout(150);
+const cfMsg = await page.textContent('#cf');
+await page.tap('#seg-input');
+await page.waitForTimeout(150);
+check('おかしな入力は欄の下とページ上部で知らせ、計算できなくても画面が落ちない',
+  /1 件/.test(banner) && /終了年齢/.test(msg) && /計算できません/.test(sumBad) && /計算できる年がありません/.test(cfMsg),
+  `${banner.trim()} / ${msg.trim().slice(0, 30)}`);
+await page.screenshot({ path: join(shots, '7-validation.png') });
+await page.fill('#f-endage', '90');
+await page.press('#f-endage', 'Tab');
+await page.waitForTimeout(150);
+check('直すと知らせが消える', (await page.locator('.vbanner').count()) === 0);
+
 // ダークモード
 const dark = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'dark' });
 const dp = await dark.newPage();

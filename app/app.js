@@ -42,6 +42,9 @@
     inputScroll: 0
   };
   var result = E.compute(state);
+  var issues = {};      // 入力の確認結果を場所ごとに（E.validate の at をキーに）
+  var issueCount = 0;
+  var pendingRender = false;
 
   // ---------- 小物 ----------
 
@@ -62,6 +65,25 @@
     var m = byId(state.family, id);
     if (!m) return 'その他';
     return m.name || m.relation;
+  }
+
+  // ---------- 入力の確認 ----------
+
+  function issuesAt(at) { return issues[at] || []; }
+  function bad(at, field) {
+    return issuesAt(at).some(function (i) { return i.field === field; }) ? ' bad' : '';
+  }
+  function vmsgs(at) {
+    return issuesAt(at).map(function (i) {
+      return '<div class="vmsg ' + i.level + '">' + ic('warn', 15) + '<span>' + esc(i.msg) + '</span></div>';
+    }).join('');
+  }
+
+  // 保存は「1990/04/01」の形（Excelと同じ）。日付入力欄は「1990-04-01」の形で受け渡す。
+  function isoDate(s) {
+    var p = String(s || '').trim().split(/[\/-]/);
+    if (p.length !== 3 || !/^\d{4}$/.test(p[0])) return '';
+    return p[0] + '-' + ('0' + p[1]).slice(-2) + '-' + ('0' + p[2]).slice(-2);
   }
 
   var renderQueued = false;
@@ -110,6 +132,20 @@
     depositRate: function (v) { state.depositRate = toNum(v); commit(); },
 
     member: function (id) { ui.openMember = ui.openMember === id ? 0 : id; ui.confirmDelMember = 0; commit(); },
+    // 日付入力欄は、選んでいる途中にも change が来る（iPhoneの回転式の選択など）。
+    // 選んでいる間に描き直すと選択が閉じてしまうので、保存だけして、欄を離れたときに描き直す。
+    birth: function (id, v, el) {
+      var m = byId(state.family, id); if (!m) return;
+      m.birth = v ? v.replace(/-/g, '/') : '';
+      if (el && document.activeElement === el) { save(); pendingRender = true; return; }
+      commit();
+    },
+    flush: function () { if (pendingRender) { pendingRender = false; commit(); } },
+    firstIssue: function () {
+      var el = document.querySelector('#content .vmsg');
+      var sc = document.getElementById('scroll');
+      if (el && sc) sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 190;
+    },
     fam: function (id, field, v) {
       var m = byId(state.family, id); if (!m) return;
       m[field] = v;
@@ -294,6 +330,7 @@
       var dup = !!opts.dupCheck && counts[r.year] > 1 && seen[r.year] > 1;
       var cls = opts.requiredFirst && i === 0 ? 'rq' : 'op';
       var q = "'" + key + "'," + r.id;
+      var at = 'row:' + key + ':' + r.id;
       var ageYear = opts.anchorFirst && i === 0 ? state.startYear : r.year;
       var ageHint = r.year ? (opts.hasTo
         ? '家族１ ' + (r.year - by) + '歳 〜 ' + (r.toYear - by) + '歳（' + (r.toYear - r.year + 1) + '年間）'
@@ -302,19 +339,20 @@
       return '<div class="rowline divide">' +
         '<div class="rowtop">' +
           (locked ? lockedYear() :
-            numInput(fid(key, r.id, 'year'), cls, 76, r.year, 'A.num(' + q + ",'year',this.value)") +
+            numInput(fid(key, r.id, 'year'), cls + bad(at, 'year'), 76, r.year, 'A.num(' + q + ",'year',this.value)") +
             '<span class="u">' + opts.yearSuffix + '</span>') +
-          (opts.hasTo ? numInput(fid(key, r.id, 'to'), cls, 76, r.toYear, 'A.num(' + q + ",'toYear',this.value)", ';margin-left:2px') + '<span class="u">年まで</span>' : '') +
+          (opts.hasTo ? numInput(fid(key, r.id, 'to'), cls + bad(at, 'toYear'), 76, r.toYear, 'A.num(' + q + ",'toYear',this.value)", ';margin-left:2px') + '<span class="u">年まで</span>' : '') +
           (locked ? '' : delButton('A.del(' + q + ')')) +
         '</div>' +
         (ageHint ? '<div class="ageh">' + ageHint + '</div>' : '') +
         '<div class="rowamt">' +
           (opts.hasTo ? '<span class="u">年間</span>' : '') +
-          numInput(fid(key, r.id, 'amt'), cls, 96, r.amount, 'A.num(' + q + ",'amount',this.value)") +
+          numInput(fid(key, r.id, 'amt'), cls + bad(at, 'amount'), 96, r.amount, 'A.num(' + q + ",'amount',this.value)") +
           '<span class="u">万円</span>' +
         '</div>' +
         (dup ? '<div class="dup">' + ic('merge', 17) + '<span class="txt">' + r.year + '年の行が重複しています</span>' +
           '<button class="btn" style="margin-left:auto;padding:7px 12px" onclick="A.merge(' + q + ')">合算する</button></div>' : '') +
+        vmsgs(at) +
         (opts.memo ? textInput(fid(key, r.id, 'memo'), 'op memo', '', r.memo || '', 'A.text(' + q + ",'memo',this.value)", '備考') : '') +
       '</div>';
     }).join('');
@@ -327,7 +365,8 @@
     return '<div class="card">' +
       '<div class="head"><span class="ttl">' + esc(label) + '</span><span class="cnt">' + list.length + ' / ' + max + '行</span></div>' +
       (opts.inflation ? '<div class="rowtop divide" style="padding:10px 0"><span class="u">物価上昇率</span>' +
-        numInput('f-inflation', 'rq', 64, state.inflation, 'A.infl(this.value)', ';margin-left:auto') + '<span class="u">％</span></div>' : '') +
+        numInput('f-inflation', 'rq' + bad('infl', 'inflation'), 64, state.inflation, 'A.infl(this.value)', ';margin-left:auto') + '<span class="u">％</span></div>' +
+        (issuesAt('infl').length ? '<div style="padding-bottom:10px">' + vmsgs('infl') + '</div>' : '') : '') +
       rowsHTML(key, list, opts) +
       (list.length < max ? addButton("A.add('" + key + "'," + max + ',' + !!opts.hasTo + ')', '行を追加') : '') +
       (opts.hint ? '<div class="hint divide">' + esc(opts.hint) + '</div>' : '') +
@@ -347,33 +386,36 @@
     var rows = sal.rows.map(function (r, i) {
       var cls = idx === 0 && i === 0 ? 'rq' : 'op';
       var q = sal.id + ',' + r.id;
+      var at = 'salrow:' + sal.id + ':' + r.id;
       var y = i === 0 ? state.startYear : r.year;
       return '<div class="rowline divide">' +
         '<div class="rowtop">' +
           (i === 0 ? lockedYear() :
-            numInput(fid('sal', sal.id, r.id, 'year'), cls, 76, r.year, 'A.sal(' + q + ",'year',this.value)") +
+            numInput(fid('sal', sal.id, r.id, 'year'), cls + bad(at, 'year'), 76, r.year, 'A.sal(' + q + ",'year',this.value)") +
             '<span class="u">年から</span>' + delButton('A.salDel(' + q + ')')) +
         '</div>' +
         '<div class="ageh">' + esc(memberName(sal.memberId)) + ' ' + (y - mBirth) + '歳</div>' +
         '<div class="rowamt">' +
-          numInput(fid('sal', sal.id, r.id, 'amt'), cls, 96, r.amount, 'A.sal(' + q + ",'amount',this.value)") +
+          numInput(fid('sal', sal.id, r.id, 'amt'), cls + bad(at, 'amount'), 96, r.amount, 'A.sal(' + q + ",'amount',this.value)") +
           '<span class="u">万円</span>' +
           '<span class="u" style="margin-left:auto">上昇率</span>' +
-          numInput(fid('sal', sal.id, r.id, 'g'), cls, 60, r.growth || 0, 'A.sal(' + q + ",'growth',this.value)") +
+          numInput(fid('sal', sal.id, r.id, 'g'), cls + bad(at, 'growth'), 60, r.growth || 0, 'A.sal(' + q + ",'growth',this.value)") +
           '<span class="u">％</span>' +
         '</div>' +
+        vmsgs(at) +
       '</div>';
     }).join('');
     return '<div class="card">' +
       '<div class="head"><span class="u">対象者</span>' +
-        selectInput(fid('sal', sal.id, 'member'), idx === 0 ? 'rq' : 'op', 'font-size:14px', memberOptions, sal.memberId, 'A.salMember(' + sal.id + ',this.value)') +
+        selectInput(fid('sal', sal.id, 'member'), idx === 0 ? 'rq' : 'op', '', memberOptions, sal.memberId, 'A.salMember(' + sal.id + ',this.value)') +
         '<span class="cnt">' + sal.rows.length + ' / 8行</span></div>' +
       '<div class="hint" style="padding:6px 0 0">手取り（可処分所得）で入力します。2行目以降の金額は今の水準で入れれば、その行の上昇率で開始年から伸ばして計算します。</div>' +
       rows +
       (sal.rows.length < 8 ? addButton('A.salAdd(' + sal.id + ')', '行を追加') : '') +
       (member ? '<div class="retire divide">' + ic('work', 18) + '' +
-        numInput(fid('sal', sal.id, 'retire'), 'op', 64, sal.retireAge || '', 'A.salRetire(' + sal.id + ',this.value)', ';margin-left:auto') +
+        numInput(fid('sal', sal.id, 'retire'), 'op' + bad('sal:' + sal.id, 'retire'), 64, sal.retireAge || '', 'A.salRetire(' + sal.id + ',this.value)', ';margin-left:auto') +
         '<span class="u">歳まで働く</span></div>' +
+        vmsgs('sal:' + sal.id) +
         '<div class="hint" style="padding-top:2px">' + (sal.retireAge ? (mBirth + sal.retireAge) + '年以降の収入は0として計算します' : '空欄なら、行で入れた金額がずっと続きます') + '</div>' : '') +
       '<div class="divide">' +
         '<button class="toggle" onclick="A.calcToggle(' + sal.id + ')">' + ic('calc', 18, 'lead') + '<span class="lbl">額面から手取りを計算</span><span class="chev">' + chevron(calcOpen) + '</span></button>' +
@@ -403,19 +445,21 @@
     var stages = plan.map(function (st) {
       total += st.amount * st.years;
       var base = child.id + ',' + st.index;
+      var at = 'edu:' + child.id + ':' + st.index;
       return '<div class="stage divide">' +
         '<div class="rowtop">' +
-          selectInput(fid('edu', child.id, st.index, 'stage'), 'op', 'flex:1;min-width:0;font-size:14px', st.options, st.stage, 'A.eduStage(' + base + ',this.value)') +
+          selectInput(fid('edu', child.id, st.index, 'stage'), 'op', 'flex:1;min-width:0', st.options, st.stage, 'A.eduStage(' + base + ',this.value)') +
           numInput(fid('edu', child.id, st.index, 'amt'), 'op', 72, st.amount, 'A.eduAmt(' + base + ',this.value)') +
           '<span class="u">万円</span>' +
         '</div>' +
         '<div class="rowtop" style="margin-top:8px">' +
           numInput(fid('edu', child.id, st.index, 'from'), 'op', 76, st.from, 'A.eduSpan(' + base + ",'from',this.value," + st.autoFrom + ',' + st.autoTo + ')') +
           '<span class="u">年から</span>' +
-          numInput(fid('edu', child.id, st.index, 'to'), 'op', 76, st.to, 'A.eduSpan(' + base + ",'to',this.value," + st.autoFrom + ',' + st.autoTo + ')') +
+          numInput(fid('edu', child.id, st.index, 'to'), 'op' + bad(at, 'to'), 76, st.to, 'A.eduSpan(' + base + ",'to',this.value," + st.autoFrom + ',' + st.autoTo + ')') +
           '<span class="u">年まで</span>' +
           '<span class="u" style="margin-left:auto">' + st.years + '年・計' + man(st.amount * st.years) + '万</span>' +
         '</div>' +
+        vmsgs(at) +
       '</div>';
     }).join('');
     return '<div class="card">' +
@@ -434,9 +478,10 @@
       '<div class="ttl" style="margin-bottom:11px">自動車の購入費</div>' +
       '<div class="rowtop" style="flex-wrap:wrap;row-gap:8px">' +
         numInput('f-car-from', 'op', 76, c.fromYear, "A.car('fromYear',this.value)") + '<span class="u">年から</span>' +
-        numInput('f-car-every', 'op', 52, c.every, "A.car('every',this.value)", ';margin-left:2px') + '<span class="u">年ごとに</span>' +
-        numInput('f-car-until', 'op', 56, c.untilAge, "A.car('untilAge',this.value)", ';margin-left:auto') + '<span class="u">歳まで</span>' +
+        numInput('f-car-every', 'op' + bad('car', 'every'), 52, c.every, "A.car('every',this.value)", ';margin-left:2px') + '<span class="u">年ごとに</span>' +
+        numInput('f-car-until', 'op' + bad('car', 'untilAge'), 56, c.untilAge, "A.car('untilAge',this.value)", ';margin-left:auto') + '<span class="u">歳まで</span>' +
       '</div>' +
+      vmsgs('car') +
       '<div class="rowtop" style="margin-top:10px"><span class="u">1回あたり</span>' +
         numInput('f-car-amt', 'op', 96, c.amount, "A.car('amount',this.value)", ';margin-left:auto') + '<span class="u">万円</span></div>' +
       '<div class="divide" style="margin-top:10px">' +
@@ -455,25 +500,27 @@
     var by = baseBirth();
     var rows = list.map(function (r) {
       var q = asset.id + ",'" + kind + "'," + r.id;
+      var at = 'inv:' + asset.id + ':' + kind + ':' + r.id;
       return '<div class="rowline divide">' +
         '<div class="rowtop">' +
-          numInput(fid('inv', asset.id, kind, r.id, 'year'), 'op', 76, r.year, 'A.inv(' + q + ",'year',this.value)") + '<span class="u">年から</span>' +
-          numInput(fid('inv', asset.id, kind, r.id, 'to'), 'op', 76, r.toYear, 'A.inv(' + q + ",'toYear',this.value)", ';margin-left:2px') + '<span class="u">年まで</span>' +
+          numInput(fid('inv', asset.id, kind, r.id, 'year'), 'op' + bad(at, 'year'), 76, r.year, 'A.inv(' + q + ",'year',this.value)") + '<span class="u">年から</span>' +
+          numInput(fid('inv', asset.id, kind, r.id, 'to'), 'op' + bad(at, 'toYear'), 76, r.toYear, 'A.inv(' + q + ",'toYear',this.value)", ';margin-left:2px') + '<span class="u">年まで</span>' +
           delButton('A.invDel(' + q + ')') +
         '</div>' +
         '<div class="ageh">家族１ ' + (r.year - by) + '歳 〜 ' + (r.toYear - by) + '歳（' + (r.toYear - r.year + 1) + '年間・計' + man((r.toYear - r.year + 1) * r.amount) + '万円）</div>' +
         '<div class="rowamt"><span class="u">年間</span>' +
-          numInput(fid('inv', asset.id, kind, r.id, 'amt'), 'op', 96, r.amount, 'A.inv(' + q + ",'amount',this.value)") + '<span class="u">万円</span></div>' +
+          numInput(fid('inv', asset.id, kind, r.id, 'amt'), 'op' + bad(at, 'amount'), 96, r.amount, 'A.inv(' + q + ",'amount',this.value)") + '<span class="u">万円</span></div>' +
+        vmsgs(at) +
         textInput(fid('inv', asset.id, kind, r.id, 'memo'), 'op memo', '', r.memo || '', 'A.inv(' + q + ",'memo',this.value)", '備考') +
       '</div>';
     }).join('');
     return '<div class="card">' +
       '<div class="head"><span class="ttl">' + esc(label) + '</span><span class="cnt">' + list.length + ' / 5行</span></div>' +
       (withRate ? '<div class="rowtop divide" style="padding:10px 0">' +
-        '<span class="u">想定利回り</span>' + numInput(fid('rate', asset.id), 'rq', 60, asset.rate, 'A.rate(' + asset.id + ',this.value)') + '<span class="u">％</span>' +
+        '<span class="u">想定利回り</span>' + numInput(fid('rate', asset.id), 'rq' + bad('rate:' + asset.id, 'rate'), 60, asset.rate, 'A.rate(' + asset.id + ',this.value)') + '<span class="u">％</span>' +
         '<span class="u" style="margin-left:auto">税率</span>' +
-        selectInput(fid('tax', asset.id), 'rq', 'font-size:14px', ['0%', '20%'], asset.tax, 'A.tax(' + asset.id + ',this.value)') +
-      '</div>' : '') +
+        selectInput(fid('tax', asset.id), 'rq', '', ['0%', '20%'], asset.tax, 'A.tax(' + asset.id + ',this.value)') +
+      '</div>' + (issuesAt('rate:' + asset.id).length ? '<div style="padding-bottom:10px">' + vmsgs('rate:' + asset.id) + '</div>' : '') : '') +
       rows +
       (list.length < 5 ? addButton('A.invAdd(' + asset.id + ",'" + kind + "')", '行を追加') : '') +
       (withRate ? '<div class="hint divide">税率は、NISA・iDeCoなら0%、投資信託や個別株なら20%。「＋」で足す行は前の行の翌年から始まるので、期間は重なりません。</div>' :
@@ -485,10 +532,10 @@
     var assets = state.assets.map(function (a) {
       return '<div class="rowtop divide" style="padding:10px 0">' +
         (a.fixed ? '<span style="font-size:14px;font-weight:500">' + esc(a.name) + '</span>'
-                 : textInput(fid('asset', a.id, 'name'), 'op', 'width:120px;font-size:14px', a.name, "A.text('assets'," + a.id + ",'name',this.value)")) +
-        numInput(fid('asset', a.id, 'amt'), 'rq', 96, a.amount, "A.num('assets'," + a.id + ",'amount',this.value)", ';margin-left:auto') +
+                 : textInput(fid('asset', a.id, 'name'), 'op', 'width:120px', a.name, "A.text('assets'," + a.id + ",'name',this.value)")) +
+        numInput(fid('asset', a.id, 'amt'), 'rq' + bad('asset:' + a.id, 'amount'), 96, a.amount, "A.num('assets'," + a.id + ",'amount',this.value)", ';margin-left:auto') +
         '<span class="u">万円</span>' +
-      '</div>';
+      '</div>' + (issuesAt('asset:' + a.id).length ? '<div style="padding-bottom:10px">' + vmsgs('asset:' + a.id) + '</div>' : '');
     }).join('');
     var family = state.family.map(function (m, i) {
       var d = E.parseDate(m.birth);
@@ -502,14 +549,16 @@
           '<button class="del" aria-label="詳しく" onclick="A.member(' + m.id + ')">' + chevron(open, 22) + '</button>' +
         '</div>' +
         '<div class="n2">' +
-          textInput(fid('fam', m.id, 'birth'), cls, 'width:128px;font-size:15px', m.birth, 'A.fam(' + m.id + ",'birth',this.value)", '1990/04/01') +
+          '<input type="date" id="' + fid('fam', m.id, 'birth') + '" class="' + cls + bad('fam:' + m.id, 'birth') + ' date" min="1900-01-01" max="2100-12-31" aria-label="生年月日"' +
+            ' value="' + isoDate(m.birth) + '" onchange="A.birth(' + m.id + ',this.value,this)" onblur="A.flush()">' +
           '<span class="u">' + ageLabel + '</span>' +
           '<span class="badge" style="margin-left:auto">' + esc(m.relation) + '</span>' +
         '</div>' +
+        vmsgs('fam:' + m.id) +
         (open ? '<div class="expand">' +
-          selectInput(fid('fam', m.id, 'gender'), 'op', 'font-size:14px', ['男性', '女性'], m.gender, 'A.fam(' + m.id + ",'gender',this.value)") +
-          selectInput(fid('fam', m.id, 'rel'), 'op', 'font-size:14px', REL, m.relation, 'A.fam(' + m.id + ",'relation',this.value)") +
-          selectInput(fid('fam', m.id, 'job'), 'op', 'font-size:14px', JOBS, m.job, 'A.fam(' + m.id + ",'job',this.value)") +
+          selectInput(fid('fam', m.id, 'gender'), 'op', '', ['男性', '女性'], m.gender, 'A.fam(' + m.id + ",'gender',this.value)") +
+          selectInput(fid('fam', m.id, 'rel'), 'op', '', REL, m.relation, 'A.fam(' + m.id + ",'relation',this.value)") +
+          selectInput(fid('fam', m.id, 'job'), 'op', '', JOBS, m.job, 'A.fam(' + m.id + ",'job',this.value)") +
           (i > 0 ? '<button class="btn ghost" style="margin-left:auto" onclick="A.delFamily(' + m.id + ')">' + (ui.confirmDelMember === m.id ? 'もう一度押すと削除' : 'この人を削除') + '</button>' : '') +
         '</div>' : '') +
       '</div>';
@@ -519,13 +568,15 @@
       '<div class="card">' +
         '<div class="ttl" style="margin-bottom:11px">シミュレーション期間</div>' +
         '<div class="rowtop"><span class="u" style="width:44px">開始年</span>' +
-          numInput('f-start', 'rq', 84, state.startYear, 'A.start(this.value)') + '<span class="u">年から</span>' +
-          numInput('f-endage', 'op', 64, state.endAge, 'A.endAge(this.value)', ';margin-left:auto') + '<span class="u">歳まで</span>' +
+          numInput('f-start', 'rq' + bad('start', 'start'), 84, state.startYear, 'A.start(this.value)') + '<span class="u">年から</span>' +
+          numInput('f-endage', 'op' + bad('start', 'endAge'), 64, state.endAge, 'A.endAge(this.value)', ';margin-left:auto') + '<span class="u">歳まで</span>' +
         '</div>' +
+        vmsgs('start') +
       '</div>' +
       '<div class="card"><div class="ttl" style="margin-bottom:2px">前年末の金融資産</div>' + assets +
         '<div class="rowtop divide" style="padding:10px 0"><span class="u">普通預金等の利率</span>' +
-          numInput('f-deprate', 'op', 64, state.depositRate || 0, 'A.depositRate(this.value)', ';margin-left:auto') + '<span class="u">％</span></div>' +
+          numInput('f-deprate', 'op' + bad('deprate', 'depositRate'), 64, state.depositRate || 0, 'A.depositRate(this.value)', ';margin-left:auto') + '<span class="u">％</span></div>' +
+        vmsgs('deprate') +
         '<div class="hint" style="padding-top:0">投資資産の名前は自由に変えられ、投資セクションの見出しに反映されます</div>' +
       '</div>' +
       '<div class="card"><div class="head"><span class="ttl">家族構成</span><span class="cnt">最大6人</span></div>' + family +
@@ -535,7 +586,12 @@
 
   function inputHTML() {
     var by = baseBirth();
-    var h = basicHTML();
+    var h = '';
+    if (issueCount) {
+      h += '<div class="vbanner">' + ic('warn', 18) + '<span>確認が必要な入力が ' + issueCount + ' 件あります</span>' +
+        '<button class="btn" onclick="A.firstIssue()">見る</button></div>';
+    }
+    h += basicHTML();
 
     h += '<h2 class="sec" id="sec-income">' + ic('income', 20) + '収入</h2>';
     state.salaries.forEach(function (s, i) { h += salaryCard(s, i); });
@@ -588,6 +644,9 @@
   }
 
   function summaryHTML() {
+    if (!result.years.length) {
+      return '<div class="warnline">' + ic('warn', 18) + '<span>計算できません</span><span class="worst" style="font-size:12px">期間と生年月日を確認</span></div>';
+    }
     var sp = sparkPath(result.years.map(function (r) { return r.assets.total; }), 340, 30);
     var warn = !!result.shortfall;
     var head = warn
@@ -745,6 +804,10 @@
 
   function cfHTML(width) {
     var last = result.years[result.years.length - 1];
+    if (!last) {
+      return '<div class="alert" style="margin-top:12px">' + ic('warn', 19) + '<span>計算できる年がありません。入力画面で、開始年・終了年齢・家族１の生年月日を確かめてください。</span></div>' +
+        '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>';
+    }
     var sf = result.shortfall;
     return '<div class="hero"><div class="k">終了時点（' + last.year + '年・家族１ ' + last.age + '歳）の金融資産</div>' +
         '<div class="v">' + man(result.endTotal) + '<small> 万円</small></div>' +
@@ -781,6 +844,11 @@
 
   function render() {
     result = E.compute(state);
+    issues = {};
+    var list = E.validate(state);
+    list.forEach(function (i) { (issues[i.at] = issues[i.at] || []).push(i); });
+    issueCount = list.length;
+
     var sc = document.getElementById('scroll');
     var top = sc.scrollTop;
     var active = document.activeElement && document.activeElement.id;
@@ -792,7 +860,7 @@
 
     var summary = document.getElementById('summary');
     summary.hidden = ui.view !== 'input';
-    summary.classList.toggle('warn', !!result.shortfall);
+    summary.classList.toggle('warn', !!result.shortfall || !result.years.length);
     summary.innerHTML = summaryHTML();
 
     document.getElementById('inputview').hidden = ui.view !== 'input';
