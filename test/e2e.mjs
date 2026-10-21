@@ -3,7 +3,7 @@
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -192,7 +192,7 @@ await page.fill('#f-living-2-year', '2056');
 await page.press('#f-living-2-year', 'Tab');
 
 // はじめての人：案内から「かんたん入力」で自分のプランを作る
-const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
+const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP', acceptDownloads: true });
 const wp = await fresh.newPage();
 wp.on('pageerror', (e) => errors.push(e.message));
 await wp.goto(url);
@@ -279,6 +279,43 @@ check('比較画面に2本の推移・差つきの表・タップで年ごとの
 await wp.screenshot({ path: join(shots, '13-compare.png'), fullPage: false });
 await wp.locator('.tablecard').scrollIntoViewIfNeeded();
 await wp.screenshot({ path: join(shots, '14-compare-table.png') });
+
+// バックアップ：すべてのプランをファイルに保存し、そのファイルから読み込める
+await wp.tap('#planbtn');
+await wp.waitForSelector('.sheet');
+const [dl] = await Promise.all([wp.waitForEvent('download'), wp.locator('.bk .btn', { hasText: 'ファイルに保存' }).tap()]);
+const dlPath = join(shots, dl.suggestedFilename());
+await dl.saveAs(dlPath);
+const saved = JSON.parse(readFileSync(dlPath, 'utf8'));
+check('バックアップのファイルにすべてのプランが入る', /^lifeplan-backup-\d{8}\.json$/.test(dl.suggestedFilename()) && saved.plans.length === 2 && saved.plans[1].name === 'わが家', `${dl.suggestedFilename()} plans=${saved.plans.map((p) => p.name)}`);
+await wp.setInputFiles('#f-backup-file', dlPath);
+await wp.waitForSelector('.bk .plconfirm');
+await wp.screenshot({ path: join(shots, '15-backup.png') });
+await wp.locator('.bk .btn', { hasText: '追加する' }).tap();
+await wp.waitForTimeout(150);
+const afterImport = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
+check('バックアップを読み込むと、今のプランを残したまま追加される', JSON.stringify(afterImport) === '["記入例","わが家","記入例（2）","わが家（2）"]', `${afterImport}`);
+
+// 細工されたファイルを読み込んでも、文字として表示されるだけで画面に要素が入り込まない
+const evil = JSON.parse(JSON.stringify(saved.plans[0]));
+evil.name = '<img src=x id=pwn1>';
+evil.state.living[1].year = '"><img src=x id=pwn2>';
+evil.state.living[1].id = "1);document.title='pwn';(";
+const evilPath = join(shots, 'evil.json');
+writeFileSync(evilPath, JSON.stringify({ plans: [evil] }));
+await wp.setInputFiles('#f-backup-file', evilPath);
+await wp.waitForSelector('.bk .plconfirm');
+await wp.locator('.bk .btn', { hasText: '追加する' }).tap();
+await wp.waitForTimeout(150);
+await wp.locator('.sheethead button').tap();
+await wp.waitForTimeout(100);
+await wp.tap('#seg-input');
+await wp.waitForTimeout(150);
+await wp.tap('#seg-cmp');
+await wp.waitForTimeout(150);
+const pwned = await wp.evaluate(() => !!document.getElementById('pwn1') || !!document.getElementById('pwn2') || document.title === 'pwn');
+const shownName = await wp.textContent('#planname');
+check('細工されたファイルでも要素が入り込まない', !pwned && shownName === '<img src=x id=pwn1>', `pwned=${pwned} name=${shownName}`);
 await fresh.close();
 
 // ダークモード

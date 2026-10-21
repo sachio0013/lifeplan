@@ -74,6 +74,7 @@
     sheet: false,      // プランの一覧を開いているか
     confirmDelPlan: 0,
     cmp: null,         // 比較で選んでいるプランの id
+    backup: { msg: '', level: '', text: false, pending: null },
     inputScroll: 0
   };
   var result = E.compute(state);
@@ -319,6 +320,7 @@
   var ICONS = {
     add: '<path d="M12 5v14M5 12h14"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     del: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
     more: '<path d="M6 9l6 6 6-6"/>',
     less: '<path d="M6 15l6-6 6 6"/>',
@@ -1101,7 +1103,11 @@
     return name;
   }
 
-  A.planSheet = function () { ui.sheet = !ui.sheet; ui.confirmDelPlan = 0; commit(); };
+  A.planSheet = function () {
+    ui.sheet = !ui.sheet; ui.confirmDelPlan = 0;
+    ui.backup = { msg: '', level: '', text: false, pending: null };
+    commit();
+  };
   A.planSwitch = function (id) {
     switchTo(id);
     ui.sheet = false;
@@ -1136,8 +1142,152 @@
     commit();
   };
 
-  // バックアップ（ファイルへの保存と読み込み）の欄。中身は後で作る
-  function renderBackup() {}
+  // バックアップ（ファイルへの保存と読み込み）の欄。
+  // claude.ai の中ではファイルの保存に downloads の機能を使う（使えない画面では null になる）。
+  // それ以外（保存したHTMLを直接開いた場合など）はブラウザのダウンロードで保存する。
+  var downloads = null;
+  try {
+    if (window.claude && window.claude.use) {
+      window.claude.use('downloads').then(function (d) { downloads = d; }, function () { /* 使えなければブラウザのダウンロードで */ });
+    }
+  } catch (e) { /* 同上 */ }
+
+  // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
+  var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
+    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to'];
+  // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
+  function clean(v, key, numLeaves) {
+    if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });
+    if (v && typeof v === 'object') {
+      var o = {};
+      Object.keys(v).forEach(function (k) { o[k] = clean(v[k], k, numLeaves || k === 'eduAmount' || k === 'carBuyOverride'); });
+      return o;
+    }
+    if (numLeaves || NUM_KEYS.indexOf(key) >= 0) return v === '' || v == null ? '' : toNum(v);
+    return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? v : '';
+  }
+
+  function backupText() {
+    return JSON.stringify({
+      app: 'lifeplan', kind: 'backup', version: 2, savedAt: new Date().toISOString(),
+      plans: store.plans.map(function (p) { return { name: p.name, state: p.state }; })
+    }, null, 1);
+  }
+
+  function parseBackup(text) {
+    var o;
+    try { o = JSON.parse(text); } catch (e) { return { error: 'ライフプランのバックアップの形式ではありません' }; }
+    var list = [];
+    if (o && Array.isArray(o.plans)) list = o.plans.map(function (p) { return { name: p && p.name, state: p && p.state }; });
+    else if (okState(o)) list = [{ name: '読み込んだプラン', state: o }];
+    list = list.filter(function (p) { return okState(p.state); }).map(function (p) {
+      return { name: String(p.name || '読み込んだプラン').slice(0, 30), state: clean(p.state, null, false) };
+    });
+    if (!list.length) return { error: '読み込めるプランが見つかりませんでした' };
+    return { plans: list };
+  }
+
+  function renderBackup() {
+    var el = document.getElementById('backup');
+    if (!el) return;
+    var b = ui.backup;
+    var msg = b.msg ? '<div class="vmsg ' + (b.level || 'ok') + '">' + ic(b.level === 'error' ? 'warn' : 'check', 15) + '<span>' + esc(b.msg) + '</span></div>' : '';
+    var pending = b.pending
+      ? '<div class="plconfirm ok"><span>' + b.pending.length + '件のプラン（' + b.pending.map(function (p) { return '「' + esc(p.name) + '」'; }).join('') + '）を追加します。今あるプランはそのまま残ります。</span>' +
+        '<button class="btn" onclick="A.backupAdd()">追加する</button><button class="btn ghost" onclick="A.backupCancel()">やめる</button></div>'
+      : '';
+    el.innerHTML = '<div class="bk">' +
+      '<div class="lb">バックアップ</div>' +
+      '<div class="hint" style="padding:0 0 8px">入力はこの端末のこのブラウザの中だけに保存されています。ファイルにしておくと、機種変更やデータの削除のあとでも戻せます。</div>' +
+      '<div class="sheetbtns" style="margin:0">' +
+        '<button class="btn ghost" onclick="A.backupSave()">すべてのプランをファイルに保存</button>' +
+        '<label class="btn ghost" for="f-backup-file" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click();}">ファイルから読み込む</label>' +
+        '<input type="file" id="f-backup-file" accept=".json,application/json,text/plain" hidden onchange="A.backupFile(this)">' +
+      '</div>' +
+      msg + pending +
+      '<button class="toggle" onclick="A.backupTextToggle()"><span class="lbl">ファイルが使えないときは、テキストで受け渡す</span><span class="chev">' + chevron(b.text) + '</span></button>' +
+      (b.text ? '<div class="hint" style="padding:4px 0 6px">下の文字をコピーして、メモやメールに貼っておきます。戻すときは、ここに貼り付けて「この内容を読み込む」を押します。</div>' +
+        '<textarea id="f-backup-text" class="op bktext" spellcheck="false" aria-label="バックアップの内容">' + esc(backupText()) + '</textarea>' +
+        '<div class="sheetbtns"><button class="btn ghost" onclick="A.backupCopy()">コピー</button><button class="btn ghost" onclick="A.backupPaste()">この内容を読み込む</button></div>' : '') +
+    '</div>';
+  }
+
+  function backupNote(text, level) { ui.backup.msg = text; ui.backup.level = level; renderBackup(); }
+
+  A.backupSave = function () {
+    var d = new Date();
+    var name = 'lifeplan-backup-' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.json';
+    var data = backupText();
+    ui.backup.pending = null;
+    if (downloads) {
+      downloads.save({ filename: name, data: data }).then(function () {
+        backupNote(name + ' を保存しました', 'ok');
+      }, function (e) {
+        var code = e && e.code;
+        if (code === 'declined') backupNote('保存を取りやめました', 'warn');
+        else if (code === 'rate_limited') backupNote('少し待ってから、もう一度押してください', 'warn');
+        else backupNote('この画面ではファイルに保存できませんでした。下の「テキストで受け渡す」を使ってください', 'error');
+      });
+      return;
+    }
+    try {
+      var url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+      var a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      backupNote(name + ' のダウンロードを始めました', 'ok');
+    } catch (e) {
+      backupNote('この画面ではファイルに保存できませんでした。下の「テキストで受け渡す」を使ってください', 'error');
+    }
+  };
+  function received(text) {
+    var r = parseBackup(text);
+    if (r.error) { ui.backup.pending = null; backupNote(r.error, 'error'); return; }
+    ui.backup.pending = r.plans; ui.backup.msg = '';
+    renderBackup();
+  }
+  A.backupFile = function (input) {
+    var f = input.files && input.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () { received(String(reader.result || '')); };
+    reader.onerror = function () { backupNote('ファイルを読めませんでした', 'error'); };
+    reader.readAsText(f);
+    input.value = '';
+  };
+  A.backupPaste = function () { received(document.getElementById('f-backup-text').value); };
+  A.backupCopy = function () {
+    var ta = document.getElementById('f-backup-text');
+    ta.focus(); ta.select();
+    function done() { backupNote('コピーしました', 'ok'); }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ta.value).then(done, function () {
+          try { if (document.execCommand('copy')) done(); else throw 0; } catch (e) { backupNote('選択した文字を、長押しでコピーしてください', 'warn'); }
+        });
+        return;
+      }
+      if (document.execCommand('copy')) { done(); return; }
+    } catch (e) { /* 下へ */ }
+    backupNote('選択した文字を、長押しでコピーしてください', 'warn');
+  };
+  A.backupTextToggle = function () { ui.backup.text = !ui.backup.text; ui.backup.msg = ''; renderBackup(); };
+  A.backupCancel = function () { ui.backup.pending = null; renderBackup(); };
+  A.backupAdd = function () {
+    var list = ui.backup.pending; if (!list) return;
+    var first = null;
+    list.forEach(function (p) {
+      var np = { id: store.nextPlanId++, name: uniqueName(p.name), state: p.state };
+      np.state.nextId = Math.max(toNum(np.state.nextId), 500);
+      store.plans.push(np);
+      if (!first) first = np;
+    });
+    switchTo(first.id);
+    ui.backup = { msg: list.length + '件のプランを追加し、「' + first.name + '」を表示しています', level: 'ok', text: false, pending: null };
+    store.prefs.welcomed = true;
+    commit();
+  };
 
   function sheetHTML() {
     var list = store.plans.map(function (p) {
