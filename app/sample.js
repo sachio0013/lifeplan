@@ -73,6 +73,8 @@
         }
       },
       calc: { income: 600, spouse: 'なし', kids: 0 },
+      // 住宅ローンの試算（入力シート T115:AH121 のサンプル。返済総額5,810万円）
+      loanCalc: { start: 2027, amount: 4500, years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: '' }], upkeep: 50 },
       // 公的年金の試算（入力シート T85:AL91 のサンプル。合計289.8万円）
       penCalc: {
         adjust: 90,

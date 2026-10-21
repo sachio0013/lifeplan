@@ -165,6 +165,14 @@ input.date { width: 158px; padding-right: 6px; font-variant-numeric: tabular-num
 .penres { display: flex; align-items: baseline; gap: 6px; margin-top: 10px; }
 .penres b { margin-left: auto; font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .calcbox a { color: var(--accent); font-weight: 700; }
+.loanres { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.loanres .lr { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; padding: 4px 0; }
+.loanres .lr .y { font-size: 13px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.loanres .lr .v { margin-left: auto; font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.loanres .lr .v small { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 2px; }
+.loanres .lr .u { order: 3; flex-basis: 100%; }
+.loantable { margin-top: 8px; max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.loantable table.cf th:first-child, .loantable table.cf td:first-child { min-width: 52px; }
 .calcresult { display: flex; align-items: baseline; gap: 8px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
 .retire { display: flex; align-items: center; gap: 7px; padding: 11px 0 4px; }
 .retire .ic { color: var(--text-faint); }

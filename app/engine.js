@@ -328,6 +328,38 @@
     return { from: birthYear + 22, to: birthYear + 60, payFrom: '', payTo: '', basic: 70 };
   }
 
+  // ---- 住宅ローンの試算（入力シート T114:AH125、住宅ローン返済表シート） ----
+
+  // 元利均等返済。金利は3段階まで変えられ、2段階目以降は「前の段階が終わった時点の残高」を
+  // 残りの期間・新しい金利で返す（Excel: 返済表シートの B432・B860 が前の表の残高を引く）。
+  // 最後の段階の年数は、返済期間の残り全部とする。
+  // loan: { amount（万円）, years, phases: [{ rate（％）, years }] }
+  function loanSchedule(loan) {
+    var total = Math.max(0, Math.round(num(loan.years)));
+    var balance = num(loan.amount) * 10000;   // 返済表シートと同じく円で計算する
+    var phases = [], yearly = [], month = 0, used = 0, paid = 0;
+    (loan.phases || []).forEach(function (ph, k, list) {
+      var last = k === list.length - 1;
+      var yrs = last ? total - used : Math.min(Math.max(0, Math.round(num(ph.years))), total - used);
+      if (yrs <= 0) return;
+      var n = (total - used) * 12;             // 残りの回数（この段階の金利で、完済までの返済額を出す）
+      var i = pct(ph.rate) / 12;
+      var pay = i ? balance * i / (1 - Math.pow(1 + i, -n)) : balance / n;
+      phases.push({ rate: num(ph.rate), from: used, years: yrs, monthly: pay / 10000, annual: pay * 12 / 10000 });
+      for (var m = 0; m < yrs * 12; m++, month++) {
+        var interest = balance * i, principal = pay - interest;
+        balance -= principal;
+        var y = Math.floor(month / 12);
+        var row = yearly[y] || (yearly[y] = { index: y, pay: 0, principal: 0, interest: 0, balance: 0 });
+        row.pay += pay / 10000; row.principal += principal / 10000; row.interest += interest / 10000;
+        row.balance = Math.max(0, balance) / 10000;
+        paid += pay / 10000;
+      }
+      used += yrs;
+    });
+    return { phases: phases, yearly: yearly, total: paid, interest: paid - num(loan.amount), years: used };
+  }
+
   // ---- 入力の確認 ----
 
   function isDate(s) {
@@ -500,6 +532,6 @@
     parseDate: parseDate, isDate: isDate, validate: validate, isEarlyBorn: isEarlyBorn, baseBirthYear: baseBirthYear,
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
     eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
-    compute: compute, takeHome: takeHome, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults
+    compute: compute, takeHome: takeHome, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults, loanSchedule: loanSchedule
   };
 }));

@@ -237,3 +237,19 @@ test('公的年金の試算がExcel（入力シート AK87・AK89・AK91）と�
   // 期間が逆なら報酬比例は0
   assert.equal(E.pensionEstimate({ ...d, from: 2051, to: 2013, payFrom: 300, payTo: 700 }, 90).earn, 0);
 });
+
+test('住宅ローンの試算がExcel（入力シート X118・AB118・AE119、住宅ローン返済表シート）と一致する', () => {
+  // サンプル：4500万円、35年、当初1%を10年、その後2%を25年
+  const r = E.loanSchedule({ amount: 4500, years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: 25 }] });
+  const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-6, `${msg}: ${a} / ${b}`);
+  near(r.phases[0].annual, 152.43427742581025, '当初の年間返済額');
+  near(r.phases[1].annual, 171.4371244693776, '見直し後の年間返済額');
+  near(r.total, 5810.270885992542, '返済総額');
+  near(r.yearly[9].balance, 3370.5982778936840, '10年後の残高（返済表 E126）');
+  assert.equal(r.yearly.length, 35);
+  near(r.yearly[34].balance, 0, '完済');
+  // 最後の段階の年数は残り全部（入れた年数は使わない）。0%は均等割り
+  const z = E.loanSchedule({ amount: 1200, years: 10, phases: [{ rate: 0, years: 99 }] });
+  near(z.phases[0].annual, 120, '金利0%');
+  assert.equal(z.phases[0].years, 10);
+});

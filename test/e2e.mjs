@@ -107,6 +107,27 @@ const penRow = await page.inputValue('#f-pubPension-1-amt');
 check('公的年金の試算がExcelと同じ289.8万円で、変えると再計算し1行目に反映できる',
   /289\.8万円/.test(penTotal0) && /299\.7万円/.test(penTotal1) && penRow === '299.7', `${penTotal0.trim()} → ${penTotal1.trim()} / 1行目=${penRow}`);
 
+// 住宅ローンの試算：サンプル（4500万円・35年・1%→2%）はExcelと同じ返済額。反映すると住宅費の行になる
+await page.locator('.toggle', { hasText: '住宅ローンを試算する' }).tap();
+await page.waitForSelector('#f-loan-amount');
+const loanRes = await page.locator('.loanres').textContent();
+const loanTotal = await page.locator('.calcresult', { hasText: '返済総額' }).textContent();
+await page.locator('.toggle', { hasText: '年ごとの返済表' }).tap();
+await page.waitForTimeout(100);
+const loanTableRows = await page.$$eval('.loantable tbody tr', (els) => els.length);
+await page.locator('.loanres').scrollIntoViewIfNeeded();
+await page.screenshot({ path: join(shots, '17-loan.png') });
+await page.locator('.btn', { hasText: '住宅費に反映する' }).tap();
+await page.waitForTimeout(100);
+const loanConfirm = await page.locator('.calcbox .plconfirm').textContent();
+await page.locator('.calcbox .btn', { hasText: '置き換える' }).tap();
+await page.waitForTimeout(150);
+const housingRows = await page.$$eval('#content input[id^="f-housing-"][id$="-amt"]', (els) => els.map((e) => e.value));
+check('住宅ローンの試算がExcelと同じ（年152.4→171.4万円、総額5,810万円）で、確認のうえ住宅費に反映できる',
+  /返済 年152\.4万円/.test(loanRes) && /返済 年171\.4万円/.test(loanRes) && /5,810/.test(loanTotal) && loanTableRows === 36 &&
+  /2027年以降の住宅費の行（3行）/.test(loanConfirm) && JSON.stringify(housingRows) === '["110","202.4","221.4","50"]',
+  `${loanTotal.trim()} 表${loanTableRows}行 / ${loanConfirm.trim().slice(0, 30)} / 住宅費=${housingRows}`);
+
 // 目次をタップすると該当セクションに移る
 await page.tap('#tabs .tab[data-k="invest"]');
 await page.waitForTimeout(200);

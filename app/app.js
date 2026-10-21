@@ -76,6 +76,7 @@
     cmp: null,         // 比較で選んでいるプランの id
     backup: { msg: '', level: '', text: false, pending: null },
     penOpen: { state: false, wz: false },  // 公的年金の試算を開いているか
+    loanOpen: false, loanTable: false, loanConfirm: false,  // 住宅ローンの試算
     inputScroll: 0
   };
   var result = E.compute(state);
@@ -665,7 +666,7 @@
 
     h += '<h2 class="sec" id="sec-expense">' + ic('expense', 20) + '支出</h2>';
     h += groupCard('living', '基本生活費', { max: 5, requiredFirst: true, anchorFirst: true, inflation: true, dupCheck: true, memo: true, hint: '住宅費・教育費・保険料・自動車・その他を除いた、ふだんの支出。2行目以降は今の物価で入れれば、物価上昇を足して計算します。' });
-    h += groupCard('housing', '住宅費', { max: 5, requiredFirst: true, anchorFirst: true, dupCheck: true, memo: true, hint: '家賃・ローン・修繕/管理費・固定資産税の合計' });
+    h += groupCard('housing', '住宅費', { max: 5, requiredFirst: true, anchorFirst: true, dupCheck: true, memo: true, hint: '家賃・ローン・修繕/管理費・固定資産税の合計', extra: loanCalcHTML() });
     h += groupCard('housingLump', '住宅費一時金（頭金など）', { max: 3, lump: true, memo: true });
     E.children(state).forEach(function (c) { h += eduCard(c); });
     h += groupCard('insurance', '保険料', { max: 7, requiredFirst: true, dupCheck: true, memo: true });
@@ -1014,6 +1015,156 @@
     commit();
   };
 
+  // ---------- 住宅ローンの試算（入力シート T114:AH125、住宅ローン返済表シート） ----------
+  //
+  // 試算の入力は state.loanCalc に置く：{ start, amount, years, phases: [{ rate, years }], upkeep }。
+  // 計算エンジンの結果には影響せず、「住宅費に反映する」で住宅費の行を作る。
+
+  function loanData(create) {
+    if (!state.loanCalc && create) {
+      state.loanCalc = { start: state.startYear, amount: '', years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: '' }], upkeep: 50 };
+    }
+    return state.loanCalc || { start: state.startYear, amount: '', years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: '' }], upkeep: 50 };
+  }
+  function ylabel(year, by) { return ageMode() ? '家族１が' + (year - by) + '歳' : year + '年'; }
+  function r1(v) { return Math.round(v * 10) / 10; }
+  function f1(v) { return r1(v).toLocaleString('ja-JP', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); }
+
+  // 反映したときの住宅費の行（年・年額・備考）。完済後は修繕・管理費等だけ
+  function loanRows(lc, sch) {
+    var start = toNum(lc.start), up = toNum(lc.upkeep);
+    var rows = sch.phases.map(function (ph, k) {
+      return { year: start + ph.from, amount: r1(ph.annual + up), memo: '住宅ローン（' + (k ? '金利' + ph.rate + '%に変わってから' : '当初金利' + ph.rate + '%') + '）＋修繕・管理費等' };
+    });
+    if (sch.phases.length) rows.push({ year: start + sch.years, amount: r1(up), memo: '完済後の修繕・管理費等' });
+    return rows;
+  }
+
+  // 今の住宅費の行のうち、反映で置き換わるもの（1行目は開始年からなので、借入が開始年以前なら1行目も）
+  function loanReplaced(lc) {
+    var start = toNum(lc.start);
+    return state.housing.filter(function (r, i) { return i === 0 ? start <= state.startYear : toNum(r.year) >= start; });
+  }
+
+  function loanCalcHTML() {
+    var open = ui.loanOpen;
+    var head = '<button class="toggle" onclick="A.loanToggle()">' + ic('calc', 18, 'lead') +
+      '<span class="lbl">住宅ローンを試算する</span><span class="chev">' + chevron(open) + '</span></button>';
+    if (!open) return '<div class="divide">' + head + '</div>';
+    var lc = loanData(), by = baseBirth();
+    var sch = E.loanSchedule(lc);
+    var bg = ';background:var(--surface)';
+    var nPh = lc.phases.length;
+    var usedBeforeLast = lc.phases.slice(0, -1).reduce(function (s, p) { return s + toNum(p.years); }, 0);
+    var over = nPh > 1 && usedBeforeLast >= toNum(lc.years);
+    var phases = lc.phases.map(function (ph, k) {
+      var last = k === nPh - 1;
+      var rest = Math.max(0, toNum(lc.years) - usedBeforeLast);
+      return '<div class="calcrow">' +
+        '<span class="u" style="width:58px">' + (k === 0 ? '当初金利' : (k + 1) + '段階目') + '</span>' +
+        numInput('f-loan-rate-' + k, 'op', 64, ph.rate, 'A.loanPh(' + k + ",'rate',this.value)", bg) + '<span class="u">％を</span>' +
+        (last ? '<span class="u" style="font-weight:700">残り' + rest + '年間</span>'
+              : numInput('f-loan-yrs-' + k, 'op' + (over ? ' bad' : ''), 56, ph.years, 'A.loanPh(' + k + ",'years',this.value)", bg) + '<span class="u">年間</span>') +
+        (k > 0 ? '<button class="del" style="width:36px;height:36px" aria-label="この金利の段階を外す" onclick="A.loanPhDel(' + k + ')">' + ic('del', 18) + '</button>' : '') +
+      '</div>';
+    }).join('');
+    var rows = loanRows(lc, sch);
+    var res = toNum(lc.amount) > 0 && sch.phases.length
+      ? '<div class="loanres">' + sch.phases.map(function (ph, k) {
+          return '<div class="lr"><span class="y">' + ylabel(toNum(lc.start) + ph.from, by) + '〜</span>' +
+            '<span class="u">返済 年' + f1(ph.annual) + '万円（月' + f1(ph.monthly) + '万円）</span>' +
+            '<span class="v">' + f1(rows[k].amount) + '<small>万円</small></span></div>';
+        }).join('') +
+        '<div class="lr"><span class="y">' + ylabel(toNum(lc.start) + sch.years, by) + '〜</span><span class="u">完済。修繕・管理費等だけ</span>' +
+          '<span class="v">' + f1(toNum(lc.upkeep)) + '<small>万円</small></span></div>' +
+        '<div class="hint" style="padding:2px 0 0">右の金額が、その年からの住宅費（返済＋修繕・管理費等の年額）です</div>' +
+        '</div>' +
+        '<div class="calcresult"><span class="u" style="font-weight:700">返済総額</span>' +
+          '<span class="u">うち利息 ' + man(sch.interest) + '万円</span>' +
+          '<span style="font-size:20px;font-weight:900;color:var(--accent-ink);margin-left:auto">' + man(sch.total) + '</span><span class="u" style="font-weight:700">万円</span></div>'
+      : '<div class="hint" style="padding:10px 0 0">借入額を入れると計算します</div>';
+    var table = '';
+    if (ui.loanTable && sch.yearly.length) {
+      table = '<div class="tablewrap loantable"><table class="cf"><thead><tr><th>年</th><th>返済額</th><th>元金</th><th>利息</th><th>年末残高</th></tr></thead><tbody>' +
+        sch.yearly.map(function (y) {
+          return '<tr><td>' + (toNum(lc.start) + y.index) + '</td><td>' + f1(y.pay) + '</td><td>' + f1(y.principal) + '</td><td>' + f1(y.interest) + '</td><td>' + man(y.balance) + '</td></tr>';
+        }).join('') +
+        '<tr class="sum"><td>合計</td><td>' + man(sch.total) + '</td><td>' + man(toNum(lc.amount)) + '</td><td>' + man(sch.interest) + '</td><td></td></tr>' +
+        '</tbody></table></div>';
+    }
+    var replaced = loanReplaced(lc);
+    var confirm = ui.loanConfirm
+      ? '<div class="plconfirm ok"><span>' + ylabel(toNum(lc.start), by) + '以降の住宅費の行（' + replaced.length + '行）を、試算の結果で置き換えます。</span>' +
+        '<button class="btn" onclick="A.loanApply(true)">置き換える</button><button class="btn ghost" onclick="A.loanApplyNo()">やめる</button></div>'
+      : '';
+    return '<div class="divide">' + head +
+      '<div class="calcbox">' +
+        '<div class="calcrow"><span class="u" style="width:58px">借入開始</span>' +
+          numInput('f-loan-start', 'op', 76, yv(lc.start, by), "A.loan('start'," + yin(by) + ')', bg) + '<span class="u">' + suf('from') + '</span></div>' +
+        '<div class="calcrow"><span class="u" style="width:58px">借入額</span>' +
+          numInput('f-loan-amount', 'op', 84, lc.amount, "A.loan('amount',this.value)", bg) + '<span class="u">万円</span>' +
+          numInput('f-loan-years', 'op', 52, lc.years, "A.loan('years',this.value)", ';margin-left:auto' + bg) + '<span class="u">年返済</span></div>' +
+        phases +
+        (over ? '<div class="vmsg error">' + ic('warn', 15) + '<span>金利の期間の合計が返済期間を超えています</span></div>' : '') +
+        (nPh < 3 ? '<button class="btn ghost" style="margin-top:9px;background:var(--surface)" onclick="A.loanPhAdd()">＋ 金利が変わる時期を追加</button>' : '') +
+        '<div class="calcrow" style="margin-top:12px"><span class="u">修繕・管理費、固定資産税（年）</span>' +
+          numInput('f-loan-upkeep', 'op', 64, lc.upkeep, "A.loan('upkeep',this.value)", ';margin-left:auto' + bg) + '<span class="u">万円</span></div>' +
+        res +
+        (sch.yearly.length && toNum(lc.amount) > 0 ? '<button class="toggle" onclick="A.loanTableToggle()"><span class="lbl">年ごとの返済表</span><span class="chev">' + chevron(ui.loanTable) + '</span></button>' + table : '') +
+        '<div class="hint" style="padding:8px 0 0">元利均等返済で計算します。金利が変わったあとは、その時点の残高を残りの期間で返す額になります。頭金は「住宅費一時金」に入れます。' +
+          '<a href="https://www.excelcf.net/hayamihyo/" target="_blank" rel="noopener">返済額早見表</a>・' +
+          '<a href="https://www.excelcf.net/hiritsu/" target="_blank" rel="noopener">安全な返済比率</a></div>' +
+        (toNum(lc.amount) > 0 && sch.phases.length ? (confirm || '<button class="btn block" onclick="A.loanApply(false)">住宅費に反映する</button>') : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  A.loanToggle = function () { ui.loanOpen = !ui.loanOpen; ui.loanConfirm = false; commit(); };
+  A.loanTableToggle = function () { ui.loanTable = !ui.loanTable; commit(); };
+  A.loan = function (field, v) { loanData(true)[field] = String(v).trim() === '' ? '' : toNum(v); ui.loanConfirm = false; commit(); };
+  A.loanPh = function (k, field, v) {
+    var ph = loanData(true).phases[k]; if (!ph) return;
+    ph[field] = String(v).trim() === '' ? '' : toNum(v);
+    ui.loanConfirm = false;
+    commit();
+  };
+  A.loanPhAdd = function () {
+    var lc = loanData(true);
+    if (lc.phases.length >= 3) return;
+    var used = lc.phases.slice(0, -1).reduce(function (s, p) { return s + toNum(p.years); }, 0);
+    var last = lc.phases[lc.phases.length - 1];
+    // 今の最後の段階に年数を入れて（残りの半分ほど）、その後ろに新しい段階を足す
+    last.years = Math.max(1, Math.floor((toNum(lc.years) - used) / 2));
+    lc.phases.push({ rate: last.rate, years: '' });
+    commit();
+  };
+  A.loanPhDel = function (k) {
+    var lc = loanData(true);
+    if (k < 1 || lc.phases.length < 2) return;
+    lc.phases.splice(k, 1);
+    commit();
+  };
+  A.loanApplyNo = function () { ui.loanConfirm = false; commit(); };
+  A.loanApply = function (sure) {
+    var lc = loanData(true);
+    var sch = E.loanSchedule(lc);
+    if (!(toNum(lc.amount) > 0) || !sch.phases.length) return;
+    if (!sure && loanReplaced(lc).length) { ui.loanConfirm = true; commit(); return; }
+    var start = toNum(lc.start), sy = state.startYear;
+    var gen = loanRows(lc, sch);
+    var head = state.housing[0] || { id: nid(), year: sy, amount: 0, memo: '' };
+    // 開始年までに始まっている分は1行目（開始年から）にまとめる
+    var atStart = gen.filter(function (r) { return r.year <= sy; }).pop();
+    if (atStart) { head.amount = atStart.amount; head.memo = atStart.memo; }
+    var keep = state.housing.slice(1).filter(function (r) { return toNum(r.year) < start; });
+    state.housing = [head].concat(keep, gen.filter(function (r) { return r.year > sy; }).map(function (r) {
+      return { id: nid(), year: r.year, amount: r.amount, memo: r.memo };
+    }));
+    ui.loanConfirm = false;
+    ui.loanOpen = false;
+    commit();
+  };
+
   // ---------- かんたん入力（必須の項目だけを順に聞く） ----------
 
   var WZ_STEPS = ['期間と家族１', '家族', '金融資産', '収入', '年金', '支出'];
@@ -1207,6 +1358,7 @@
     store.activeId = id;
     state = p.state;
     ui.openMember = 0; ui.openCalc = 0; ui.carDetailOpen = false; ui.confirmReset = false; ui.inputScroll = 0;
+    ui.loanConfirm = false;
     quiet = true;
   }
   function uniqueName(base) {
@@ -1266,7 +1418,7 @@
 
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
-    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust'];
+    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });
