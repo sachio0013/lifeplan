@@ -99,7 +99,13 @@
       commit();
     },
 
-    start: function (v) { state.startYear = toNum(v); commit(); },
+    start: function (v) {
+      state.startYear = toNum(v);
+      [state.living, state.housing].concat(state.salaries.map(function (s) { return s.rows; })).forEach(function (rows) {
+        if (rows && rows[0]) rows[0].year = state.startYear;
+      });
+      commit();
+    },
     endAge: function (v) { state.endAge = toNum(v); commit(); },
     depositRate: function (v) { state.depositRate = toNum(v); commit(); },
 
@@ -273,6 +279,9 @@
   function delButton(handler) {
     return '<button class="del" aria-label="この行を削除" onclick="' + handler + '">' + ic('del', 20) + '</button>';
   }
+  function lockedYear() {
+    return '<span class="lockyear" title="1行目は開始年から">' + state.startYear + '</span><span class="u">年（開始年）から</span>';
+  }
   function chevron(open, size) { return ic(open ? 'less' : 'more', size || 18); }
 
   function rowsHTML(key, list, opts) {
@@ -285,15 +294,18 @@
       var dup = !!opts.dupCheck && counts[r.year] > 1 && seen[r.year] > 1;
       var cls = opts.requiredFirst && i === 0 ? 'rq' : 'op';
       var q = "'" + key + "'," + r.id;
+      var ageYear = opts.anchorFirst && i === 0 ? state.startYear : r.year;
       var ageHint = r.year ? (opts.hasTo
         ? '家族１ ' + (r.year - by) + '歳 〜 ' + (r.toYear - by) + '歳（' + (r.toYear - r.year + 1) + '年間）'
         : '家族１ ' + (r.year - by) + '歳') : '';
+      var locked = opts.anchorFirst && i === 0;
       return '<div class="rowline divide">' +
         '<div class="rowtop">' +
-          numInput(fid(key, r.id, 'year'), cls, 76, r.year, 'A.num(' + q + ",'year',this.value)") +
-          '<span class="u">' + opts.yearSuffix + '</span>' +
+          (locked ? lockedYear() :
+            numInput(fid(key, r.id, 'year'), cls, 76, r.year, 'A.num(' + q + ",'year',this.value)") +
+            '<span class="u">' + opts.yearSuffix + '</span>') +
           (opts.hasTo ? numInput(fid(key, r.id, 'to'), cls, 76, r.toYear, 'A.num(' + q + ",'toYear',this.value)", ';margin-left:2px') + '<span class="u">年まで</span>' : '') +
-          delButton('A.del(' + q + ')') +
+          (locked ? '' : delButton('A.del(' + q + ')')) +
         '</div>' +
         (ageHint ? '<div class="ageh">' + ageHint + '</div>' : '') +
         '<div class="rowamt">' +
@@ -335,12 +347,14 @@
     var rows = sal.rows.map(function (r, i) {
       var cls = idx === 0 && i === 0 ? 'rq' : 'op';
       var q = sal.id + ',' + r.id;
+      var y = i === 0 ? state.startYear : r.year;
       return '<div class="rowline divide">' +
         '<div class="rowtop">' +
-          numInput(fid('sal', sal.id, r.id, 'year'), cls, 76, r.year, 'A.sal(' + q + ",'year',this.value)") +
-          '<span class="u">年から</span>' + delButton('A.salDel(' + q + ')') +
+          (i === 0 ? lockedYear() :
+            numInput(fid('sal', sal.id, r.id, 'year'), cls, 76, r.year, 'A.sal(' + q + ",'year',this.value)") +
+            '<span class="u">年から</span>' + delButton('A.salDel(' + q + ')')) +
         '</div>' +
-        '<div class="ageh">' + esc(memberName(sal.memberId)) + ' ' + (r.year - mBirth) + '歳</div>' +
+        '<div class="ageh">' + esc(memberName(sal.memberId)) + ' ' + (y - mBirth) + '歳</div>' +
         '<div class="rowamt">' +
           numInput(fid('sal', sal.id, r.id, 'amt'), cls, 96, r.amount, 'A.sal(' + q + ",'amount',this.value)") +
           '<span class="u">万円</span>' +
@@ -354,7 +368,7 @@
       '<div class="head"><span class="u">対象者</span>' +
         selectInput(fid('sal', sal.id, 'member'), idx === 0 ? 'rq' : 'op', 'font-size:14px', memberOptions, sal.memberId, 'A.salMember(' + sal.id + ',this.value)') +
         '<span class="cnt">' + sal.rows.length + ' / 8行</span></div>' +
-      '<div class="hint" style="padding:6px 0 0">手取り（可処分所得）で入力します</div>' +
+      '<div class="hint" style="padding:6px 0 0">手取り（可処分所得）で入力します。2行目以降の金額は今の水準で入れれば、その行の上昇率で開始年から伸ばして計算します。</div>' +
       rows +
       (sal.rows.length < 8 ? addButton('A.salAdd(' + sal.id + ')', '行を追加') : '') +
       (member ? '<div class="retire divide">' + ic('work', 18) + '' +
@@ -536,12 +550,12 @@
     h += groupCard('pubPension', '公的年金', { max: 5, requiredFirst: true, dupCheck: true, memo: true, hint: '家族１が65歳＝' + (by + 65) + '年／70歳＝' + (by + 70) + '年' });
 
     h += '<h2 class="sec" id="sec-expense">' + ic('expense', 20) + '支出</h2>';
-    h += groupCard('living', '基本生活費', { max: 5, requiredFirst: true, inflation: true, dupCheck: true, memo: true, hint: '住宅費・教育費・保険料・自動車・その他を除いた、ふだんの支出。2行目以降は今の物価で入れれば、物価上昇を足して計算します。' });
-    h += groupCard('housing', '住宅費', { max: 5, requiredFirst: true, dupCheck: true, memo: true, hint: '家賃・ローン・修繕/管理費・固定資産税の合計' });
+    h += groupCard('living', '基本生活費', { max: 5, requiredFirst: true, anchorFirst: true, inflation: true, dupCheck: true, memo: true, hint: '住宅費・教育費・保険料・自動車・その他を除いた、ふだんの支出。2行目以降は今の物価で入れれば、物価上昇を足して計算します。' });
+    h += groupCard('housing', '住宅費', { max: 5, requiredFirst: true, anchorFirst: true, dupCheck: true, memo: true, hint: '家賃・ローン・修繕/管理費・固定資産税の合計' });
     h += groupCard('housingLump', '住宅費一時金（頭金など）', { max: 3, lump: true, memo: true });
     E.children(state).forEach(function (c) { h += eduCard(c); });
     h += groupCard('insurance', '保険料', { max: 7, requiredFirst: true, dupCheck: true, memo: true });
-    h += groupCard('carCost', '自動車の維持費', { max: 5, dupCheck: true, memo: true, hint: '税金・保険・車検・駐車場・整備の年額' });
+    h += groupCard('carCost', '自動車の維持費', { max: 5, dupCheck: true, memo: true, hint: '税金・保険・車検・駐車場・整備の年額。下の購入費の「◯歳まで」（今は' + state.carBuy.untilAge + '歳）を過ぎた年からは、車を手放したとみなして0になります。' });
     h += carCard();
     h += groupCard('otherFlow', 'その他の経常支出', { max: 5, dupCheck: true, memo: true, hint: '同じ年は1行にまとめます（趣味と旅行なら合算して1行）' });
     h += groupCard('otherLump', 'その他の一時支出', { max: 5, lump: true, memo: true, hint: '子供の結婚の援助、留学費など' });

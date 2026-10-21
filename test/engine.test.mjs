@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const E = require('../app/engine.js');
@@ -98,41 +98,62 @@ test('同じ年の変更行は合算する（Excelは先頭の1行だけを拾�
   assert.equal(E.changeAt(rows, 2029), 0);
 });
 
-// CF表シートの全行との照合（フィクスチャがある場合のみ）
-const fixturePath = new URL('./fixtures/excel-cf.json', import.meta.url);
-test('CF表の全項目がExcelと一致する', { skip: !existsSync(fixturePath) && 'Excelの計算済みの値（test/fixtures/excel-cf.json）がまだ無い' }, () => {
-  const fx = JSON.parse(readFileSync(fixturePath, 'utf8'));
-  const pick = {
-    salary1: (r) => r.income.salaries[0],
-    salary2: (r) => r.income.salaries[1] ?? 0,
-    pension: (r) => r.income.pension,
-    nisaOut: (r) => r.income.withdrawals[0],
-    idecoOut: (r) => r.income.withdrawals[1],
-    incomeTotal: (r) => r.income.total,
-    living: (r) => r.expense.living,
-    housing: (r) => r.expense.housing,
-    education: (r) => r.expense.education,
-    insurance: (r) => r.expense.insurance,
-    car: (r) => r.expense.car,
-    other: (r) => r.expense.other,
-    nisaIn: (r) => r.expense.contributions[0],
-    idecoIn: (r) => r.expense.contributions[1],
-    expenseTotal: (r) => r.expense.total,
-    balance: (r) => r.balance,
-    deposit: (r) => r.assets.deposit,
-    nisa: (r) => r.assets.investments[0],
-    ideco: (r) => r.assets.investments[1],
-    total: (r) => r.assets.total,
-  };
-  const mismatches = [];
-  for (const row of fx.years) {
-    const mine = byYear[row.year];
-    if (!mine) { mismatches.push(`${row.year}: 年が無い`); continue; }
-    for (const [key, get] of Object.entries(pick)) {
+// CF表シートの全行との照合
+const PICK = {
+  salary1: (r) => r.income.salaries[0] ?? 0,
+  salary2: (r) => r.income.salaries[1] ?? 0,
+  salary3: (r) => r.income.salaries[2] ?? 0,
+  pension: (r) => r.income.pension,
+  nisaOut: (r) => r.income.withdrawals[0],
+  idecoOut: (r) => r.income.withdrawals[1],
+  incomeTotal: (r) => r.income.total,
+  living: (r) => r.expense.living,
+  housing: (r) => r.expense.housing,
+  education: (r) => r.expense.education,
+  insurance: (r) => r.expense.insurance,
+  car: (r) => r.expense.car,
+  other: (r) => r.expense.other,
+  nisaIn: (r) => r.expense.contributions[0],
+  idecoIn: (r) => r.expense.contributions[1],
+  expenseTotal: (r) => r.expense.total,
+  balance: (r) => r.balance,
+  deposit: (r) => r.assets.deposit,
+  nisa: (r) => r.assets.investments[0],
+  ideco: (r) => r.assets.investments[1],
+  total: (r) => r.assets.total,
+};
+
+function compareWithExcel(state, excelYears) {
+  const mine = Object.fromEntries(E.compute(state).years.map((r) => [r.year, r]));
+  const out = [];
+  if (Object.keys(mine).length !== excelYears.length) out.push(`年数: アプリ ${Object.keys(mine).length} / Excel ${excelYears.length}`);
+  for (const row of excelYears) {
+    const m = mine[row.year];
+    if (!m) { out.push(`${row.year}: 年が無い`); continue; }
+    for (const [key, get] of Object.entries(PICK)) {
       if (row[key] == null) continue;
-      const a = get(mine), b = row[key];
-      if (Math.abs(a - b) > 0.005) mismatches.push(`${row.year} ${key}: アプリ ${a.toFixed(3)} / Excel ${b.toFixed(3)}`);
+      const a = get(m), b = row[key];
+      // 万円単位で0.005（＝50円）を超える差は不一致とみなす
+      if (Math.abs(a - b) > 0.005) out.push(`${row.year} ${key}: アプリ ${a.toFixed(3)} / Excel ${b.toFixed(3)}`);
     }
   }
-  assert.deepEqual(mismatches.slice(0, 40), [], `${mismatches.length}件の不一致`);
+  return out;
+}
+
+const fixtureDir = new URL('./fixtures/', import.meta.url);
+const samplePath = new URL('excel-cf.json', fixtureDir);
+test('サンプル入力でCF表の全項目がExcelと一致する', { skip: !existsSync(samplePath) && 'Excelの計算済みの値（test/fixtures/excel-cf.json）がまだ無い' }, () => {
+  const fx = JSON.parse(readFileSync(samplePath, 'utf8'));
+  const bad = compareWithExcel(sample(), fx.years);
+  assert.deepEqual(bad.slice(0, 40), [], `${bad.length}件の不一致`);
 });
+
+// 別の入力をExcelに流し込んで再計算した結果（tools/excel_scenarios.py が作る）
+const scenarioFiles = existsSync(fixtureDir) ? readdirSync(fixtureDir).filter((f) => f.startsWith('scenario-')) : [];
+for (const file of scenarioFiles) {
+  const fx = JSON.parse(readFileSync(new URL(file, fixtureDir), 'utf8'));
+  test(`シナリオ「${fx.name}」でCF表の全項目がExcelと一致する`, () => {
+    const bad = compareWithExcel(fx.state, fx.years);
+    assert.deepEqual(bad.slice(0, 40), [], `${bad.length}件の不一致`);
+  });
+}

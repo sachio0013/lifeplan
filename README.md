@@ -14,7 +14,8 @@ Excel「ライフプラン表」を元にした、家計・資産シミュレー
 | `app/app.js` / `app/style.css` / `app/index.html` | 画面 |
 | `tools/build.mjs` | 上をまとめて `dist/lifeplan.html`（公開用）と `dist/preview.html`（手元確認用）を作る |
 | `tools/extract_excel_fixture.py` | ExcelのCF表から計算済みの値を取り出し、テスト用の照合データにする |
-| `test/engine.test.mjs` | 計算のテスト（Excelの値と照合） |
+| `tools/excel_scenarios.py` | `test/scenarios/` の入力をExcelに流し込みLibreOfficeで再計算して、照合データを作る |
+| `test/engine.test.mjs` | 計算のテスト（Excelの値と照合。サンプル＋3シナリオ） |
 | `test/e2e.mjs` | スマホ幅のブラウザで実際に操作するテスト |
 
 ```

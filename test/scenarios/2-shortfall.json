@@ -1,0 +1,160 @@
+{
+ "version": 1,
+ "calc": {
+  "income": 600,
+  "spouse": "なし",
+  "kids": 0
+ },
+ "nextId": 900,
+ "eduAmount": {},
+ "eduSpan": {},
+ "edu": {},
+ "carBuyOverride": {},
+ "startYear": 2026,
+ "endAge": 85,
+ "depositRate": 0,
+ "assets": [
+  {
+   "id": 1,
+   "name": "普通預金等",
+   "fixed": true,
+   "amount": 80
+  },
+  {
+   "id": 2,
+   "name": "NISA",
+   "fixed": false,
+   "amount": 300,
+   "rate": 5,
+   "tax": "0%"
+  },
+  {
+   "id": 3,
+   "name": "iDeCo",
+   "fixed": false,
+   "amount": 0,
+   "rate": 3,
+   "tax": "0%"
+  }
+ ],
+ "family": [
+  {
+   "id": 1,
+   "name": "A",
+   "gender": "男性",
+   "relation": "家族１",
+   "birth": "1975/04/01",
+   "job": "会社員等"
+  }
+ ],
+ "salaries": [
+  {
+   "id": 1,
+   "who": "",
+   "memberId": 1,
+   "retireAge": 60,
+   "rows": [
+    {
+     "id": 100,
+     "year": 2026,
+     "amount": 280,
+     "growth": 0
+    }
+   ]
+  }
+ ],
+ "lump": [],
+ "corpPension": [],
+ "privPension": [],
+ "pubPension": [
+  {
+   "id": 1,
+   "year": 2040,
+   "amount": 150,
+   "memo": ""
+  }
+ ],
+ "living": [
+  {
+   "id": 1,
+   "year": 2026,
+   "amount": 260,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2035,
+   "amount": 230,
+   "memo": ""
+  }
+ ],
+ "inflation": 0.8,
+ "housing": [
+  {
+   "id": 1,
+   "year": 2026,
+   "amount": 96,
+   "memo": ""
+  }
+ ],
+ "housingLump": [],
+ "insurance": [
+  {
+   "id": 1,
+   "year": 2026,
+   "amount": 12,
+   "memo": ""
+  }
+ ],
+ "carCost": [],
+ "carBuy": {
+  "fromYear": 2030,
+  "every": 10,
+  "amount": 0,
+  "untilAge": 70
+ },
+ "otherFlow": [],
+ "otherLump": [],
+ "invest": {
+  "2": {
+   "add": [
+    {
+     "id": 10,
+     "year": 2026,
+     "toYear": 2034,
+     "amount": 100,
+     "memo": ""
+    }
+   ],
+   "out": [
+    {
+     "id": 20,
+     "year": 2036,
+     "toYear": 2060,
+     "amount": 200,
+     "memo": ""
+    }
+   ]
+  },
+  "3": {
+   "add": [
+    {
+     "id": 30,
+     "year": 2026,
+     "toYear": 2034,
+     "amount": 30,
+     "memo": ""
+    }
+   ],
+   "out": [
+    {
+     "id": 40,
+     "year": 2035,
+     "toYear": 2044,
+     "amount": 50,
+     "memo": ""
+    }
+   ]
+  }
+ }
+}

@@ -137,21 +137,33 @@
     return out;
   }
 
+  // 給与・基本生活費・住宅費の1行目は、入力した年にかかわらず開始年から使う
+  // （Excel: CF表の初年度の列が1行目の金額を直接参照している）。
+  function anchored(rows, sy) {
+    return (rows || []).map(function (r, i) { return i === 0 ? { year: sy, amount: r.amount, growth: r.growth, toYear: r.toYear } : r; });
+  }
+
   // ---- 給与 ----
 
-  // 変更年はその行の手取額、それ以外は前年×(1+直近の変更行の上昇率)。退職年齢に達した年から0。
+  // 変更年は「その行の金額をその行の上昇率で開始年から膨らませた額」（Excel: FV）。
+  // それ以外は 前年 ×（1＋直近の変更行の上昇率）。退職年齢に達した年から0。
   function salaryAt(state, sal, y, prev) {
-    var rows = (sal.rows || []).filter(function (r) { return num(r.year); });
-    var exact = rows.filter(function (r) { return num(r.year) === y; });
+    var sy = num(state.startYear);
+    var rows = anchored(sal.rows, sy).filter(function (r) { return num(r.year); });
     var v;
-    if (exact.length) {
-      v = exact.reduce(function (s, r) { return s + num(r.amount); }, 0);
+    if (y === sy) {
+      v = rows.length ? num(rows[0].amount) : 0;
     } else {
-      var before = rows.filter(function (r) { return num(r.year) < y; });
-      if (!before.length) v = 0;
-      else {
-        var last = before.reduce(function (a, r) { return num(r.year) >= num(a.year) ? r : a; });
-        v = prev * (1 + pct(last.growth));
+      var exact = rows.filter(function (r) { return num(r.year) === y; });
+      if (exact.length) {
+        v = exact.reduce(function (s, r) { return s + num(r.amount) * Math.pow(1 + pct(r.growth), y - sy); }, 0);
+      } else {
+        var before = rows.filter(function (r) { return num(r.year) < y; });
+        if (!before.length) v = 0;
+        else {
+          var last = before.reduce(function (a, r) { return num(r.year) >= num(a.year) ? r : a; });
+          v = prev * (1 + pct(last.growth));
+        }
       }
     }
     var retire = num(sal.retireAge);
@@ -164,19 +176,19 @@
 
   // ---- 基本生活費 ----
 
-  // 変更年は「今の価値で入れた金額」を開始年からの物価上昇で膨らませる（Excel: FV）。
-  // それ以外は前年×(1+物価上昇率)。
+  // 1行目の金額から始め、変更年は「今の価値で入れた金額」を開始年からの物価上昇で膨らませる（Excel: FV）。
+  // それ以外は 前年 ×（1＋物価上昇率）。
   function livingAt(state, y, prev) {
     var infl = pct(state.inflation);
     var sy = num(state.startYear);
-    var rows = (state.living || []).filter(function (r) { return num(r.year); });
-    var exact = rows.filter(function (r) { return num(r.year) === y; });
+    var rows = state.living || [];
+    if (y === sy) return rows.length ? num(rows[0].amount) : 0;
+    var exact = rows.slice(1).filter(function (r) { return num(r.year) === y; });
     if (exact.length) {
       var base = exact.reduce(function (s, r) { return s + num(r.amount); }, 0);
       return base * Math.pow(1 + infl, y - sy);
     }
-    var before = rows.filter(function (r) { return num(r.year) < y; });
-    return before.length ? prev * (1 + infl) : 0;
+    return prev * (1 + infl);
   }
 
   // ---- 本体 ----
@@ -218,13 +230,16 @@
 
       // 支出
       var living = livingAt(state, y, prevLiving); prevLiving = living;
-      var housing = changeAt(state.housing, y) + lumpAt(state.housingLump, y);
+      var housing = changeAt(anchored(state.housing, sy), y) + lumpAt(state.housingLump, y);
       var education = 0;
       kids.forEach(function (plan) {
         plan.forEach(function (st) { if (st.from <= y && y <= st.to) education += st.amount; });
       });
       var insurance = changeAt(state.insurance, y);
-      var car = changeAt(state.carCost, y) + cars.reduce(function (s, o) { return s + (o.year === y ? o.amount : 0); }, 0);
+      // 維持費は、購入費の「◯歳まで」を過ぎたら車を手放したとみなして0（Excel: 入力シート 225行）
+      var carUntil = num((state.carBuy || {}).untilAge);
+      var maintenance = carUntil && y - by > carUntil ? 0 : changeAt(state.carCost, y);
+      var car = maintenance + cars.reduce(function (s, o) { return s + (o.year === y ? o.amount : 0); }, 0);
       var other = changeAt(state.otherFlow, y) + lumpAt(state.otherLump, y);
 
       // 投資：積立は前年の預金で足りる分だけ、現金化は前年の残高で足りる分だけ（Excel: 足りなければその年は0）
@@ -328,7 +343,7 @@
     EDU_UNIT: EDU_UNIT, EDU_STAGES: EDU_STAGES,
     parseDate: parseDate, isEarlyBorn: isEarlyBorn, baseBirthYear: baseBirthYear,
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
-    eduPlan: eduPlan, children: children, carOccurrences: carOccurrences,
+    eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
     compute: compute, takeHome: takeHome
   };
 }));
