@@ -73,6 +73,14 @@
         }
       },
       calc: { income: 600, spouse: 'なし', kids: 0 },
+      // 公的年金の試算（入力シート T85:AL91 のサンプル。合計289.8万円）
+      penCalc: {
+        adjust: 90,
+        people: {
+          1: { from: 2013, to: 2051, payFrom: 300, payTo: 700, basic: 70 },
+          2: { from: 2013, to: 2051, payFrom: 300, payTo: 400, basic: 70 }
+        }
+      },
       nextId: 500
     };
   }
@@ -125,6 +133,8 @@
       otherLump: [],
       invest: { 2: { add: [], out: [] }, 3: { add: [], out: [] } },
       calc: { income: 600, spouse: 'なし', kids: 0 },
+      // 年金のステップで試算した場合は、その入力も引き継ぐ（家族１・家族２の id は 1・2）
+      penCalc: d.penCalc ? JSON.parse(JSON.stringify(d.penCalc)) : undefined,
       nextId: 500
     };
   }

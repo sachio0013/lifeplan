@@ -221,3 +221,19 @@ test('かんたん入力の答えから作ったプランは、確認箇所な�
   assert.equal(r.years.at(-1).age, 90);
   assert.ok(r.years[0].expense.education > 0);        // 子供の教育費が自動で入る
 });
+
+test('公的年金の試算がExcel（入力シート AK87・AK89・AK91）と一致する', () => {
+  // サンプル：家族１・家族２とも1991年生まれ → 入社2013年、最終退職2051年
+  const d = E.pensionDefaults(1991);
+  assert.equal(d.from, 2013);
+  assert.equal(d.to, 2051);
+  const p1 = E.pensionEstimate({ ...d, payFrom: 300, payTo: 700 }, 90);
+  const p2 = E.pensionEstimate({ ...d, payFrom: 300, payTo: 400 }, 90);
+  assert.deepEqual(p1, { years: 39, earn: 107, basic: 70, total: 159.3 });
+  assert.deepEqual(p2, { years: 39, earn: 75, basic: 70, total: 130.5 });
+  assert.equal(Math.round((p1.total + p2.total) * 10) / 10, 289.8);
+  // 会社員の期間が無い人（手取額0）は基礎年金だけ
+  assert.equal(E.pensionEstimate({ ...d, payFrom: 0, payTo: 0 }, 90).total, 63);
+  // 期間が逆なら報酬比例は0
+  assert.equal(E.pensionEstimate({ ...d, from: 2051, to: 2013, payFrom: 300, payTo: 700 }, 90).earn, 0);
+});

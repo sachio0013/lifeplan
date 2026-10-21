@@ -307,6 +307,27 @@
     };
   }
 
+  // ---- 公的年金の試算（入力シート T85:AL91） ----
+
+  // 会社員・公務員（2号被保険者）だった期間の手取額から、受け取る年金額（万円・年額）をおおざっぱに出す。
+  //   報酬比例 ＝ ROUND（（入社時の手取額＋最終退職時の手取額）÷ 2 × 年数 × 0.55%, 0）
+  //   年金額   ＝（報酬比例 ＋ 基礎年金）× 調整（Excelは0.9。所得代替率の低下を見込む）
+  // p: { from, to, payFrom, payTo, basic }、adjust は％（90 なら 0.9 倍）
+  function pensionEstimate(p, adjust) {
+    var from = num(p.from), to = num(p.to);
+    var years = from && to && to >= from ? to - from + 1 : 0;
+    var raw = (num(p.payFrom) + num(p.payTo)) / 2 * years * 0.0055;
+    var earn = Math.round(Math.round(raw * 1e6) / 1e6);
+    var basic = num(p.basic);
+    var total = Math.round((earn + basic) * pct(adjust) * 10) / 10;
+    return { years: years, earn: earn, basic: basic, total: total };
+  }
+
+  // 試算の初期値（Excel: 入社は生年＋22年、最終退職は入社＋38年、基礎年金70万円）
+  function pensionDefaults(birthYear) {
+    return { from: birthYear + 22, to: birthYear + 60, payFrom: '', payTo: '', basic: 70 };
+  }
+
   // ---- 入力の確認 ----
 
   function isDate(s) {
@@ -479,6 +500,6 @@
     parseDate: parseDate, isDate: isDate, validate: validate, isEarlyBorn: isEarlyBorn, baseBirthYear: baseBirthYear,
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
     eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
-    compute: compute, takeHome: takeHome
+    compute: compute, takeHome: takeHome, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults
   };
 }));

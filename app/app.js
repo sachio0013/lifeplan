@@ -75,6 +75,7 @@
     confirmDelPlan: 0,
     cmp: null,         // 比較で選んでいるプランの id
     backup: { msg: '', level: '', text: false, pending: null },
+    penOpen: { state: false, wz: false },  // 公的年金の試算を開いているか
     inputScroll: 0
   };
   var result = E.compute(state);
@@ -423,6 +424,7 @@
       rowsHTML(key, list, opts) +
       (list.length < max ? addButton("A.add('" + key + "'," + max + ',' + !!opts.hasTo + ')', '行を追加') : '') +
       (opts.hint ? '<div class="hint divide">' + esc(opts.hint) + '</div>' : '') +
+      (opts.extra || '') +
     '</div>';
   }
 
@@ -659,7 +661,7 @@
     h += groupCard('lump', '退職一時金・その他一時収入', { max: 3, lump: true, memo: true, hint: '不動産の売却や親からの援助もここへ' });
     h += groupCard('corpPension', '企業年金', { max: 5, hasTo: true, memo: true });
     h += groupCard('privPension', '個人年金・保険など', { max: 5, hasTo: true, memo: true, hint: '備考に契約名を書いておくと、あとで見返したときに分かります' });
-    h += groupCard('pubPension', '公的年金', { max: 5, requiredFirst: true, dupCheck: true, memo: true, hint: '家族１が65歳＝' + (by + 65) + '年／70歳＝' + (by + 70) + '年' });
+    h += groupCard('pubPension', '公的年金', { max: 5, requiredFirst: true, dupCheck: true, memo: true, hint: '家族１が65歳＝' + (by + 65) + '年／70歳＝' + (by + 70) + '年。家族全員の合計を手取りの年額で入れます', extra: penCalcHTML('state') });
 
     h += '<h2 class="sec" id="sec-expense">' + ic('expense', 20) + '支出</h2>';
     h += groupCard('living', '基本生活費', { max: 5, requiredFirst: true, anchorFirst: true, inflation: true, dupCheck: true, memo: true, hint: '住宅費・教育費・保険料・自動車・その他を除いた、ふだんの支出。2行目以降は今の物価で入れれば、物価上昇を足して計算します。' });
@@ -904,6 +906,114 @@
       '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>';
   }
 
+  // ---------- 公的年金の試算（入力シート T85:AL91） ----------
+  //
+  // 入力画面（mode 'state'）とかんたん入力（mode 'wz'）で同じ部品を使う。
+  // 試算の入力は { adjust: 90, people: { <人のキー>: { from, to, payFrom, payTo, basic } } } の形で、
+  // 入力画面では state.penCalc、かんたん入力では答えの penCalc に置く。計算エンジンの結果には影響しない。
+
+  function penPeople(mode) {
+    if (mode === 'wz') {
+      var d = ui.wz.d, out = [{ key: 1, label: d.name1 || '家族１', by: E.parseDate(d.birth1).y }];
+      if (d.has2) out.push({ key: 2, label: d.name2 || '家族２', by: E.parseDate(d.birth2).y });
+      return out;
+    }
+    return state.family
+      .filter(function (m) { return m.relation === '家族１' || m.relation === '家族２'; })
+      .map(function (m) { return { key: m.id, label: memberName(m.id), by: E.parseDate(m.birth).y || baseBirth() }; });
+  }
+  function penData(mode, create) {
+    var holder = mode === 'wz' ? ui.wz.d : state;
+    if (!holder.penCalc && create) holder.penCalc = { adjust: 90, people: {} };
+    return holder.penCalc || { adjust: 90, people: {} };
+  }
+  function penPerson(mode, p) {
+    var saved = penData(mode).people[p.key] || {};
+    var d = E.pensionDefaults(p.by);
+    Object.keys(d).forEach(function (k) { if (saved[k] !== undefined) d[k] = saved[k]; });
+    return d;
+  }
+  function penTotal(mode) {
+    var pc = penData(mode);
+    var sum = penPeople(mode).reduce(function (s, p) { return s + E.pensionEstimate(penPerson(mode, p), pc.adjust).total; }, 0);
+    return Math.round(sum * 10) / 10;
+  }
+
+  function penCalcHTML(mode) {
+    var open = ui.penOpen[mode];
+    var pc = penData(mode);
+    var head = '<button class="toggle" onclick="A.penToggle(\'' + mode + '\')">' + ic('calc', 18, 'lead') +
+      '<span class="lbl">見込額がわからないときは、ここで試算する</span><span class="chev">' + chevron(open) + '</span></button>';
+    if (!open) return '<div class="divide">' + head + '</div>';
+    var people = penPeople(mode).map(function (p) {
+      var v = penPerson(mode, p);
+      var r = E.pensionEstimate(v, pc.adjust);
+      var q = "'" + mode + "'," + p.key;
+      var id = function (f) { return 'f-pen-' + mode + '-' + p.key + '-' + f; };
+      var reversed = toNum(v.from) && toNum(v.to) && toNum(v.to) < toNum(v.from);
+      return '<div class="penp">' +
+        '<div class="pnm">' + esc(p.label) + '</div>' +
+        '<div class="u" style="margin-top:6px">会社員・公務員として働く（働いた）期間</div>' +
+        '<div class="calcrow">' +
+          numInput(id('from'), 'op' + (reversed ? ' bad' : ''), 76, yv(v.from, p.by), 'A.pen(' + q + ",'from'," + yin(p.by) + ')', ';background:var(--surface)') + '<span class="u">' + suf('from') + '</span>' +
+          numInput(id('to'), 'op' + (reversed ? ' bad' : ''), 76, yv(v.to, p.by), 'A.pen(' + q + ",'to'," + yin(p.by) + ')', ';background:var(--surface)') + '<span class="u">' + suf('to') + '</span>' +
+        '</div>' +
+        (reversed ? '<div class="vmsg error">' + ic('warn', 15) + '<span>「まで」が「から」より前です</span></div>' : '') +
+        '<div class="calcrow"><span class="u" style="width:96px">手取り年収 はじめ</span>' +
+          numInput(id('payFrom'), 'op', 84, v.payFrom, 'A.pen(' + q + ",'payFrom',this.value)", ';margin-left:auto;background:var(--surface)') + '<span class="u">万円</span></div>' +
+        '<div class="calcrow"><span class="u" style="width:96px">手取り年収 終わり</span>' +
+          numInput(id('payTo'), 'op', 84, v.payTo, 'A.pen(' + q + ",'payTo',this.value)", ';margin-left:auto;background:var(--surface)') + '<span class="u">万円</span></div>' +
+        '<div class="calcrow"><span class="u" style="width:96px">基礎年金</span>' +
+          numInput(id('basic'), 'op', 84, v.basic, 'A.pen(' + q + ",'basic',this.value)", ';margin-left:auto;background:var(--surface)') + '<span class="u">万円</span></div>' +
+        '<div class="penres"><span class="u">（報酬比例 ' + r.earn + ' ＋ 基礎 ' + man(r.basic) + '）× ' + toNum(pc.adjust) + '％</span>' +
+          '<b>' + r.total.toLocaleString('ja-JP') + '</b><span class="u" style="font-weight:700">万円</span></div>' +
+      '</div>';
+    }).join('');
+    var total = penTotal(mode);
+    return '<div class="divide">' + head +
+      '<div class="calcbox">' +
+        '<div class="hint" style="padding:0 0 4px">厚生年金に入っている（いた）期間と、そのはじめと終わりの手取り年収から、おおざっぱに見積もります。自営業や専業主婦（夫）の期間しかない人は、手取りを0にすると基礎年金だけになります。</div>' +
+        people +
+        '<div class="calcrow" style="margin-top:12px"><span class="u">将来の目減りを見込んだ割合</span>' +
+          numInput('f-pen-' + mode + '-adj', 'op', 64, pc.adjust, "A.penAdj('" + mode + "',this.value)", ';margin-left:auto;background:var(--surface)') + '<span class="u">％</span></div>' +
+        '<div class="hint" style="padding:4px 0 0">所得代替率の低下を見込んで9割にしています（Excelと同じ）。' +
+          '<a href="https://www.excelcf.net/lossofpension/" target="_blank" rel="noopener">20～30年後、公的年金は今より1割くらい減少？</a></div>' +
+        '<div class="calcresult"><span class="u" style="font-weight:700">受け取る年金（年額・合計）</span>' +
+          '<span style="font-size:20px;font-weight:900;color:var(--accent-ink);margin-left:auto">' + total.toLocaleString('ja-JP') + '</span><span class="u" style="font-weight:700">万円</span></div>' +
+        '<button class="btn block" onclick="A.penApply(\'' + mode + '\')">' + (mode === 'wz' ? 'この金額を使う' : '公的年金の1行目に反映する') + '</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  A.penToggle = function (mode) { ui.penOpen[mode] = !ui.penOpen[mode]; commit(); };
+  A.pen = function (mode, key, field, v) {
+    var p = penPeople(mode).filter(function (x) { return x.key === key; })[0];
+    if (!p) return;
+    var pc = penData(mode, true);
+    var cur = penPerson(mode, p);
+    cur[field] = String(v).trim() === '' ? '' : toNum(v);
+    pc.people[key] = cur;
+    commit();
+  };
+  A.penAdj = function (mode, v) { penData(mode, true).adjust = toNum(v); commit(); };
+  A.penApply = function (mode) {
+    var total = penTotal(mode);
+    ui.penOpen[mode] = false;
+    if (mode === 'wz') {
+      ui.wz.d.pension = total;
+      delete ui.wz.err.pension;
+    } else {
+      var rows = state.pubPension;
+      if (rows.length) {
+        rows[0].amount = total;
+        if (!rows[0].memo) rows[0].memo = '試算した額';
+      } else {
+        rows.push({ id: nid(), year: baseBirth() + 65, amount: total, memo: '試算した額' });
+      }
+    }
+    commit();
+  };
+
   // ---------- かんたん入力（必須の項目だけを順に聞く） ----------
 
   var WZ_STEPS = ['期間と家族１', '家族', '金融資産', '収入', '年金', '支出'];
@@ -1006,6 +1116,7 @@
     } else if (s === 4) {
       lead = '老後に受け取る公的年金です。家族全員の合計を、手取りの年額で入れます。';
       body = wzField('pension', '公的年金（年額・家族の合計）', '万円', { hint: 'ねんきん定期便の見込額（年額）を足して、その9割ほどが手取りの目安です' }) +
+        penCalcHTML('wz') +
         wzField('pensionAge', '受け取りを始める年齢（家族１）', '歳から', { width: 80 });
     } else {
       lead = '今の暮らしの年額です。月の額なら12倍にします（月20万円なら240）。';
@@ -1034,6 +1145,7 @@
 
   A.wizOpen = function () {
     ui.wz = { step: 0, d: wzDraft(), err: {}, from: ui.view === 'wizard' ? 'input' : ui.view };
+    ui.penOpen.wz = false;
     store.prefs.welcomed = true;
     ui.view = 'wizard';
     commit();
@@ -1154,7 +1266,7 @@
 
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
-    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to'];
+    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });

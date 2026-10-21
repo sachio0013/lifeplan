@@ -91,6 +91,22 @@ await page.waitForTimeout(150);
 const eduAmt = await page.inputValue('#f-edu-3-2-amt');
 check('教育費の段階を変えると相場の金額が入る', eduAmt === '185', `小学校（私）=${eduAmt}`);
 
+// 公的年金の試算：サンプルはExcelと同じ289.8万円。変えると再計算し、1行目に反映できる
+await page.locator('#content .card', { hasText: '公的年金' }).locator('.toggle').tap();
+await page.waitForSelector('#f-pen-state-1-payTo');
+const penTotal0 = await page.locator('.calcresult', { hasText: '受け取る年金' }).textContent();
+await page.fill('#f-pen-state-1-payTo', '800');
+await page.press('#f-pen-state-1-payTo', 'Tab');
+await page.waitForTimeout(150);
+const penTotal1 = await page.locator('.calcresult', { hasText: '受け取る年金' }).textContent();
+await page.locator('#content .card', { hasText: '公的年金' }).locator('.penp').first().scrollIntoViewIfNeeded();
+await page.screenshot({ path: join(shots, '16-pension.png') });
+await page.locator('.btn', { hasText: '公的年金の1行目に反映する' }).tap();
+await page.waitForTimeout(150);
+const penRow = await page.inputValue('#f-pubPension-1-amt');
+check('公的年金の試算がExcelと同じ289.8万円で、変えると再計算し1行目に反映できる',
+  /289\.8万円/.test(penTotal0) && /299\.7万円/.test(penTotal1) && penRow === '299.7', `${penTotal0.trim()} → ${penTotal1.trim()} / 1行目=${penRow}`);
+
 // 目次をタップすると該当セクションに移る
 await page.tap('#tabs .tab[data-k="invest"]');
 await page.waitForTimeout(200);
@@ -221,7 +237,17 @@ await next();
 await wp.fill('#w-sal1', '450'); await wp.press('#w-sal1', 'Tab');
 await wp.fill('#w-sal2', '200'); await wp.press('#w-sal2', 'Tab');
 await next();
-await wp.fill('#w-pension', '260'); await wp.press('#w-pension', 'Tab');
+await wp.locator('.wz .toggle').tap();
+await wp.waitForSelector('#f-pen-wz-1-payFrom');
+for (const [id, v] of [['1-payFrom', '350'], ['1-payTo', '500'], ['2-payFrom', '250'], ['2-payTo', '300']]) {
+  await wp.fill(`#f-pen-wz-${id}`, v); await wp.press(`#f-pen-wz-${id}`, 'Tab');
+}
+await wp.locator('.wz .btn', { hasText: 'この金額を使う' }).tap();
+await wp.waitForTimeout(100);
+// 家族１：1986+22〜+60年（39年）、(350+500)/2×39×0.55%=91.2→91、(91+70)×0.9=144.9
+// 家族２：1988+22〜+60年（39年）、(250+300)/2×39×0.55%=59.0→59、(59+70)×0.9=116.1
+const wzPension = await wp.inputValue('#w-pension');
+check('かんたん入力の年金も試算から入れられる', wzPension === '261', `公的年金=${wzPension}`);
 await next();
 await wp.fill('#w-living', '280'); await wp.press('#w-living', 'Tab');
 await wp.fill('#w-housing', '130'); await wp.press('#w-housing', 'Tab');
