@@ -202,3 +202,22 @@ test('期間の逆転・期間外・使われない行・大きすぎる率を�
     'salrow:1:1/growth/warn',
   ]);
 });
+
+test('かんたん入力の答えから作ったプランは、確認箇所なしで計算できる', () => {
+  const { fromAnswers } = require('../app/sample.js');
+  const s = fromAnswers({
+    startYear: 2026, endAge: 90, name1: '', birth1: '1988/06/15',
+    has2: true, name2: 'B', birth2: '1990/02/01', kids: [{ name: '', birth: '2023/03/31' }],
+    deposit: 300, nisa: 50, ideco: 0, rate: 3,
+    sal1: 420, retire1: 65, growth: 1, sal2: 0, retire2: 60, retireLump: 1000,
+    pension: 250, pensionAge: 65, living: 300, housing: 120, insurance: 24, inflation: 0.5,
+  });
+  assert.deepEqual(E.validate(s), []);
+  assert.equal(s.salaries.length, 1);                 // 家族２の収入0円は行を作らない
+  assert.equal(s.lump[0].year, 1988 + 65);
+  assert.equal(s.pubPension[0].year, 1988 + 65);
+  const r = E.compute(s);
+  assert.equal(r.years[0].year, 2026);
+  assert.equal(r.years.at(-1).age, 90);
+  assert.ok(r.years[0].expense.education > 0);        // 子供の教育費が自動で入る
+});

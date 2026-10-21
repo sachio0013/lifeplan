@@ -9,28 +9,59 @@
   'use strict';
 
   var E = window.LifePlanEngine;
-  var STORE_KEY = 'lifeplan.v1';
+  var STORE_KEY = 'lifeplan.v2';
+  var OLD_KEY = 'lifeplan.v1';
   var REL = ['家族１', '家族２', '子供１', '子供２', '子供３', '子供４', '親', 'その他'];
   var JOBS = ['会社員等', 'パート', '自営業', '専業主婦', '学生', '乳幼児', '自由業', 'その他'];
 
   // ---------- 保存と読み込み ----------
+  //
+  // 保存の形：{ version: 2, activeId, nextPlanId, plans: [{ id, name, state }], prefs: { yearMode, welcomed } }
+  // state が1つのプランの入力一式（計算エンジンに渡すもの）。
+
+  function okState(s) { return !!(s && s.version === 1 && Array.isArray(s.family) && s.family.length); }
+
+  function freshStore() {
+    return {
+      version: 2, activeId: 1, nextPlanId: 2,
+      plans: [{ id: 1, name: '記入例', state: window.LifePlanSample.sample() }],
+      prefs: { yearMode: 'year', welcomed: false }
+    };
+  }
 
   function load() {
     try {
       var raw = localStorage.getItem(STORE_KEY);
       if (raw) {
-        var s = JSON.parse(raw);
-        if (s && s.version === 1 && Array.isArray(s.family) && s.family.length) return s;
+        var st = JSON.parse(raw);
+        if (st && st.version === 2 && Array.isArray(st.plans)) {
+          st.plans = st.plans.filter(function (p) { return p && okState(p.state); });
+          if (st.plans.length) {
+            if (!byId(st.plans, st.activeId)) st.activeId = st.plans[0].id;
+            st.prefs = st.prefs || { yearMode: 'year', welcomed: true };
+            return st;
+          }
+        }
       }
-    } catch (e) { /* 保存領域が使えない環境では毎回サンプルから始める */ }
-    return window.LifePlanSample.sample();
+      // 1つしか保存できなかった頃のデータは、そのまま1つ目のプランにする
+      var old = localStorage.getItem(OLD_KEY);
+      if (old) {
+        var s = JSON.parse(old);
+        if (okState(s)) return { version: 2, activeId: 1, nextPlanId: 2, plans: [{ id: 1, name: 'プラン1', state: s }], prefs: { yearMode: 'year', welcomed: true } };
+      }
+    } catch (e) { /* 保存領域が使えない環境では毎回記入例から始める */ }
+    return freshStore();
   }
 
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* 同上 */ }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { /* 同上 */ }
   }
 
-  var state = load();
+  function byId(list, id) { for (var i = 0; i < (list || []).length; i++) if (list[i].id === id) return list[i]; return null; }
+  function plan() { return byId(store.plans, store.activeId); }
+
+  var store = load();
+  var state = plan().state;
   var ui = {
     view: location.hash === '#cf' ? 'cf' : 'input',
     active: 'basic',
@@ -39,6 +70,7 @@
     carDetailOpen: false,
     confirmReset: false,
     confirmDelMember: 0,
+    wz: null,          // かんたん入力の途中の答え
     inputScroll: 0
   };
   var result = E.compute(state);
@@ -57,7 +89,6 @@
   function toNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
   function fid() { return 'f-' + Array.prototype.join.call(arguments, '-'); }
   function nid() { return state.nextId++; }
-  function byId(list, id) { for (var i = 0; i < (list || []).length; i++) if (list[i].id === id) return list[i]; return null; }
   function baseBirth() { return E.baseBirthYear(state); }
   function man(v) {
     var n = Math.round(v);
@@ -158,7 +189,7 @@
     addFamily: function () {
       if (state.family.length >= 6) return;
       var id = nid();
-      state.family.push({ id: id, name: '', gender: '男性', relation: REL[Math.min(state.family.length, 7)], birth: '', job: '会社員等' });
+      state.family.push({ id: id, name: '', gender: '', relation: REL[Math.min(state.family.length, 7)], birth: '', job: '会社員等' });
       ui.openMember = id;
       commit();
     },
@@ -259,6 +290,7 @@
     view: function (v) {
       if (ui.view === v) return;
       var sc = document.getElementById('scroll');
+      if (ui.view === 'wizard') ui.wz = null;
       if (ui.view === 'input') ui.inputScroll = sc.scrollTop;
       ui.view = v;
       render();
@@ -267,7 +299,7 @@
     resetAsk: function () { ui.confirmReset = true; commit(); },
     resetNo: function () { ui.confirmReset = false; commit(); },
     resetYes: function () {
-      state = window.LifePlanSample.sample();
+      state = plan().state = window.LifePlanSample.sample();
       ui.confirmReset = false; ui.openMember = 0; ui.openCalc = 0;
       commit();
       document.getElementById('scroll').scrollTop = 0;
@@ -280,6 +312,7 @@
 
   var ICONS = {
     add: '<path d="M12 5v14M5 12h14"/>',
+    close: '<path d="M6 6l12 12M18 6 6 18"/>',
     del: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
     more: '<path d="M6 9l6 6 6-6"/>',
     less: '<path d="M6 15l6-6 6 6"/>',
@@ -559,7 +592,8 @@
         '</div>' +
         vmsgs('fam:' + m.id) +
         (open ? '<div class="expand">' +
-          selectInput(fid('fam', m.id, 'gender'), 'op', '', ['男性', '女性'], m.gender, 'A.fam(' + m.id + ",'gender',this.value)") +
+          selectInput(fid('fam', m.id, 'gender'), 'op', '', [{ value: '', label: '性別' }, '男性', '女性'], m.gender || '',
+ 'A.fam(' + m.id + ",'gender',this.value)") +
           selectInput(fid('fam', m.id, 'rel'), 'op', '', REL, m.relation, 'A.fam(' + m.id + ",'relation',this.value)") +
           selectInput(fid('fam', m.id, 'job'), 'op', '', JOBS, m.job, 'A.fam(' + m.id + ",'job',this.value)") +
           (i > 0 ? '<button class="btn ghost" style="margin-left:auto" onclick="A.delFamily(' + m.id + ')">' + (ui.confirmDelMember === m.id ? 'もう一度押すと削除' : 'この人を削除') + '</button>' : '') +
@@ -594,6 +628,7 @@
       h += '<div class="vbanner">' + ic('warn', 18) + '<span>確認が必要な入力が ' + issueCount + ' 件あります</span>' +
         '<button class="btn" onclick="A.firstIssue()">見る</button></div>';
     }
+    h += welcomeHTML();
     h += basicHTML();
 
     h += '<h2 class="sec" id="sec-income">' + ic('income', 20) + '収入</h2>';
@@ -851,6 +886,190 @@
       '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>';
   }
 
+  // ---------- かんたん入力（必須の項目だけを順に聞く） ----------
+
+  var WZ_STEPS = ['期間と家族１', '家族', '金融資産', '収入', '年金', '支出'];
+
+  function wzDraft() {
+    return {
+      startYear: new Date().getFullYear(), endAge: 90, name1: '', birth1: '',
+      has2: false, name2: '', birth2: '', kids: [],
+      deposit: '', nisa: 0, ideco: 0, rate: 3,
+      sal1: '', retire1: 65, growth: 1, sal2: '', retire2: 65, retireLump: 0,
+      pension: '', pensionAge: 65,
+      living: '', housing: '', insurance: 0, inflation: 0.5
+    };
+  }
+
+  // そのステップで先に進めない入力（キー → メッセージ）
+  function wzErrors(step, d) {
+    var e = {};
+    function need(key, label) { if (String(d[key]).trim() === '') e[key] = label + 'を入れてください'; }
+    if (step === 0) {
+      var sy = toNum(d.startYear);
+      if (!(sy >= 1990 && sy <= 2100)) e.startYear = '1990〜2100の西暦で入れてください';
+      if (!E.isDate(d.birth1)) e.birth1 = '生年月日を選んでください';
+      else if (toNum(d.endAge) <= sy - E.parseDate(d.birth1).y) e.endAge = '今の年齢より上にしてください';
+    }
+    if (step === 1) {
+      if (d.has2 && !E.isDate(d.birth2)) e.birth2 = '生年月日を選んでください';
+      d.kids.forEach(function (k, i) { if (!E.isDate(k.birth)) e['kid' + i] = '生年月日を選んでください'; });
+    }
+    if (step === 2) need('deposit', '普通預金等の残高');
+    if (step === 3) need('sal1', '手取り年収');
+    if (step === 4) need('pension', '年金の見込額');
+    if (step === 5) { need('living', '基本生活費'); need('housing', '住宅費'); }
+    return e;
+  }
+
+  function wzField(key, label, unit, opts) {
+    opts = opts || {};
+    var d = ui.wz.d, err = ui.wz.err[key];
+    var id = 'w-' + key;
+    var input = opts.date
+      ? '<input type="date" id="' + id + '" class="rq date' + (err ? ' bad' : '') + '" min="1900-01-01" max="2100-12-31" value="' + isoDate(d[key]) + '"' +
+        ' onchange="A.wz(\'' + key + '\',this.value,this)" onblur="A.flush()">'
+      : opts.text
+        ? '<input type="text" id="' + id + '" class="op" style="flex:1;min-width:0" value="' + esc(d[key]) + '" placeholder="' + esc(opts.placeholder || '') + '" onchange="A.wz(\'' + key + '\',this.value)">'
+        : '<input type="number" inputmode="decimal" id="' + id + '" class="' + (opts.optional ? 'op' : 'rq') + (err ? ' bad' : '') + '" style="width:' + (opts.width || 110) + 'px" value="' + esc(d[key]) + '" onchange="A.wz(\'' + key + '\',this.value)">';
+    return '<div class="fl"><label class="lb" for="' + id + '">' + label + '</label>' +
+      '<div class="fi">' + input + (unit ? '<span class="u">' + unit + '</span>' : '') + '</div>' +
+      (err ? '<div class="vmsg error">' + ic('warn', 15) + '<span>' + esc(err) + '</span></div>' : '') +
+      (opts.hint ? '<div class="hint" style="padding:6px 0 0">' + opts.hint + '</div>' : '') +
+    '</div>';
+  }
+
+  function wzKid(k, i) {
+    var err = ui.wz.err['kid' + i];
+    return '<div class="kid divide">' +
+      '<div class="fi">' +
+        '<input type="text" id="w-kidname-' + i + '" class="op" style="flex:1;min-width:0" value="' + esc(k.name) + '" placeholder="子供' + (i + 1) + 'の名前（任意）" onchange="A.wzKid(' + i + ',\'name\',this.value)">' +
+        '<button class="del" aria-label="この子供を外す" onclick="A.wzKidDel(' + i + ')">' + ic('del', 20) + '</button>' +
+      '</div>' +
+      '<div class="fi" style="margin-top:8px">' +
+        '<input type="date" id="w-kid-' + i + '" class="rq date' + (err ? ' bad' : '') + '" min="1900-01-01" max="2100-12-31" aria-label="子供' + (i + 1) + 'の生年月日" value="' + isoDate(k.birth) + '"' +
+          ' onchange="A.wzKid(' + i + ',\'birth\',this.value,this)" onblur="A.flush()">' +
+        '<span class="u">生まれ（予定でも可）</span>' +
+      '</div>' +
+      (err ? '<div class="vmsg error">' + ic('warn', 15) + '<span>' + esc(err) + '</span></div>' : '') +
+    '</div>';
+  }
+
+  function wizardHTML() {
+    var w = ui.wz, d = w.d, s = w.step;
+    var body = '';
+    var lead = '';
+    if (s === 0) {
+      lead = 'いつから、だれの何歳までを計算するかを決めます。家族１は家計の中心になる人です。';
+      body = wzField('startYear', '開始年', '年から', { width: 96 }) +
+        wzField('name1', '家族１の名前', '', { text: true, placeholder: '任意（例：わたし）' }) +
+        wzField('birth1', '家族１の生年月日', '', { date: true }) +
+        wzField('endAge', '家族１が何歳になるまで計算するか', '歳まで', { width: 80 });
+    } else if (s === 1) {
+      lead = '一緒に暮らす家族を入れます。子供の生年月日から、教育費が自動で入ります。';
+      body = '<button class="check' + (d.has2 ? ' on' : '') + '" role="switch" aria-checked="' + d.has2 + '" onclick="A.wz(\'has2\',' + !d.has2 + ')"><span class="box"></span>家族２（配偶者・パートナー）がいる</button>' +
+        (d.has2 ? wzField('name2', '家族２の名前', '', { text: true, placeholder: '任意' }) + wzField('birth2', '家族２の生年月日', '', { date: true }) : '') +
+        '<div class="lb" style="margin-top:16px">子供（' + d.kids.length + '人）</div>' +
+        d.kids.map(wzKid).join('') +
+        (d.kids.length < 4 ? '<div style="margin-top:8px"><button class="btn ghost" onclick="A.wzKidAdd()">＋ 子供を追加</button></div>' : '');
+    } else if (s === 2) {
+      lead = '前の年の年末時点の残高です。だいたいで構いません。';
+      body = wzField('deposit', '普通預金等（現金・預貯金）', '万円') +
+        wzField('nisa', 'NISA', '万円', { optional: true }) +
+        wzField('ideco', 'iDeCo', '万円', { optional: true }) +
+        wzField('rate', '投資の想定利回り（年）', '％', { width: 80, hint: '積立や取り崩しの予定は、あとで「投資」で入れられます' });
+    } else if (s === 3) {
+      lead = '給与は手取り（税金・社会保険料を引いた額）の年額で入れます。';
+      body = wzField('sal1', (esc(d.name1) || '家族１') + 'の手取り年収', '万円', { hint: '額面しかわからなければ、あとで「額面から手取りを計算」が使えます' }) +
+        wzField('retire1', '何歳まで働くか', '歳まで', { width: 80 }) +
+        (d.has2 ? wzField('sal2', (esc(d.name2) || '家族２') + 'の手取り年収', '万円', { optional: true, hint: '収入がなければ0のままにします' }) + wzField('retire2', '何歳まで働くか', '歳まで', { width: 80, optional: true }) : '') +
+        wzField('growth', '毎年の昇給率', '％', { width: 80, optional: true }) +
+        wzField('retireLump', '退職金（手取り）', '万円', { optional: true, hint: '働き終える年に入ります。わからなければ0' });
+    } else if (s === 4) {
+      lead = '老後に受け取る公的年金です。家族全員の合計を、手取りの年額で入れます。';
+      body = wzField('pension', '公的年金（年額・家族の合計）', '万円', { hint: 'ねんきん定期便の見込額（年額）を足して、その9割ほどが手取りの目安です' }) +
+        wzField('pensionAge', '受け取りを始める年齢（家族１）', '歳から', { width: 80 });
+    } else {
+      lead = '今の暮らしの年額です。月の額なら12倍にします（月20万円なら240）。';
+      body = wzField('living', '基本生活費', '万円', { hint: '住宅費・教育費・保険料・自動車を除いた、ふだんの支出' }) +
+        wzField('housing', '住宅費', '万円', { hint: '家賃やローン返済、管理費・固定資産税など' }) +
+        wzField('insurance', '保険料', '万円', { optional: true, hint: '生命保険・医療保険など' }) +
+        wzField('inflation', '物価上昇率（年）', '％', { width: 80 });
+    }
+    var last = s === WZ_STEPS.length - 1;
+    return '<div class="wz">' +
+      '<div class="wzhead">' +
+        '<button class="del" style="margin:0" aria-label="かんたん入力を閉じる" onclick="A.wizClose()">' + ic('close', 22) + '</button>' +
+        '<div class="dots" aria-hidden="true">' + WZ_STEPS.map(function (x, i) { return '<i class="' + (i < s ? 'done' : i === s ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
+        '<span class="u">' + (s + 1) + ' / ' + WZ_STEPS.length + '</span>' +
+      '</div>' +
+      '<h2 class="wzt">' + WZ_STEPS[s] + '</h2>' +
+      '<p class="wzlead">' + lead + '</p>' +
+      '<div class="card">' + body + '</div>' +
+      '<div class="wznav">' +
+        (s > 0 ? '<button class="btn ghost" onclick="A.wzBack()">戻る</button>' : '') +
+        '<button class="btn" style="margin-left:auto" onclick="A.wzNext()">' + (last ? 'この内容で計算する' : '次へ') + '</button>' +
+      '</div>' +
+      '<div class="hint" style="text-align:center">細かい項目（住宅ローン、車、一時的な支出など）は、あとで入力画面で足せます</div>' +
+    '</div>';
+  }
+
+  A.wizOpen = function () {
+    ui.wz = { step: 0, d: wzDraft(), err: {}, from: ui.view === 'wizard' ? 'input' : ui.view };
+    store.prefs.welcomed = true;
+    ui.view = 'wizard';
+    commit();
+    document.getElementById('scroll').scrollTop = 0;
+  };
+  A.wizClose = function () { ui.view = ui.wz ? ui.wz.from : 'input'; ui.wz = null; commit(); };
+  A.wz = function (key, v, el) {
+    var d = ui.wz.d;
+    if (key === 'has2') d.has2 = !!v;
+    else if (key.indexOf('birth') === 0) d[key] = v ? v.replace(/-/g, '/') : '';
+    else d[key] = v;
+    delete ui.wz.err[key];
+    if (el && document.activeElement === el) { pendingRender = true; return; }
+    commit();
+  };
+  A.wzKid = function (i, field, v, el) {
+    var k = ui.wz.d.kids[i]; if (!k) return;
+    k[field] = field === 'birth' ? (v ? v.replace(/-/g, '/') : '') : v;
+    if (field === 'birth') delete ui.wz.err['kid' + i];
+    if (el && document.activeElement === el) { pendingRender = true; return; }
+    commit();
+  };
+  A.wzKidAdd = function () { if (ui.wz.d.kids.length < 4) ui.wz.d.kids.push({ name: '', birth: '' }); commit(); };
+  A.wzKidDel = function (i) { ui.wz.d.kids.splice(i, 1); ui.wz.err = {}; commit(); };
+  A.wzBack = function () { ui.wz.step = Math.max(0, ui.wz.step - 1); ui.wz.err = {}; commit(); document.getElementById('scroll').scrollTop = 0; };
+  A.wzNext = function () {
+    var w = ui.wz;
+    w.err = wzErrors(w.step, w.d);
+    if (Object.keys(w.err).length) { commit(); return; }
+    if (w.step < WZ_STEPS.length - 1) { w.step++; commit(); document.getElementById('scroll').scrollTop = 0; return; }
+    // 完成：新しいプランとして加え、そのプランのCF表を開く
+    var n = store.plans.length + 1;
+    var p = { id: store.nextPlanId++, name: 'プラン' + n, state: window.LifePlanSample.fromAnswers(w.d) };
+    while (store.plans.some(function (x) { return x.name === p.name; })) p.name = 'プラン' + (++n);
+    store.plans.push(p);
+    store.activeId = p.id;
+    state = p.state;
+    ui.wz = null; ui.view = 'cf'; ui.active = 'basic'; ui.inputScroll = 0; ui.openMember = 0; ui.openCalc = 0;
+    quiet = true;
+    commit();
+    document.getElementById('scroll').scrollTop = 0;
+  };
+  A.welcomeDone = function () { store.prefs.welcomed = true; commit(); };
+
+  function welcomeHTML() {
+    if (store.prefs.welcomed) return '';
+    return '<div class="welcome">' +
+      '<div class="t">ようこそ</div>' +
+      '<p>いま入っているのは記入例（共働きの夫婦と子供2人）です。数字を書き換えると、上の資産の見通しがその場で変わります。</p>' +
+      '<p>ご自分の家計で試すなら、必須の項目だけを順に聞く「かんたん入力」が手早いです（6ステップ）。</p>' +
+      '<div class="row"><button class="btn" onclick="A.wizOpen()">かんたん入力で始める</button><button class="btn ghost" onclick="A.welcomeDone()">記入例を見る</button></div>' +
+    '</div>';
+  }
+
   // ---------- 描画 ----------
 
   function markTabs() {
@@ -893,8 +1112,11 @@
 
     document.getElementById('inputview').hidden = ui.view !== 'input';
     document.getElementById('cfview').hidden = ui.view !== 'cf';
+    document.getElementById('wizview').hidden = ui.view !== 'wizard';
 
-    if (ui.view === 'input') {
+    if (ui.view === 'wizard') {
+      document.getElementById('wizview').innerHTML = wizardHTML();
+    } else if (ui.view === 'input') {
       document.getElementById('tabs').innerHTML = [['basic', '基本'], ['income', '収入'], ['pension', '年金'], ['expense', '支出'], ['invest', '投資']]
         .map(function (t) { return '<button class="tab' + (ui.active === t[0] ? ' on' : '') + '" data-k="' + t[0] + '" onclick="A.jump(\'' + t[0] + '\')">' + t[1] + '</button>'; }).join('');
       document.getElementById('content').innerHTML = inputHTML();

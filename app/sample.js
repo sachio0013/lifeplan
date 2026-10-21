@@ -77,5 +77,57 @@
     };
   }
 
-  return { sample: sample };
+  // かんたん入力の答えから、プランの入力一式を作る。答えていない項目は空（0円・行なし）にする。
+  // 教育費の進路はサンプルと同じ（公立→私立文系の大学→大学院）。あとで支出セクションで選び直せる。
+  function fromAnswers(d) {
+    function n(v) { var x = parseFloat(v); return isFinite(x) ? x : 0; }
+    var sy = n(d.startYear);
+    var by = parseInt(String(d.birth1 || '').slice(0, 4), 10) || sy;
+    var family = [{ id: 1, name: d.name1 || '', gender: '', relation: '家族１', birth: d.birth1, job: '会社員等' }];
+    if (d.has2) family.push({ id: 2, name: d.name2 || '', gender: '', relation: '家族２', birth: d.birth2, job: '会社員等' });
+    var edu = {};
+    (d.kids || []).forEach(function (k, i) {
+      var id = 10 + i;
+      var age = sy - (parseInt(String(k.birth || '').slice(0, 4), 10) || sy);
+      family.push({ id: id, name: k.name || '', gender: '', relation: '子供' + (i + 1), birth: k.birth, job: age < 6 ? '乳幼児' : '学生' });
+      edu[id] = ['保育園0～3歳', '保育園4～6歳', '小学校（公）', '中学校（公）', '高校（公）', '大学（私文）', '大学院'];
+    });
+    var salaries = [{ id: 1, who: d.name1 || '家族１', memberId: 1, retireAge: n(d.retire1), rows: [{ id: 1, year: sy, amount: n(d.sal1), growth: n(d.growth) }] }];
+    if (d.has2 && n(d.sal2) > 0) {
+      salaries.push({ id: 2, who: d.name2 || '家族２', memberId: 2, retireAge: n(d.retire2), rows: [{ id: 2, year: sy, amount: n(d.sal2), growth: n(d.growth) }] });
+    }
+    return {
+      version: 1,
+      startYear: sy,
+      endAge: n(d.endAge),
+      depositRate: 0,
+      assets: [
+        { id: 1, name: '普通預金等', fixed: true, amount: n(d.deposit) },
+        { id: 2, name: 'NISA', fixed: false, amount: n(d.nisa), rate: n(d.rate), tax: '0%' },
+        { id: 3, name: 'iDeCo', fixed: false, amount: n(d.ideco), rate: n(d.rate), tax: '0%' }
+      ],
+      family: family,
+      edu: edu, eduAmount: {}, eduSpan: {},
+      salaries: salaries,
+      lump: n(d.retireLump) > 0 && n(d.retire1) ? [{ id: 1, year: by + n(d.retire1), amount: n(d.retireLump), memo: '退職金' }] : [],
+      corpPension: [],
+      privPension: [],
+      pubPension: [{ id: 1, year: by + n(d.pensionAge), amount: n(d.pension), memo: '' }],
+      living: [{ id: 1, year: sy, amount: n(d.living), memo: '' }],
+      inflation: n(d.inflation),
+      housing: [{ id: 1, year: sy, amount: n(d.housing), memo: '' }],
+      housingLump: [],
+      insurance: [{ id: 1, year: sy, amount: n(d.insurance), memo: '' }],
+      carCost: [],
+      carBuy: { fromYear: '', every: 10, amount: 0, untilAge: 75 },
+      carBuyOverride: {},
+      otherFlow: [],
+      otherLump: [],
+      invest: { 2: { add: [], out: [] }, 3: { add: [], out: [] } },
+      calc: { income: 600, spouse: 'なし', kids: 0 },
+      nextId: 500
+    };
+  }
+
+  return { sample: sample, fromAnswers: fromAnswers };
 }));
