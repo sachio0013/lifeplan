@@ -280,7 +280,10 @@
       commit();
     },
 
+    y: function (v, by) { return ageMode() && String(v).trim() !== '' ? toNum(v) + by : v; },
+    yearMode: function (m) { store.prefs.yearMode = m; quiet = true; commit(); },
     jump: function (key) {
+
       ui.active = key;
       var el = document.getElementById('sec-' + key);
       var sc = document.getElementById('scroll');
@@ -351,7 +354,17 @@
   function delButton(handler) {
     return '<button class="del" aria-label="この行を削除" onclick="' + handler + '">' + ic('del', 20) + '</button>';
   }
-  function lockedYear() {
+  // 年の欄は「西暦」と「年齢」のどちらでも入れられる（store.prefs.yearMode）。
+  // 年齢のときは、その欄に関係する人（ふつうは家族１、給与はその人、教育費はその子）の生年 by を足して西暦で保存する。
+  function ageMode() { return store.prefs.yearMode === 'age'; }
+  function yv(year, by) { return ageMode() ? (toNum(year) ? toNum(year) - by : '') : year; }
+  function yin(by) { return 'A.y(this.value,' + by + ')'; }
+  function suf(kind) { return (ageMode() ? '歳' : '年') + { from: 'から', at: 'で', to: 'まで' }[kind]; }
+  // 欄の下の補足は、入れている方と逆（西暦なら年齢、年齢なら西暦）を出す
+  function other(year, by, who) { return ageMode() ? year + '年' : (who ? who + ' ' : '') + (year - by) + '歳'; }
+
+  function lockedYear(by) {
+    if (ageMode()) return '<span class="lockyear" title="1行目は開始年から">' + (state.startYear - by) + '</span><span class="u">歳（開始年）から</span>';
     return '<span class="lockyear" title="1行目は開始年から">' + state.startYear + '</span><span class="u">年（開始年）から</span>';
   }
   function chevron(open, size) { return ic(open ? 'less' : 'more', size || 18); }
@@ -367,17 +380,16 @@
       var cls = opts.requiredFirst && i === 0 ? 'rq' : 'op';
       var q = "'" + key + "'," + r.id;
       var at = 'row:' + key + ':' + r.id;
-      var ageYear = opts.anchorFirst && i === 0 ? state.startYear : r.year;
-      var ageHint = r.year ? (opts.hasTo
-        ? '家族１ ' + (r.year - by) + '歳 〜 ' + (r.toYear - by) + '歳（' + (r.toYear - r.year + 1) + '年間）'
-        : '家族１ ' + (r.year - by) + '歳') : '';
       var locked = opts.anchorFirst && i === 0;
+      var ageHint = r.year && !locked ? (opts.hasTo
+        ? other(r.year, by, '家族１') + ' 〜 ' + other(r.toYear, by) + '（' + (r.toYear - r.year + 1) + '年間）'
+        : other(r.year, by, '家族１')) : locked && !ageMode() ? '家族１ ' + (state.startYear - by) + '歳' : locked ? state.startYear + '年' : '';
       return '<div class="rowline divide">' +
         '<div class="rowtop">' +
-          (locked ? lockedYear() :
-            numInput(fid(key, r.id, 'year'), cls + bad(at, 'year'), 76, r.year, 'A.num(' + q + ",'year',this.value)") +
-            '<span class="u">' + opts.yearSuffix + '</span>') +
-          (opts.hasTo ? numInput(fid(key, r.id, 'to'), cls + bad(at, 'toYear'), 76, r.toYear, 'A.num(' + q + ",'toYear',this.value)", ';margin-left:2px') + '<span class="u">年まで</span>' : '') +
+          (locked ? lockedYear(by) :
+            numInput(fid(key, r.id, 'year'), cls + bad(at, 'year'), 76, yv(r.year, by), 'A.num(' + q + ",'year'," + yin(by) + ')') +
+            '<span class="u">' + suf(opts.lump ? 'at' : 'from') + '</span>') +
+          (opts.hasTo ? numInput(fid(key, r.id, 'to'), cls + bad(at, 'toYear'), 76, yv(r.toYear, by), 'A.num(' + q + ",'toYear'," + yin(by) + ')', ';margin-left:2px') + '<span class="u">' + suf('to') + '</span>' : '') +
           (locked ? '' : delButton('A.del(' + q + ')')) +
         '</div>' +
         (ageHint ? '<div class="ageh">' + ageHint + '</div>' : '') +
@@ -397,7 +409,7 @@
   function groupCard(key, label, opts) {
     var list = state[key] || [];
     var max = opts.max || 5;
-    opts.yearSuffix = opts.lump ? '年に' : '年から';
+
     return '<div class="card">' +
       '<div class="head"><span class="ttl">' + esc(label) + '</span><span class="cnt">' + list.length + ' / ' + max + '行</span></div>' +
       (opts.inflation ? '<div class="rowtop divide" style="padding:10px 0"><span class="u">物価上昇率</span>' +
@@ -426,11 +438,11 @@
       var y = i === 0 ? state.startYear : r.year;
       return '<div class="rowline divide">' +
         '<div class="rowtop">' +
-          (i === 0 ? lockedYear() :
-            numInput(fid('sal', sal.id, r.id, 'year'), cls + bad(at, 'year'), 76, r.year, 'A.sal(' + q + ",'year',this.value)") +
-            '<span class="u">年から</span>' + delButton('A.salDel(' + q + ')')) +
+          (i === 0 ? lockedYear(mBirth) :
+            numInput(fid('sal', sal.id, r.id, 'year'), cls + bad(at, 'year'), 76, yv(r.year, mBirth), 'A.sal(' + q + ",'year'," + yin(mBirth) + ')') +
+            '<span class="u">' + suf('from') + '</span>' + delButton('A.salDel(' + q + ')')) +
         '</div>' +
-        '<div class="ageh">' + esc(memberName(sal.memberId)) + ' ' + (y - mBirth) + '歳</div>' +
+        '<div class="ageh">' + esc(other(y, mBirth, memberName(sal.memberId))) + '</div>' +
         '<div class="rowamt">' +
           numInput(fid('sal', sal.id, r.id, 'amt'), cls + bad(at, 'amount'), 96, r.amount, 'A.sal(' + q + ",'amount',this.value)") +
           '<span class="u">万円</span>' +
@@ -489,10 +501,10 @@
           '<span class="u">万円</span>' +
         '</div>' +
         '<div class="rowtop" style="margin-top:8px">' +
-          numInput(fid('edu', child.id, st.index, 'from'), 'op', 76, st.from, 'A.eduSpan(' + base + ",'from',this.value," + st.autoFrom + ',' + st.autoTo + ')') +
-          '<span class="u">年から</span>' +
-          numInput(fid('edu', child.id, st.index, 'to'), 'op' + bad(at, 'to'), 76, st.to, 'A.eduSpan(' + base + ",'to',this.value," + st.autoFrom + ',' + st.autoTo + ')') +
-          '<span class="u">年まで</span>' +
+          numInput(fid('edu', child.id, st.index, 'from'), 'op', 76, yv(st.from, d.y), 'A.eduSpan(' + base + ",'from'," + yin(d.y) + ',' + st.autoFrom + ',' + st.autoTo + ')') +
+          '<span class="u">' + suf('from') + '</span>' +
+          numInput(fid('edu', child.id, st.index, 'to'), 'op' + bad(at, 'to'), 76, yv(st.to, d.y), 'A.eduSpan(' + base + ",'to'," + yin(d.y) + ',' + st.autoFrom + ',' + st.autoTo + ')') +
+          '<span class="u">' + suf('to') + '</span>' +
           '<span class="u" style="margin-left:auto">' + st.years + '年・計' + man(st.amount * st.years) + '万</span>' +
         '</div>' +
         vmsgs(at) +
@@ -513,7 +525,7 @@
     return '<div class="card">' +
       '<div class="ttl" style="margin-bottom:11px">自動車の購入費</div>' +
       '<div class="rowtop" style="flex-wrap:wrap;row-gap:8px">' +
-        numInput('f-car-from', 'op', 76, c.fromYear, "A.car('fromYear',this.value)") + '<span class="u">年から</span>' +
+        numInput('f-car-from', 'op', 76, yv(c.fromYear, by), "A.car('fromYear'," + yin(by) + ')') + '<span class="u">' + suf('from') + '</span>' +
         numInput('f-car-every', 'op' + bad('car', 'every'), 52, c.every, "A.car('every',this.value)", ';margin-left:2px') + '<span class="u">年ごとに</span>' +
         numInput('f-car-until', 'op' + bad('car', 'untilAge'), 56, c.untilAge, "A.car('untilAge',this.value)", ';margin-left:auto') + '<span class="u">歳まで</span>' +
       '</div>' +
@@ -539,11 +551,11 @@
       var at = 'inv:' + asset.id + ':' + kind + ':' + r.id;
       return '<div class="rowline divide">' +
         '<div class="rowtop">' +
-          numInput(fid('inv', asset.id, kind, r.id, 'year'), 'op' + bad(at, 'year'), 76, r.year, 'A.inv(' + q + ",'year',this.value)") + '<span class="u">年から</span>' +
-          numInput(fid('inv', asset.id, kind, r.id, 'to'), 'op' + bad(at, 'toYear'), 76, r.toYear, 'A.inv(' + q + ",'toYear',this.value)", ';margin-left:2px') + '<span class="u">年まで</span>' +
+          numInput(fid('inv', asset.id, kind, r.id, 'year'), 'op' + bad(at, 'year'), 76, yv(r.year, by), 'A.inv(' + q + ",'year'," + yin(by) + ')') + '<span class="u">' + suf('from') + '</span>' +
+          numInput(fid('inv', asset.id, kind, r.id, 'to'), 'op' + bad(at, 'toYear'), 76, yv(r.toYear, by), 'A.inv(' + q + ",'toYear'," + yin(by) + ')', ';margin-left:2px') + '<span class="u">' + suf('to') + '</span>' +
           delButton('A.invDel(' + q + ')') +
         '</div>' +
-        '<div class="ageh">家族１ ' + (r.year - by) + '歳 〜 ' + (r.toYear - by) + '歳（' + (r.toYear - r.year + 1) + '年間・計' + man((r.toYear - r.year + 1) * r.amount) + '万円）</div>' +
+        '<div class="ageh">' + other(r.year, by, '家族１') + ' 〜 ' + other(r.toYear, by) + '（' + (r.toYear - r.year + 1) + '年間・計' + man((r.toYear - r.year + 1) * r.amount) + '万円）</div>' +
         '<div class="rowamt"><span class="u">年間</span>' +
           numInput(fid('inv', asset.id, kind, r.id, 'amt'), 'op' + bad(at, 'amount'), 96, r.amount, 'A.inv(' + q + ",'amount',this.value)") + '<span class="u">万円</span></div>' +
         vmsgs(at) +
@@ -629,6 +641,7 @@
         '<button class="btn" onclick="A.firstIssue()">見る</button></div>';
     }
     h += welcomeHTML();
+    if (ageMode()) h += '<div class="hint" style="padding:8px 2px 0">年の欄は家族１の年齢で入れます（給与はその人の、教育費はその子の年齢）。保存は西暦です。</div>';
     h += basicHTML();
 
     h += '<h2 class="sec" id="sec-income">' + ic('income', 20) + '収入</h2>';
@@ -1119,6 +1132,14 @@
     } else if (ui.view === 'input') {
       document.getElementById('tabs').innerHTML = [['basic', '基本'], ['income', '収入'], ['pension', '年金'], ['expense', '支出'], ['invest', '投資']]
         .map(function (t) { return '<button class="tab' + (ui.active === t[0] ? ' on' : '') + '" data-k="' + t[0] + '" onclick="A.jump(\'' + t[0] + '\')">' + t[1] + '</button>'; }).join('');
+      document.getElementById('legend').innerHTML =
+        '<span class="chip"><span class="sw" style="background:var(--fill-req)"></span>必須</span>' +
+        '<span class="chip"><span class="sw" style="background:var(--fill-opt)"></span>任意</span>' +
+        '<span class="ymode"><span>年の入れ方</span><span class="mini" role="radiogroup" aria-label="年の入れ方">' +
+          [['year', '西暦'], ['age', '年齢']].map(function (m) {
+            var on = store.prefs.yearMode === m[0];
+            return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.yearMode(\'' + m[0] + '\')">' + m[1] + '</button>';
+          }).join('') + '</span></span>';
       document.getElementById('content').innerHTML = inputHTML();
     } else {
       var cf = document.getElementById('cf');

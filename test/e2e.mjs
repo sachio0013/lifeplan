@@ -173,6 +173,24 @@ await page.press('#f-endage', 'Tab');
 await page.waitForTimeout(150);
 check('直すと知らせが消える', (await page.locator('.vbanner').count()) === 0);
 
+// 年の欄を「年齢」で入れる
+await page.tap('#tabs .tab[data-k="expense"]');
+await page.locator('.mini button', { hasText: '年齢' }).tap();
+await page.waitForTimeout(150);
+const ageVal = await page.inputValue('#f-living-2-year');
+const ageSuffix = await page.locator('#f-living-2-year + .u').textContent();
+await page.fill('#f-living-2-year', '70');
+await page.press('#f-living-2-year', 'Tab');
+await page.waitForTimeout(150);
+const ageHint = await page.locator('#content .rowline', { has: page.locator('#f-living-2-year') }).locator('.ageh').textContent();
+await page.screenshot({ path: join(shots, '11-age-mode.png') });
+await page.locator('.mini button', { hasText: '西暦' }).tap();
+await page.waitForTimeout(150);
+const backYear = await page.inputValue('#f-living-2-year');
+check('「年齢」に切り替えると家族１の年齢で入れられ、西暦で保存される', ageVal === '65' && ageSuffix === '歳から' && ageHint === '2061年' && backYear === '2061', `${ageVal}${ageSuffix} → 70歳=${ageHint} / 西暦=${backYear}`);
+await page.fill('#f-living-2-year', '2056');
+await page.press('#f-living-2-year', 'Tab');
+
 // はじめての人：案内から「かんたん入力」で自分のプランを作る
 const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
 const wp = await fresh.newPage();
