@@ -16,6 +16,7 @@
   --c-deposit: #c67139;
   --c-invest: #2a78c2;
   --neg: #b3261e;
+  --good: #4f6a35;
   --neg-soft: #fbe3e0;
   --shadow: 0 1px 3px rgba(32, 26, 18, .08), 0 1px 2px rgba(32, 26, 18, .05);
   color-scheme: light;
@@ -28,7 +29,7 @@
     --sage: #a3b581; --sage-soft: #333c26; --line: #3c3427;
     --fill-req: #4d3d18; --fill-opt: #2a323b;
     --c-deposit: #cf7c43; --c-invest: #4a8fd4;
-    --neg: #ff8a80; --neg-soft: #4a2420;
+    --neg: #ff8a80; --neg-soft: #4a2420; --good: #b5c98f;
     --shadow: 0 1px 3px rgba(0, 0, 0, .4), 0 1px 2px rgba(0, 0, 0, .3);
     color-scheme: dark;
   }
@@ -40,7 +41,7 @@
   --sage: #a3b581; --sage-soft: #333c26; --line: #3c3427;
   --fill-req: #4d3d18; --fill-opt: #2a323b;
   --c-deposit: #cf7c43; --c-invest: #4a8fd4;
-  --neg: #ff8a80; --neg-soft: #4a2420;
+  --neg: #ff8a80; --neg-soft: #4a2420; --good: #b5c98f;
   --shadow: 0 1px 3px rgba(0, 0, 0, .4), 0 1px 2px rgba(0, 0, 0, .3);
   color-scheme: dark;
 }
@@ -80,6 +81,12 @@ button { font-family: inherit; color: inherit; }
 #summary .warnline .worst { margin-left: auto; font-size: 15px; font-weight: 900; white-space: nowrap; font-variant-numeric: tabular-nums; }
 #summary .warnline span:first-of-type { white-space: nowrap; }
 #summary svg { display: block; margin-top: 3px; }
+.delta { position: absolute; right: 14px; top: 34px; display: flex; align-items: baseline; gap: 3px; padding: 4px 11px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; opacity: 0; transform: translateY(4px); transition: opacity .2s, transform .2s; pointer-events: none; }
+.delta.show { opacity: 1; transform: none; }
+.delta .k { font-size: 10.5px; font-weight: 700; color: var(--text-muted); }
+.delta .k:first-child { margin-right: 4px; }
+.delta.up { color: var(--good); }
+.delta.down { color: var(--neg); }
 
 /* 目次 */
 #tabs { position: sticky; top: 72px; z-index: 2; display: flex; gap: 5px; padding: 8px 12px; background: var(--bg); border-bottom: 1.5px solid var(--line); overflow-x: auto; scrollbar-width: none; }

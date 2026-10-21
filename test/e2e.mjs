@@ -49,6 +49,11 @@ await page.press('#f-living-1-amt', 'Tab');
 await page.waitForTimeout(200);
 const after = await page.textContent('#summary');
 check('基本生活費を変えるとサマリーの数字が変わる', before !== after, `${before.trim().slice(0, 30)} → ${after.trim().slice(0, 30)}`);
+const deltaText = await page.locator('#delta.show').textContent().catch(() => '');
+check('変えた直後に、終了時点の金融資産の増減が出る', /今の変更で−[\d,]+万円/.test(deltaText), deltaText);
+await page.screenshot({ path: join(shots, '1b-delta.png') });
+await page.waitForTimeout(3000);
+check('増減の表示は数秒で消える', (await page.locator('#delta').isHidden()));
 
 // 入力欄を移ってもフォーカスが外れない（スマホでキーボードが閉じない）
 await page.tap('#f-housing-1-amt');

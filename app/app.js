@@ -45,6 +45,9 @@
   var issues = {};      // 入力の確認結果を場所ごとに（E.validate の at をキーに）
   var issueCount = 0;
   var pendingRender = false;
+  var lastEnd = null;   // 直前に表示した終了時点の金融資産（変化の表示用）
+  var deltaTimer = null;
+  var quiet = false;    // 次の描画では変化を表示しない（プランの切り替えなど）
 
   // ---------- 小物 ----------
 
@@ -663,7 +666,31 @@
       '</svg>';
   }
 
+  // 入力を変えたら、終了時点の金融資産がいくら動いたかを数秒だけ出す
+  function showDelta() {
+    var now = result.years.length ? result.endTotal : null;
+    var prev = lastEnd;
+    lastEnd = now;
+    if (quiet) { quiet = false; return; }
+    if (prev == null || now == null || ui.view !== 'input') return;
+    var d = Math.round(now - prev);
+    if (!d) return;
+    var el = document.getElementById('delta');
+    el.className = 'delta ' + (d > 0 ? 'up' : 'down');
+    el.innerHTML = '<span class="k">今の変更で</span>' + (d > 0 ? '＋' : '−') + Math.abs(d).toLocaleString('ja-JP') + '<span class="k">万円</span>';
+    el.setAttribute('aria-label', '終了時点の金融資産が' + Math.abs(d).toLocaleString('ja-JP') + '万円' + (d > 0 ? '増えました' : '減りました'));
+    el.hidden = false;
+    void el.offsetWidth;
+    el.classList.add('show');
+    clearTimeout(deltaTimer);
+    deltaTimer = setTimeout(function () {
+      el.classList.remove('show');
+      deltaTimer = setTimeout(function () { el.hidden = true; }, 250);
+    }, 2600);
+  }
+
   // ---------- CF表画面 ----------
+
 
   function niceStep(range, target) {
     var raw = range / target;
@@ -861,7 +888,8 @@
     var summary = document.getElementById('summary');
     summary.hidden = ui.view !== 'input';
     summary.classList.toggle('warn', !!result.shortfall || !result.years.length);
-    summary.innerHTML = summaryHTML();
+    document.getElementById('sumbody').innerHTML = summaryHTML();
+    showDelta();
 
     document.getElementById('inputview').hidden = ui.view !== 'input';
     document.getElementById('cfview').hidden = ui.view !== 'cf';
