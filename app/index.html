@@ -1,0 +1,40 @@
+<title>ライフプラン表</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/*@STYLE@*/
+</style>
+
+<div id="shell">
+  <header id="topbar">
+    <span class="name">ライフプラン</span>
+    <div class="seg" role="tablist" aria-label="画面の切り替え">
+      <button id="seg-input" role="tab" onclick="A.view('input')">入力</button>
+      <button id="seg-cf" role="tab" onclick="A.view('cf')">CF表</button>
+    </div>
+  </header>
+  <div id="scroll">
+    <div id="summary" role="button" tabindex="0" aria-label="CF表を見る"></div>
+    <div id="inputview">
+      <nav id="tabs" aria-label="入力のセクション"></nav>
+      <div id="legend">
+        <span class="chip"><span class="sw" style="background:var(--fill-req)"></span>必須入力</span>
+        <span class="chip"><span class="sw" style="background:var(--fill-opt)"></span>任意入力</span>
+        <span style="margin-left:auto">必須だけで試算できます</span>
+      </div>
+      <div id="content"></div>
+    </div>
+    <div id="cfview" hidden><div id="cf"></div></div>
+  </div>
+</div>
+
+<script>
+/*@ENGINE@*/
+</script>
+<script>
+/*@SAMPLE@*/
+</script>
+<script>
+/*@APP@*/
+</script>

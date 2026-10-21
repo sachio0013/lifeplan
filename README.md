@@ -1,3 +1,34 @@
+# ライフプラン
+
+Excel「ライフプラン表」を元にした、家計・資産シミュレーションのスマホ向けWebアプリ。
+入力画面とキャッシュフロー（CF）表の画面がある。
+
+公開中：https://claude.ai/artifact/JnyfHAf98xaDEFhDnPquTs
+
+## 構成
+
+| パス | 内容 |
+|---|---|
+| `app/engine.js` | 計算エンジン（画面に依存しない）。仕様は [docs/ENGINE.md](docs/ENGINE.md) |
+| `app/sample.js` | 初期データ。Excelのサンプル入力と同じ |
+| `app/app.js` / `app/style.css` / `app/index.html` | 画面 |
+| `tools/build.mjs` | 上をまとめて `dist/lifeplan.html`（公開用）と `dist/preview.html`（手元確認用）を作る |
+| `tools/extract_excel_fixture.py` | ExcelのCF表から計算済みの値を取り出し、テスト用の照合データにする |
+| `test/engine.test.mjs` | 計算のテスト（Excelの値と照合） |
+| `test/e2e.mjs` | スマホ幅のブラウザで実際に操作するテスト |
+
+```
+npm test          # 計算のテスト
+npm run build     # dist/ を作る
+npm run e2e       # ブラウザで操作するテスト（先に build）
+```
+
+入力内容はブラウザの保存領域（localStorage）に端末ごとに保存される。
+
+---
+
+以下は、開発初期にデザインを受け渡したときの資料。
+
 # Handoff: ライフプラン入力画面（Flutter / Android）
 
 ## Overview
