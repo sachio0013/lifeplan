@@ -92,7 +92,13 @@
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
-  function toNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+  // 日本語入力の全角数字・全角の小数点やマイナス・桁区切りのカンマも、数値として読む
+  function normNum(v) {
+    return String(v == null ? '' : v)
+      .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+      .replace(/[．。]/g, '.').replace(/[－ー−‐]/g, '-').replace(/[,，\s　]/g, '');
+  }
+  function toNum(v) { var n = parseFloat(normNum(v)); return isFinite(n) ? n : 0; }
   function fid() { return 'f-' + Array.prototype.join.call(arguments, '-'); }
   function nid() { return state.nextId++; }
   function baseBirth() { return E.baseBirthYear(state); }
@@ -126,6 +132,19 @@
     return p[0] + '-' + ('0' + p[1]).slice(-2) + '-' + ('0' + p[2]).slice(-2);
   }
 
+  // ---------- 元に戻す ----------
+  // 削除・置き換えの直前の保存内容を1つだけ覚えておき、画面下の「元に戻す」で戻せるようにする
+
+  var undo = null, toastTimer = null;
+  function snapshot(msg) {
+    undo = { json: JSON.stringify(store), msg: msg };
+    var t = document.getElementById('toast');
+    t.innerHTML = '<span>' + esc(msg) + '</span><button onclick="A.undo()">元に戻す</button>';
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; undo = null; }, 7000);
+  }
+
   var renderQueued = false;
   function commit() {
     save();
@@ -139,7 +158,7 @@
   var A = {
     num: function (key, id, field, v) { var r = byId(state[key], id); if (r) r[field] = toNum(v); commit(); },
     text: function (key, id, field, v) { var r = byId(state[key], id); if (r) r[field] = v; commit(); },
-    del: function (key, id) { state[key] = state[key].filter(function (r) { return r.id !== id; }); commit(); },
+    del: function (key, id) { snapshot('行を削除しました'); state[key] = state[key].filter(function (r) { return r.id !== id; }); commit(); },
     add: function (key, max, hasTo) {
       var list = state[key];
       if (list.length >= max) return;
@@ -151,6 +170,7 @@
       commit();
     },
     merge: function (key, id) {
+      snapshot('同じ年の行を1行にまとめました');
       var list = state[key], row = byId(list, id);
       if (!row) return;
       var first = list.filter(function (r) { return r.year === row.year && r.id !== id; })[0];
@@ -201,6 +221,7 @@
     },
     delFamily: function (id) {
       if (ui.confirmDelMember !== id) { ui.confirmDelMember = id; commit(); return; }
+      snapshot('「' + memberName(id) + '」を削除しました');
       state.family = state.family.filter(function (m) { return m.id !== id; });
       delete state.edu[id]; delete state.eduAmount[id]; delete state.eduSpan[id];
       state.salaries.forEach(function (s) { if (s.memberId === id) { s.memberId = 0; s.who = 'その他'; } });
@@ -221,7 +242,7 @@
       if (r) r[field] = toNum(v);
       commit();
     },
-    salDel: function (sid, rid) { var s = byId(state.salaries, sid); if (s) s.rows = s.rows.filter(function (r) { return r.id !== rid; }); commit(); },
+    salDel: function (sid, rid) { snapshot('行を削除しました'); var s = byId(state.salaries, sid); if (s) s.rows = s.rows.filter(function (r) { return r.id !== rid; }); commit(); },
     salAdd: function (sid) {
       var s = byId(state.salaries, sid); if (!s || s.rows.length >= 8) return;
       var last = s.rows[s.rows.length - 1];
@@ -238,7 +259,7 @@
       });
       commit();
     },
-    delEarner: function (sid) { state.salaries = state.salaries.filter(function (s) { return s.id !== sid; }); commit(); },
+    delEarner: function (sid) { snapshot('収入のある人を外しました'); state.salaries = state.salaries.filter(function (s) { return s.id !== sid; }); commit(); },
 
     calcToggle: function (sid) { ui.openCalc = ui.openCalc === sid ? 0 : sid; commit(); },
     calc: function (field, v) { state.calc[field] = field === 'spouse' ? v : toNum(v); commit(); },
@@ -262,7 +283,7 @@
       if (r) r[field] = field === 'memo' ? v : toNum(v);
       commit();
     },
-    invDel: function (aid, kind, rid) { var iv = state.invest[aid]; iv[kind] = iv[kind].filter(function (r) { return r.id !== rid; }); commit(); },
+    invDel: function (aid, kind, rid) { snapshot('行を削除しました'); var iv = state.invest[aid]; iv[kind] = iv[kind].filter(function (r) { return r.id !== rid; }); commit(); },
     invAdd: function (aid, kind) {
       var list = state.invest[aid][kind]; if (list.length >= 5) return;
       var last = list[list.length - 1];
@@ -287,6 +308,15 @@
     },
 
     y: function (v, by) { return ageMode() && String(v).trim() !== '' ? toNum(v) + by : v; },
+    undo: function () {
+      if (!undo) return;
+      store = JSON.parse(undo.json);
+      state = plan().state;
+      undo = null;
+      document.getElementById('toast').hidden = true;
+      ui.confirmDelMember = 0; ui.confirmDelPlan = 0; ui.confirmReset = false; ui.loanConfirm = false;
+      commit();
+    },
     yearMode: function (m) { store.prefs.yearMode = m; quiet = true; commit(); },
     jump: function (key) {
 
@@ -308,6 +338,7 @@
     resetAsk: function () { ui.confirmReset = true; commit(); },
     resetNo: function () { ui.confirmReset = false; commit(); },
     resetYes: function () {
+      snapshot('記入例の内容に戻しました');
       state = plan().state = window.LifePlanSample.sample();
       ui.confirmReset = false; ui.openMember = 0; ui.openCalc = 0;
       commit();
@@ -343,7 +374,8 @@
   // ---------- 入力画面の部品 ----------
 
   function numInput(id, cls, width, value, handler, extra) {
-    return '<input type="number" inputmode="decimal" id="' + id + '" class="' + cls + '" style="width:' + width + 'px' + (extra || '') + '" value="' + esc(value) + '" onchange="' + handler + '">';
+    // type="number" だと、タップした位置にカーソルが入り、全部選ぶこともできない。文字の欄にして数字のキーボードを出す
+    return '<input type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" id="' + id + '" class="' + cls + ' num" style="width:' + width + 'px' + (extra || '') + '" value="' + esc(value) + '" onchange="' + handler + '">';
   }
   function textInput(id, cls, style, value, handler, placeholder) {
     return '<input type="text" id="' + id + '" class="' + cls + '" style="' + style + '" value="' + esc(value) + '"' + (placeholder ? ' placeholder="' + esc(placeholder) + '"' : '') + ' onchange="' + handler + '">';
@@ -391,6 +423,8 @@
       var ageHint = r.year && !locked ? (opts.hasTo
         ? other(r.year, by, '家族１') + ' 〜 ' + other(r.toYear, by) + '（' + (r.toYear - r.year + 1) + '年間）'
         : other(r.year, by, '家族１')) : locked && !ageMode() ? '家族１ ' + (state.startYear - by) + '歳' : locked ? state.startYear + '年' : '';
+      // 年額の支出は、月あたりの額も添える（家計簿の感覚と照らし合わせやすいように）
+      if (opts.monthly && toNum(r.amount)) ageHint += (ageHint ? ' ・ ' : '') + '月' + (Math.round(toNum(r.amount) / 12 * 10) / 10).toLocaleString('ja-JP') + '万円';
       return '<div class="rowline divide">' +
         '<div class="rowtop">' +
           (locked ? lockedYear(by) :
@@ -543,7 +577,7 @@
       '<div class="divide" style="margin-top:10px">' +
         '<button class="toggle" onclick="A.carToggle()">' + ic('tune', 18, 'lead') + '<span class="lbl">回ごとに金額を変える</span><span class="chev">' + chevron(ui.carDetailOpen) + '</span></button>' +
         (ui.carDetailOpen ? occ.map(function (o) {
-          return '<div class="occ divide"><span style="font-size:13px;font-weight:700">' + o.year + '年</span><span class="u">家族１ ' + (o.year - by) + '歳</span>' +
+          return '<div class="occ divide"><span style="font-size:14.5px;font-weight:700">' + o.year + '年</span><span class="u">家族１ ' + (o.year - by) + '歳</span>' +
             numInput(fid('car', o.year), 'op', 80, o.amount, 'A.carOver(' + o.year + ',this.value)', ';margin-left:auto') + '<span class="u">万円</span></div>';
         }).join('') : '') +
       '</div>' +
@@ -587,7 +621,7 @@
   function basicHTML() {
     var assets = state.assets.map(function (a) {
       return '<div class="rowtop divide" style="padding:10px 0">' +
-        (a.fixed ? '<span style="font-size:14px;font-weight:500">' + esc(a.name) + '</span>'
+        (a.fixed ? '<span style="font-size:15px;font-weight:500">' + esc(a.name) + '</span>'
                  : textInput(fid('asset', a.id, 'name'), 'op', 'width:120px', a.name, "A.text('assets'," + a.id + ",'name',this.value)")) +
         numInput(fid('asset', a.id, 'amt'), 'rq' + bad('asset:' + a.id, 'amount'), 96, a.amount, "A.num('assets'," + a.id + ",'amount',this.value)", ';margin-left:auto') +
         '<span class="u">万円</span>' +
@@ -665,14 +699,14 @@
     h += groupCard('pubPension', '公的年金', { max: 5, requiredFirst: true, dupCheck: true, memo: true, hint: '家族１が65歳＝' + (by + 65) + '年／70歳＝' + (by + 70) + '年。家族全員の合計を手取りの年額で入れます', extra: penCalcHTML('state') });
 
     h += '<h2 class="sec" id="sec-expense">' + ic('expense', 20) + '支出</h2>';
-    h += groupCard('living', '基本生活費', { max: 5, requiredFirst: true, anchorFirst: true, inflation: true, dupCheck: true, memo: true, hint: '住宅費・教育費・保険料・自動車・その他を除いた、ふだんの支出。2行目以降は今の物価で入れれば、物価上昇を足して計算します。' });
-    h += groupCard('housing', '住宅費', { max: 5, requiredFirst: true, anchorFirst: true, dupCheck: true, memo: true, hint: '家賃・ローン・修繕/管理費・固定資産税の合計', extra: loanCalcHTML() });
+    h += groupCard('living', '基本生活費', { monthly: true, max: 5, requiredFirst: true, anchorFirst: true, inflation: true, dupCheck: true, memo: true, hint: '住宅費・教育費・保険料・自動車・その他を除いた、ふだんの支出。2行目以降は今の物価で入れれば、物価上昇を足して計算します。' });
+    h += groupCard('housing', '住宅費', { monthly: true, max: 5, requiredFirst: true, anchorFirst: true, dupCheck: true, memo: true, hint: '家賃・ローン・修繕/管理費・固定資産税の合計', extra: loanCalcHTML() });
     h += groupCard('housingLump', '住宅費一時金（頭金など）', { max: 3, lump: true, memo: true });
     E.children(state).forEach(function (c) { h += eduCard(c); });
-    h += groupCard('insurance', '保険料', { max: 7, requiredFirst: true, dupCheck: true, memo: true });
-    h += groupCard('carCost', '自動車の維持費', { max: 5, dupCheck: true, memo: true, hint: '税金・保険・車検・駐車場・整備の年額。下の購入費の「◯歳まで」（今は' + state.carBuy.untilAge + '歳）を過ぎた年からは、車を手放したとみなして0になります。' });
+    h += groupCard('insurance', '保険料', { monthly: true, max: 7, requiredFirst: true, dupCheck: true, memo: true });
+    h += groupCard('carCost', '自動車の維持費', { monthly: true, max: 5, dupCheck: true, memo: true, hint: '税金・保険・車検・駐車場・整備の年額。下の購入費の「◯歳まで」（今は' + state.carBuy.untilAge + '歳）を過ぎた年からは、車を手放したとみなして0になります。' });
     h += carCard();
-    h += groupCard('otherFlow', 'その他の経常支出', { max: 5, dupCheck: true, memo: true, hint: '同じ年は1行にまとめます（趣味と旅行なら合算して1行）' });
+    h += groupCard('otherFlow', 'その他の経常支出', { monthly: true, max: 5, dupCheck: true, memo: true, hint: '同じ年は1行にまとめます（趣味と旅行なら合算して1行）' });
     h += groupCard('otherLump', 'その他の一時支出', { max: 5, lump: true, memo: true, hint: '子供の結婚の援助、留学費など' });
 
     h += '<h2 class="sec" id="sec-invest">' + ic('invest', 20) + '投資</h2>';
@@ -704,7 +738,7 @@
 
   function summaryHTML() {
     if (!result.years.length) {
-      return '<div class="warnline">' + ic('warn', 18) + '<span>計算できません</span><span class="worst" style="font-size:12px">期間と生年月日を確認</span></div>';
+      return '<div class="warnline">' + ic('warn', 18) + '<span>計算できません</span><span class="worst" style="font-size:13.5px">期間と生年月日を確認</span></div>';
     }
     var sp = sparkPath(result.years.map(function (r) { return r.assets.total; }), 340, 30);
     var warn = !!result.shortfall;
@@ -758,7 +792,7 @@
   function chartSVG(width) {
     var ys = result.years;
     var W = Math.max(280, width), H = 210;
-    var L = 46, R = 8, T = 10, B = 34;
+    var L = 54, R = 8, T = 10, B = 34;
     var pw = W - L - R, ph = H - T - B;
     var top = 0, bottom = 0;
     ys.forEach(function (r) {
@@ -999,6 +1033,7 @@
   A.penAdj = function (mode, v) { penData(mode, true).adjust = toNum(v); commit(); };
   A.penApply = function (mode) {
     var total = penTotal(mode);
+    if (mode !== 'wz') snapshot('公的年金の1行目を試算した額にしました');
     ui.penOpen[mode] = false;
     if (mode === 'wz') {
       ui.wz.d.pension = total;
@@ -1150,6 +1185,7 @@
     var sch = E.loanSchedule(lc);
     if (!(toNum(lc.amount) > 0) || !sch.phases.length) return;
     if (!sure && loanReplaced(lc).length) { ui.loanConfirm = true; commit(); return; }
+    snapshot('住宅費の行を試算の結果にしました');
     var start = toNum(lc.start), sy = state.startYear;
     var gen = loanRows(lc, sch);
     var head = state.housing[0] || { id: nid(), year: sy, amount: 0, memo: '' };
@@ -1210,7 +1246,7 @@
         ' onchange="A.wz(\'' + key + '\',this.value,this)" onblur="A.flush()">'
       : opts.text
         ? '<input type="text" id="' + id + '" class="op" style="flex:1;min-width:0" value="' + esc(d[key]) + '" placeholder="' + esc(opts.placeholder || '') + '" onchange="A.wz(\'' + key + '\',this.value)">'
-        : '<input type="number" inputmode="decimal" id="' + id + '" class="' + (opts.optional ? 'op' : 'rq') + (err ? ' bad' : '') + '" style="width:' + (opts.width || 110) + 'px" value="' + esc(d[key]) + '" onchange="A.wz(\'' + key + '\',this.value)">';
+        : '<input type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" id="' + id + '" class="' + (opts.optional ? 'op' : 'rq') + (err ? ' bad' : '') + ' num" style="width:' + (opts.width || 110) + 'px" value="' + esc(d[key]) + '" onchange="A.wz(\'' + key + '\',this.value)">';
     return '<div class="fl"><label class="lb" for="' + id + '">' + label + '</label>' +
       '<div class="fi">' + input + (unit ? '<span class="u">' + unit + '</span>' : '') + '</div>' +
       (err ? '<div class="vmsg error">' + ic('warn', 15) + '<span>' + esc(err) + '</span></div>' : '') +
@@ -1307,7 +1343,8 @@
     var d = ui.wz.d;
     if (key === 'has2') d.has2 = !!v;
     else if (key.indexOf('birth') === 0) d[key] = v ? v.replace(/-/g, '/') : '';
-    else d[key] = v;
+    else if (key === 'name1' || key === 'name2') d[key] = v;
+    else d[key] = String(v).trim() === '' ? '' : String(toNum(v));
     delete ui.wz.err[key];
     if (el && document.activeElement === el) { pendingRender = true; return; }
     commit();
@@ -1389,6 +1426,7 @@
   A.planDel = function (id) {
     if (store.plans.length < 2) return;
     if (ui.confirmDelPlan !== id) { ui.confirmDelPlan = id; commit(); return; }
+    snapshot('プラン「' + byId(store.plans, id).name + '」を削除しました');
     store.plans = store.plans.filter(function (p) { return p.id !== id; });
     if (ui.cmp) ui.cmp = ui.cmp.filter(function (x) { return x !== id; });
     ui.confirmDelPlan = 0;
@@ -1600,7 +1638,7 @@
 
   var cmpGeom = null;
   function cmpChartSVG(width, series) {
-    var W = Math.max(280, width), H = 220, L = 46, R = 10, T = 10, B = 24;
+    var W = Math.max(280, width), H = 220, L = 54, R = 10, T = 10, B = 24;
     var pw = W - L - R, ph = H - T - B;
     var y0 = Infinity, y1 = -Infinity, top = 0, bottom = 0;
     series.forEach(function (s) {
@@ -1822,6 +1860,56 @@
     if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); A.view('cf'); }
   });
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && ui.sheet) A.planSheet(); });
+
+  // 数字の欄をタップしたら中身を全部選ぶ（そのまま打てば置き換わる。一の位の右を狙ってタップしなくてよい）
+  document.addEventListener('focusin', function (ev) {
+    var el = ev.target;
+    if (!el.classList || !el.classList.contains('num')) return;
+    setTimeout(function () {
+      if (document.activeElement === el) { try { el.setSelectionRange(0, el.value.length); } catch (e) { /* 選べない欄は何もしない */ } }
+    }, 0);
+  });
+
+  // Enter（キーボードの「次へ」）で、同じ画面の次の入力欄へ
+  document.addEventListener('keydown', function (ev) {
+    var el = ev.target;
+    if (ev.key !== 'Enter' || ev.isComposing || el.tagName !== 'INPUT' || el.type === 'file') return;
+    var scope = el.closest('.sheet') || el.closest('#wizview') || el.closest('#content');
+    if (!scope) return;
+    var all = Array.prototype.filter.call(scope.querySelectorAll('input:not([type=file]):not([type=hidden]), select, textarea'),
+      function (x) { return x.offsetParent && !x.disabled; });
+    var next = all[all.indexOf(el) + 1];
+    ev.preventDefault();
+    if (next) next.focus(); else el.blur();
+  });
+
+  // スマホで入力している間は、上のバーと目次をたたんで、入力欄の見える範囲を広げる。
+  // 欄を移るときや描き直しで一瞬フォーカスが外れても、ちらつかないよう少し待ってから戻す。
+  var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  var kbTimer = null;
+  function typingField(el) {
+    return el && ((el.tagName === 'INPUT' && /^(text|search|tel|email|)$/.test(el.type)) || el.tagName === 'TEXTAREA');
+  }
+  function setTyping(on) {
+    var shell = document.getElementById('shell');
+    if (shell.classList.contains('kb') === on) return;
+    var sc = document.getElementById('scroll');
+    // 本文が画面上で動かないよう、たたむ・戻す前後で本文の位置の差だけスクロールを戻す
+    var el = typingField(document.activeElement) ? document.activeElement : document.getElementById(ui.view === 'wizard' ? 'wizview' : 'content');
+    var before = el.getBoundingClientRect().top;
+    shell.classList.toggle('kb', on);
+    sc.scrollTop += el.getBoundingClientRect().top - before;
+  }
+  if (coarse) {
+    document.addEventListener('focusin', function (ev) {
+      clearTimeout(kbTimer);
+      if (typingField(ev.target) && !ev.target.closest('.sheet')) setTyping(true);
+    });
+    document.addEventListener('focusout', function () {
+      clearTimeout(kbTimer);
+      kbTimer = setTimeout(function () { if (!typingField(document.activeElement)) setTyping(false); }, 180);
+    });
+  }
   var resizeTimer = null;
   window.addEventListener('resize', function () {
     if (ui.view !== 'cf' && ui.view !== 'cmp') return;

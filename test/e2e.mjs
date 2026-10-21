@@ -20,6 +20,12 @@ const url = `http://127.0.0.1:${server.address().port}/`;
 
 const results = [];
 function check(name, ok, detail = '') { results.push({ name, ok: !!ok, detail }); }
+// スマホで入力中は上のバーと目次がたたまれるので、キーボードを閉じて（フォーカスを外して）から押す
+async function go(p, sel) {
+  await p.evaluate(() => document.activeElement && document.activeElement.blur && document.activeElement.blur());
+  await p.waitForTimeout(250);
+  await p.tap(sel);
+}
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
@@ -64,6 +70,28 @@ const focused = await page.evaluate(() => document.activeElement && document.act
 check('次の入力欄をタップしたらそこにフォーカスが残る', focused === 'f-housing-2-amt', `activeElement=${focused}`);
 await page.locator('#f-housing-2-amt').blur();
 
+// 数字の欄：タップすると中身が全部選ばれ、全角で打っても数字になり、Enterで次の欄へ。入力中は上のバーがたたまれる
+await page.locator('#f-insurance-1-amt').scrollIntoViewIfNeeded();
+await page.tap('#f-insurance-1-amt');
+await page.waitForTimeout(250);
+const sel = await page.evaluate(() => { const e = document.activeElement; return [e.id, e.selectionStart, e.selectionEnd, e.value.length]; });
+const folded = await page.evaluate(() => document.getElementById('shell').classList.contains('kb') && getComputedStyle(document.getElementById('topbar')).display === 'none');
+await page.keyboard.type('２４');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(200);
+const afterEnter = await page.evaluate(() => document.activeElement && document.activeElement.id);
+const insVal = await page.inputValue('#f-insurance-1-amt');
+await page.evaluate(() => document.activeElement.blur());
+await page.waitForTimeout(300);
+const unfolded = await page.evaluate(() => !document.getElementById('shell').classList.contains('kb'));
+check('数字の欄はタップで全選択・全角も可・Enterで次へ。入力中は上をたたみ、終わると戻る',
+  sel[0] === 'f-insurance-1-amt' && sel[1] === 0 && sel[2] === sel[3] && sel[3] > 0 && folded && insVal === '24' && afterEnter === 'f-insurance-1-memo' && unfolded,
+  `選択=${sel} たたむ=${folded} 値=${insVal} 次=${afterEnter} 戻る=${unfolded}`);
+await page.fill('#f-insurance-1-amt', '20');
+await page.press('#f-insurance-1-amt', 'Tab');
+await page.evaluate(() => document.activeElement.blur());
+await page.waitForTimeout(250);
+
 // 同じ年の行を追加すると「合算する」が出て、押すと1行になる
 const addOther = page.locator('#content .card', { hasText: 'その他の経常支出' }).locator('.addbtn');
 await addOther.tap();
@@ -83,6 +111,20 @@ await page.locator('.dup button').first().tap();
 await page.waitForTimeout(150);
 const merged = await page.$$eval('#content input[id^="f-otherFlow-"][id$="-amt"]', (els) => els.map((e) => e.value));
 check('同じ年の行で「合算する」が出て、押すと1行にまとまる', dupShown === 1 && merged.length === 1 && merged[0] === '50', `dup=${dupShown} rows=${JSON.stringify(merged)}`);
+
+// 削除しても「元に戻す」で戻せる。年額の支出には月あたりの額も出る
+const livingBefore = await page.$$eval('#content input[id^="f-living-"][id$="-amt"]', (els) => els.length);
+await page.locator('#content .rowline', { has: page.locator('#f-living-2-amt') }).locator('button.del').tap();
+await page.waitForTimeout(150);
+const livingAfter = await page.$$eval('#content input[id^="f-living-"][id$="-amt"]', (els) => els.length);
+const toastText = await page.textContent('#toast');
+await page.locator('#toast button').tap();
+await page.waitForTimeout(150);
+const livingUndone = await page.$$eval('#content input[id^="f-living-"][id$="-amt"]', (els) => els.length);
+const insHint = await page.locator('#content .rowline', { has: page.locator('#f-insurance-1-amt') }).locator('.ageh').textContent();
+check('行を削除しても「元に戻す」で戻せ、年額の支出に月あたりの額が出る',
+  livingBefore === 2 && livingAfter === 1 && /削除しました/.test(toastText) && livingUndone === 2 && /月1\.7万円/.test(insHint),
+  `${livingBefore}→${livingAfter}→${livingUndone} / ${toastText} / ${insHint}`);
 
 // 教育費：段階を私立に変えると金額が単価表の値に変わる
 const eduSel = page.locator('#content select[id^="f-edu-3-2-stage"]');
@@ -129,7 +171,7 @@ check('住宅ローンの試算がExcelと同じ（年152.4→171.4万円、総�
   `${loanTotal.trim()} 表${loanTableRows}行 / ${loanConfirm.trim().slice(0, 30)} / 住宅費=${housingRows}`);
 
 // 目次をタップすると該当セクションに移る
-await page.tap('#tabs .tab[data-k="invest"]');
+await go(page, '#tabs .tab[data-k="invest"]');
 await page.waitForTimeout(200);
 const investVisible = await page.evaluate(() => {
   const r = document.getElementById('sec-invest').getBoundingClientRect();
@@ -139,7 +181,7 @@ check('目次「投資」で投資セクションに移る', investVisible);
 await page.screenshot({ path: join(shots, '2-input-invest.png') });
 
 // CF表画面
-await page.tap('#seg-cf');
+await go(page, '#seg-cf');
 await page.waitForSelector('#chart');
 await page.waitForTimeout(200);
 const cols = await page.$$eval('table.cf thead th', (ths) => ths.length - 1);
@@ -159,7 +201,7 @@ await page.screenshot({ path: join(shots, '4-cf-table.png') });
 // 再読み込みしても入力が残る
 await page.reload();
 await page.waitForSelector('#seg-input');
-await page.tap('#seg-input');
+await go(page, '#seg-input');
 await page.waitForSelector('#f-living-1-amt');
 const persisted = await page.inputValue('#f-living-1-amt');
 check('再読み込みしても入力が残っている', persisted === '520', `基本生活費=${persisted}`);
@@ -173,7 +215,7 @@ const resetVal = await page.inputValue('#f-living-1-amt');
 check('「記入例の内容に戻す」で初期値に戻る', resetVal === '360', `基本生活費=${resetVal}`);
 
 // iPhoneは16px未満の入力欄をタップすると画面を拡大してしまうので、全部16px以上にしておく
-await page.tap('#tabs .tab[data-k="basic"]');
+await go(page, '#tabs .tab[data-k="basic"]');
 await page.locator('#content .member button.del').first().tap();
 await page.waitForTimeout(150);
 const small = await page.$$eval('#content input, #content select', (els) => els
@@ -196,10 +238,10 @@ await page.waitForTimeout(150);
 const banner = await page.locator('.vbanner').textContent().catch(() => '');
 const msg = await page.locator('#sec-basic + .card .vmsg').textContent().catch(() => '');
 const sumBad = await page.textContent('#summary');
-await page.tap('#seg-cf');
+await go(page, '#seg-cf');
 await page.waitForTimeout(150);
 const cfMsg = await page.textContent('#cf');
-await page.tap('#seg-input');
+await go(page, '#seg-input');
 await page.waitForTimeout(150);
 check('おかしな入力は欄の下とページ上部で知らせ、計算できなくても画面が落ちない',
   /1 件/.test(banner) && /終了年齢/.test(msg) && /計算できません/.test(sumBad) && /計算できる年がありません/.test(cfMsg),
@@ -211,7 +253,7 @@ await page.waitForTimeout(150);
 check('直すと知らせが消える', (await page.locator('.vbanner').count()) === 0);
 
 // 年の欄を「年齢」で入れる
-await page.tap('#tabs .tab[data-k="expense"]');
+await go(page, '#tabs .tab[data-k="expense"]');
 await page.locator('.mini button', { hasText: '年齢' }).tap();
 await page.waitForTimeout(150);
 const ageVal = await page.inputValue('#f-living-2-year');
@@ -224,7 +266,7 @@ await page.screenshot({ path: join(shots, '11-age-mode.png') });
 await page.locator('.mini button', { hasText: '西暦' }).tap();
 await page.waitForTimeout(150);
 const backYear = await page.inputValue('#f-living-2-year');
-check('「年齢」に切り替えると家族１の年齢で入れられ、西暦で保存される', ageVal === '65' && ageSuffix === '歳から' && ageHint === '2061年' && backYear === '2061', `${ageVal}${ageSuffix} → 70歳=${ageHint} / 西暦=${backYear}`);
+check('「年齢」に切り替えると家族１の年齢で入れられ、西暦で保存される', ageVal === '65' && ageSuffix === '歳から' && /^2061年/.test(ageHint) && backYear === '2061', `${ageVal}${ageSuffix} → 70歳=${ageHint} / 西暦=${backYear}`);
 await page.fill('#f-living-2-year', '2056');
 await page.press('#f-living-2-year', 'Tab');
 
@@ -281,13 +323,13 @@ const wzHero = await wp.textContent('.hero');
 check('かんたん入力を終えると、そのプランのCF表が開く（2026〜1986+90年）', wzCols === 2076 - 2026 + 1 && /2076年/.test(wzHero) && wzOverflow <= 0, `${wzCols}列 ${wzHero.slice(0, 30)}`);
 await wp.reload();
 await wp.waitForSelector('#seg-input');
-await wp.tap('#seg-input');
+await go(wp, '#seg-input');
 await wp.waitForSelector('#f-start');
 const kept = await wp.inputValue('#f-asset-1-amt');
 check('作ったプランは再読み込みしても残り、案内はもう出ない', kept === '400' && (await wp.locator('.welcome').count()) === 0, `普通預金等=${kept}`);
 
 // プランの一覧：記入例とかんたん入力で作ったプランがあり、切り替え・名前の変更・複製・削除ができる
-await wp.tap('#planbtn');
+await go(wp, '#planbtn');
 await wp.waitForSelector('.sheet');
 const planNames = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
 await wp.screenshot({ path: join(shots, '12-plans.png') });
@@ -312,7 +354,7 @@ const exampleEnd = await wp.textContent('#planname');
 check('プランを選ぶと切り替わり、一覧が閉じる', sheetClosed && exampleEnd === '記入例', exampleEnd);
 
 // 比較：2つのプランの推移と主な数字を並べる
-await wp.tap('#seg-cmp');
+await go(wp, '#seg-cmp');
 await wp.waitForSelector('#cmpchart');
 const lines = await wp.$$eval('#cmpchart path', (els) => els.length);
 const heads = await wp.$$eval('table.cmpt thead th', (els) => els.map((e) => e.textContent).filter(Boolean));
@@ -328,7 +370,7 @@ await wp.locator('.tablecard').scrollIntoViewIfNeeded();
 await wp.screenshot({ path: join(shots, '14-compare-table.png') });
 
 // バックアップ：すべてのプランをファイルに保存し、そのファイルから読み込める
-await wp.tap('#planbtn');
+await go(wp, '#planbtn');
 await wp.waitForSelector('.sheet');
 const [dl] = await Promise.all([wp.waitForEvent('download'), wp.locator('.bk .btn', { hasText: 'ファイルに保存' }).tap()]);
 const dlPath = join(shots, dl.suggestedFilename());
@@ -356,9 +398,9 @@ await wp.locator('.bk .btn', { hasText: '追加する' }).tap();
 await wp.waitForTimeout(150);
 await wp.locator('.sheethead button').tap();
 await wp.waitForTimeout(100);
-await wp.tap('#seg-input');
+await go(wp, '#seg-input');
 await wp.waitForTimeout(150);
-await wp.tap('#seg-cmp');
+await go(wp, '#seg-cmp');
 await wp.waitForTimeout(150);
 const pwned = await wp.evaluate(() => !!document.getElementById('pwn1') || !!document.getElementById('pwn2') || document.title === 'pwn');
 const shownName = await wp.textContent('#planname');
