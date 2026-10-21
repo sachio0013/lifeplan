@@ -8,10 +8,11 @@
 
 <div id="shell">
   <header id="topbar">
-    <span class="name">ライフプラン</span>
+    <button id="planbtn" onclick="A.planSheet()" aria-label="プランを切り替える・管理する" aria-haspopup="dialog"><span id="planname"></span><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     <div class="seg" role="tablist" aria-label="画面の切り替え">
       <button id="seg-input" role="tab" onclick="A.view('input')">入力</button>
       <button id="seg-cf" role="tab" onclick="A.view('cf')">CF表</button>
+      <button id="seg-cmp" role="tab" onclick="A.view('cmp')">比較</button>
     </div>
   </header>
   <div id="scroll">
@@ -23,7 +24,9 @@
     </div>
     <div id="cfview" hidden><div id="cf"></div></div>
     <div id="wizview" hidden></div>
+    <div id="cmpview" hidden><div id="cmp"></div></div>
   </div>
+  <div id="sheetwrap" hidden></div>
 </div>
 
 <script>

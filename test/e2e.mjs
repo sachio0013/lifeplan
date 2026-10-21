@@ -130,10 +130,10 @@ check('再読み込みしても入力が残っている', persisted === '520', `
 // サンプルに戻す（確認つき）
 await page.locator('.reset button').tap();
 await page.waitForTimeout(100);
-await page.locator('.reset button', { hasText: 'サンプルに戻す' }).tap();
+await page.locator('.reset button', { hasText: '記入例に戻す' }).tap();
 await page.waitForTimeout(150);
 const resetVal = await page.inputValue('#f-living-1-amt');
-check('「サンプルの内容に戻す」で初期値に戻る', resetVal === '360', `基本生活費=${resetVal}`);
+check('「記入例の内容に戻す」で初期値に戻る', resetVal === '360', `基本生活費=${resetVal}`);
 
 // iPhoneは16px未満の入力欄をタップすると画面を拡大してしまうので、全部16px以上にしておく
 await page.tap('#tabs .tab[data-k="basic"]');
@@ -238,6 +238,47 @@ await wp.tap('#seg-input');
 await wp.waitForSelector('#f-start');
 const kept = await wp.inputValue('#f-asset-1-amt');
 check('作ったプランは再読み込みしても残り、案内はもう出ない', kept === '400' && (await wp.locator('.welcome').count()) === 0, `普通預金等=${kept}`);
+
+// プランの一覧：記入例とかんたん入力で作ったプランがあり、切り替え・名前の変更・複製・削除ができる
+await wp.tap('#planbtn');
+await wp.waitForSelector('.sheet');
+const planNames = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
+await wp.screenshot({ path: join(shots, '12-plans.png') });
+await wp.fill('#f-planname', 'わが家');
+await wp.press('#f-planname', 'Tab');
+await wp.waitForTimeout(100);
+await wp.locator('.sheet .btn', { hasText: '複製' }).tap();
+await wp.waitForTimeout(100);
+const afterDup = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
+const topName = await wp.textContent('#planname');
+check('プランの名前を変えて複製できる', JSON.stringify(planNames) === '["記入例","プラン2"]' && JSON.stringify(afterDup) === '["記入例","わが家","わが家のコピー"]' && topName === 'わが家のコピー', `${planNames} → ${afterDup} / 表示中=${topName}`);
+await wp.locator('.pl', { hasText: 'わが家のコピー' }).locator('button.del').tap();
+await wp.waitForTimeout(50);
+await wp.locator('.plconfirm .btn', { hasText: '削除する' }).tap();
+await wp.waitForTimeout(100);
+const afterDel = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
+check('削除は確認してから行う', JSON.stringify(afterDel) === '["記入例","わが家"]', `${afterDel}`);
+await wp.locator('.pl .pick', { hasText: '記入例' }).tap();
+await wp.waitForTimeout(150);
+const sheetClosed = (await wp.locator('.sheet').count()) === 0;
+const exampleEnd = await wp.textContent('#planname');
+check('プランを選ぶと切り替わり、一覧が閉じる', sheetClosed && exampleEnd === '記入例', exampleEnd);
+
+// 比較：2つのプランの推移と主な数字を並べる
+await wp.tap('#seg-cmp');
+await wp.waitForSelector('#cmpchart');
+const lines = await wp.$$eval('#cmpchart path', (els) => els.length);
+const heads = await wp.$$eval('table.cmpt thead th', (els) => els.map((e) => e.textContent).filter(Boolean));
+const diffs = await wp.$$eval('table.cmpt .df.up, table.cmpt .df.down', (els) => els.length);
+const cmpOverflow = await wp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+const cbox = await wp.locator('#cmpchart').boundingBox();
+await wp.touchscreen.tap(cbox.x + cbox.width * 0.6, cbox.y + cbox.height * 0.5);
+await wp.waitForTimeout(100);
+const ctip = await wp.locator('#cmptip').textContent();
+check('比較画面に2本の推移・差つきの表・タップで年ごとの値が出る', lines === 2 && JSON.stringify(heads) === '["記入例","わが家"]' && diffs >= 3 && cmpOverflow <= 0 && /年記入例[\d,−]+万わが家/.test(ctip), `lines=${lines} heads=${heads} diffs=${diffs} tip=${ctip}`);
+await wp.screenshot({ path: join(shots, '13-compare.png'), fullPage: false });
+await wp.locator('.tablecard').scrollIntoViewIfNeeded();
+await wp.screenshot({ path: join(shots, '14-compare-table.png') });
 await fresh.close();
 
 // ダークモード

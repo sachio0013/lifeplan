@@ -63,7 +63,7 @@
   var store = load();
   var state = plan().state;
   var ui = {
-    view: location.hash === '#cf' ? 'cf' : 'input',
+    view: location.hash === '#cf' ? 'cf' : location.hash === '#cmp' ? 'cmp' : 'input',
     active: 'basic',
     openMember: 0,
     openCalc: 0,
@@ -71,6 +71,9 @@
     confirmReset: false,
     confirmDelMember: 0,
     wz: null,          // かんたん入力の途中の答え
+    sheet: false,      // プランの一覧を開いているか
+    confirmDelPlan: 0,
+    cmp: null,         // 比較で選んでいるプランの id
     inputScroll: 0
   };
   var result = E.compute(state);
@@ -675,8 +678,8 @@
 
     h += '<footer class="done">入力はここまでです。おつかれさまでした。</footer>';
     h += '<div class="reset">' + (ui.confirmReset
-      ? '<div class="q">入力をすべて消して、サンプルの内容に戻しますか？</div><div class="row"><button class="btn" onclick="A.resetYes()">サンプルに戻す</button><button class="btn ghost" onclick="A.resetNo()">やめる</button></div>'
-      : '<button class="btn ghost" onclick="A.resetAsk()">サンプルの内容に戻す</button>') + '</div>';
+      ? '<div class="q">表示中のプランの入力をすべて消して、記入例の内容に戻しますか？</div><div class="row"><button class="btn" onclick="A.resetYes()">記入例に戻す</button><button class="btn ghost" onclick="A.resetNo()">やめる</button></div>'
+      : '<button class="btn ghost" onclick="A.resetAsk()">このプランを記入例の内容に戻す</button>') + '</div>';
     return h;
   }
 
@@ -1083,6 +1086,232 @@
     '</div>';
   }
 
+  // ---------- プラン（保存した複数の入力）の切り替えと比較 ----------
+
+  function switchTo(id) {
+    var p = byId(store.plans, id); if (!p) return;
+    store.activeId = id;
+    state = p.state;
+    ui.openMember = 0; ui.openCalc = 0; ui.carDetailOpen = false; ui.confirmReset = false; ui.inputScroll = 0;
+    quiet = true;
+  }
+  function uniqueName(base) {
+    var name = base, n = 2;
+    while (store.plans.some(function (x) { return x.name === name; })) name = base + '（' + (n++) + '）';
+    return name;
+  }
+
+  A.planSheet = function () { ui.sheet = !ui.sheet; ui.confirmDelPlan = 0; commit(); };
+  A.planSwitch = function (id) {
+    switchTo(id);
+    ui.sheet = false;
+    commit();
+    document.getElementById('scroll').scrollTop = 0;
+  };
+  A.planRename = function (v) { var t = String(v).trim(); if (t) plan().name = t.slice(0, 30); commit(); };
+  A.planDup = function () {
+    var src = plan();
+    var p = { id: store.nextPlanId++, name: uniqueName(src.name + 'のコピー'), state: JSON.parse(JSON.stringify(src.state)) };
+    store.plans.splice(store.plans.indexOf(src) + 1, 0, p);
+    switchTo(p.id);
+    commit();
+  };
+  A.planDel = function (id) {
+    if (store.plans.length < 2) return;
+    if (ui.confirmDelPlan !== id) { ui.confirmDelPlan = id; commit(); return; }
+    store.plans = store.plans.filter(function (p) { return p.id !== id; });
+    if (ui.cmp) ui.cmp = ui.cmp.filter(function (x) { return x !== id; });
+    ui.confirmDelPlan = 0;
+    if (store.activeId === id) switchTo(store.plans[0].id);
+    commit();
+  };
+  A.planDelNo = function () { ui.confirmDelPlan = 0; commit(); };
+  A.planNew = function () { ui.sheet = false; A.wizOpen(); };
+  A.cmpToggle = function (id) {
+    var sel = cmpSelection();
+    var i = sel.indexOf(id);
+    if (i >= 0) { if (sel.length > 1) sel.splice(i, 1); }
+    else if (sel.length < 3) sel.push(id);
+    ui.cmp = sel;
+    commit();
+  };
+
+  // バックアップ（ファイルへの保存と読み込み）の欄。中身は後で作る
+  function renderBackup() {}
+
+  function sheetHTML() {
+    var list = store.plans.map(function (p) {
+      var on = p.id === store.activeId;
+      var r = E.compute(p.state);
+      var sub = r.years.length ? (r.shortfall ? r.shortfall.age + '歳で預金が不足' : '終了時点 ' + man(r.endTotal) + '万円') : '計算できません';
+      return '<div class="pl' + (on ? ' on' : '') + '">' +
+        '<button class="pick" onclick="A.planSwitch(' + p.id + ')" aria-current="' + on + '">' +
+          '<span class="radio"></span><span class="nm">' + esc(p.name) + '</span><span class="sub' + (r.shortfall ? ' neg' : '') + '">' + sub + '</span>' +
+        '</button>' +
+        (store.plans.length > 1 ? '<button class="del" style="margin:0" aria-label="「' + esc(p.name) + '」を削除" onclick="A.planDel(' + p.id + ')">' + ic('del', 20) + '</button>' : '') +
+      '</div>' +
+      (ui.confirmDelPlan === p.id ? '<div class="plconfirm"><span>「' + esc(p.name) + '」を削除しますか？元に戻せません</span>' +
+        '<button class="btn danger" onclick="A.planDel(' + p.id + ')">削除する</button><button class="btn ghost" onclick="A.planDelNo()">やめる</button></div>' : '');
+    }).join('');
+    return '<div class="backdrop" onclick="A.planSheet()"></div>' +
+      '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-t">' +
+        '<div class="sheethead"><h2 id="sheet-t">プラン</h2><button class="del" style="margin-left:auto" aria-label="閉じる" onclick="A.planSheet()">' + ic('close', 22) + '</button></div>' +
+        '<div class="hint" style="padding:0 0 8px">住宅購入の有無、働き方の違いなど、条件を変えた家計を別々に保存して比べられます。</div>' +
+        list +
+        '<div class="fl" style="border-top:1px solid var(--line)"><label class="lb" for="f-planname">表示中のプランの名前</label>' +
+          '<div class="fi"><input type="text" id="f-planname" class="op" style="flex:1;min-width:0" maxlength="30" value="' + esc(plan().name) + '" onchange="A.planRename(this.value)"></div></div>' +
+        '<div class="sheetbtns">' +
+          '<button class="btn ghost" onclick="A.planDup()">表示中のプランを複製</button>' +
+          '<button class="btn" onclick="A.planNew()">＋ かんたん入力で作る</button>' +
+        '</div>' +
+        '<div id="backup"></div>' +
+      '</div>';
+  }
+
+  function cmpSelection() {
+    var ids = store.plans.map(function (p) { return p.id; });
+    var sel = (ui.cmp || []).filter(function (id) { return ids.indexOf(id) >= 0; });
+    if (!sel.length) {
+      sel = [store.activeId].concat(ids.filter(function (id) { return id !== store.activeId; })).slice(0, 3);
+    }
+    return sel;
+  }
+
+  function planMetrics(p) {
+    var r = E.compute(p.state);
+    var minDep = Infinity, inc = 0, exp = 0;
+    r.years.forEach(function (y) { minDep = Math.min(minDep, y.assets.deposit); inc += y.income.total; exp += y.expense.total; });
+    return { r: r, end: r.endTotal, endAge: r.endAge, endYear: r.years.length ? r.years[r.years.length - 1].year : null, shortfall: r.shortfall, minDep: r.years.length ? minDep : 0, inc: inc, exp: exp };
+  }
+
+  var cmpGeom = null;
+  function cmpChartSVG(width, series) {
+    var W = Math.max(280, width), H = 220, L = 46, R = 10, T = 10, B = 24;
+    var pw = W - L - R, ph = H - T - B;
+    var y0 = Infinity, y1 = -Infinity, top = 0, bottom = 0;
+    series.forEach(function (s) {
+      s.m.r.years.forEach(function (r) {
+        y0 = Math.min(y0, r.year); y1 = Math.max(y1, r.year);
+        top = Math.max(top, r.assets.total); bottom = Math.min(bottom, r.assets.total);
+      });
+    });
+    if (!isFinite(y0)) return '';
+    var step = niceStep((top - bottom) || 1, 4);
+    var yMax = Math.ceil(top / step) * step || step, yMin = Math.floor(bottom / step) * step;
+    var span = Math.max(1, y1 - y0);
+    function sx(year) { return L + (year - y0) / span * pw; }
+    function sy(v) { return T + (yMax - v) / (yMax - yMin) * ph; }
+    var g = '';
+    for (var t = yMin; t <= yMax + 1e-9; t += step) {
+      var y = sy(t).toFixed(1);
+      g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '" stroke="var(--line)" stroke-width="1"/>';
+      g += '<text x="' + (L - 6) + '" y="' + (+y + 3.5) + '" text-anchor="end">' + man(t) + '</text>';
+    }
+    var xl = '';
+    for (var yr = Math.ceil(y0 / 10) * 10; yr <= y1; yr += 10) {
+      xl += '<text x="' + sx(yr).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + yr + '</text>';
+    }
+    var zero = '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + sy(0).toFixed(1) + '" y2="' + sy(0).toFixed(1) + '" stroke="var(--text-muted)" stroke-width="1"/>';
+    var lines = series.map(function (s) {
+      var d = s.m.r.years.map(function (r, i) { return (i ? 'L' : 'M') + sx(r.year).toFixed(1) + ',' + sy(r.assets.total).toFixed(1); }).join(' ');
+      return '<path d="' + d + '" fill="none" stroke="' + s.color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    }).join('');
+    cmpGeom = { L: L, pw: pw, W: W, y0: y0, y1: y1, T: T, ph: ph, sx: sx, sy: sy };
+    var desc = 'プランごとの金融資産の推移。' + series.map(function (s) { return s.name + 'は終了時点 ' + man(s.m.end) + '万円'; }).join('、');
+    return '<svg id="cmpchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(desc) + '">' + g + zero + lines + xl +
+      '<line id="cmphl" x1="0" x2="0" y1="' + T + '" y2="' + (T + ph) + '" stroke="var(--text-muted)" stroke-width="1" visibility="hidden"/>' +
+      series.map(function (s, i) { return '<circle id="cmpdot' + i + '" r="4" fill="' + s.color + '" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>'; }).join('') +
+      '</svg>';
+  }
+
+  function bindCmpChart(series) {
+    var svg = document.getElementById('cmpchart'), tip = document.getElementById('cmptip');
+    if (!svg || !tip || !cmpGeom) return;
+    function show(ev) {
+      var rect = svg.getBoundingClientRect();
+      var x = (ev.clientX - rect.left) * (cmpGeom.W / rect.width);
+      var year = Math.round(cmpGeom.y0 + (x - cmpGeom.L) / cmpGeom.pw * (cmpGeom.y1 - cmpGeom.y0));
+      if (year < cmpGeom.y0 || year > cmpGeom.y1) return;
+      var hl = document.getElementById('cmphl');
+      hl.setAttribute('x1', cmpGeom.sx(year).toFixed(1)); hl.setAttribute('x2', cmpGeom.sx(year).toFixed(1));
+      hl.setAttribute('visibility', 'visible');
+      var rows = series.map(function (s, i) {
+        var r = s.m.r.years.filter(function (y) { return y.year === year; })[0];
+        var dot = document.getElementById('cmpdot' + i);
+        if (r) { dot.setAttribute('cx', cmpGeom.sx(year).toFixed(1)); dot.setAttribute('cy', cmpGeom.sy(r.assets.total).toFixed(1)); dot.setAttribute('visibility', 'visible'); }
+        else dot.setAttribute('visibility', 'hidden');
+        return '<div class="r"><i style="background:' + s.color + '"></i>' + esc(s.name) + '<b>' + (r ? man(r.assets.total) + '万' : '—') + '</b></div>';
+      }).join('');
+      tip.innerHTML = '<div class="t">' + year + '年</div>' + rows;
+      tip.hidden = false;
+      var card = svg.parentNode.getBoundingClientRect();
+      var px = ev.clientX - card.left, tw = tip.offsetWidth;
+      tip.style.left = Math.max(6, px + 14 + tw > card.width ? px - 14 - tw : px + 14) + 'px';
+      tip.style.top = '70px';
+    }
+    svg.addEventListener('pointermove', show);
+    svg.addEventListener('pointerdown', show);
+    svg.addEventListener('pointerleave', function (ev) {
+      if (ev.pointerType !== 'mouse') return;
+      tip.hidden = true;
+      ['cmphl', 'cmpdot0', 'cmpdot1', 'cmpdot2'].forEach(function (id) { var el = document.getElementById(id); if (el) el.setAttribute('visibility', 'hidden'); });
+    });
+  }
+
+  var CMP_COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)'];
+  var cmpLast = [];
+
+  function cmpHTML(width) {
+    if (store.plans.length < 2) {
+      return '<div class="hero"><div class="k">プランの比較</div></div>' +
+        '<div class="card"><p class="wzlead" style="margin:0 0 12px">プランが1つだけです。表示中のプランを複製して条件を変えるか、かんたん入力で別のプランを作ると、ここで並べて比べられます。</p>' +
+        '<div class="sheetbtns" style="margin:0"><button class="btn ghost" onclick="A.planDup();A.view(\'input\')">表示中のプランを複製</button><button class="btn" onclick="A.wizOpen()">＋ かんたん入力で作る</button></div></div>';
+    }
+    var sel = cmpSelection();
+    var series = cmpLast = sel.map(function (id, i) { var p = byId(store.plans, id); return { id: id, name: p.name, color: CMP_COLORS[i], m: planMetrics(p) }; });
+    var chips = store.plans.map(function (p) {
+      var i = sel.indexOf(p.id);
+      var full = i < 0 && sel.length >= 3;
+      return '<button class="chipbtn' + (i >= 0 ? ' on' : '') + '" aria-pressed="' + (i >= 0) + '"' + (full ? ' disabled' : '') + ' onclick="A.cmpToggle(' + p.id + ')">' +
+        '<i style="background:' + (i >= 0 ? CMP_COLORS[i] : 'transparent') + '"></i>' + esc(p.name) + '</button>';
+    }).join('');
+    var base = series[0].m;
+    function diff(v, b, higherIsBetter) {
+      var d = Math.round(v - b);
+      if (!d) return '<span class="df">±0</span>';
+      var good = higherIsBetter ? d > 0 : d < 0;
+      return '<span class="df ' + (good ? 'up' : 'down') + '">' + (d > 0 ? '＋' : '−') + Math.abs(d).toLocaleString('ja-JP') + '</span>';
+    }
+    function row(label, f, higher, note) {
+      return '<tr><th scope="row">' + label + (note ? '<small>' + note + '</small>' : '') + '</th>' + series.map(function (s, i) {
+        var v = f(s.m);
+        return '<td><b>' + man(v) + '</b>' + (i ? diff(v, f(base), higher) : '') + '</td>';
+      }).join('') + '</tr>';
+    }
+    var table = '<table class="cmpt"><thead><tr><th></th>' + series.map(function (s) {
+        return '<th scope="col"><i style="background:' + s.color + '"></i>' + esc(s.name) + '</th>';
+      }).join('') + '</tr></thead><tbody>' +
+      row('終了時点の金融資産', function (m) { return m.end; }, true) +
+      '<tr><th scope="row">預金が不足する年齢</th>' + series.map(function (s) {
+        return '<td>' + (s.m.shortfall ? '<b class="neg">' + s.m.shortfall.age + '歳</b><span class="df">' + s.m.shortfall.year + '年</span>' : '<b>なし</b>') + '</td>';
+      }).join('') + '</tr>' +
+      row('普通預金等が最も少ない年の額', function (m) { return m.minDep; }, true) +
+      row('収入の合計', function (m) { return m.inc; }, true, '期間中') +
+      row('支出の合計', function (m) { return m.exp; }, false, '期間中') +
+      '<tr><th scope="row">期間</th>' + series.map(function (s) {
+        return '<td><span class="df" style="margin:0">' + (s.m.r.years.length ? s.m.r.years[0].year + '〜' + s.m.endYear + '年' : '—') + '</span></td>';
+      }).join('') + '</tr>' +
+      '</tbody></table>';
+    return '<div class="hero"><div class="k">プランの比較</div><div class="note">比べるプランを3つまで選べます</div></div>' +
+      '<div class="chips">' + chips + '</div>' +
+      '<div class="card chartcard"><h3>金融資産の推移</h3>' +
+        '<div class="keys">' + series.map(function (s) { return '<span><i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>'; }).join('') + '</div>' +
+        cmpChartSVG(width, series) + '<div class="tip" id="cmptip" hidden></div>' +
+      '</div>' +
+      '<div class="card tablecard"><h3>主な数字</h3><div class="sub">単位：万円。2つ目以降の小さな数字は、1つ目のプランとの差です。</div>' +
+        '<div class="tablewrap">' + table + '</div></div>';
+  }
+
   // ---------- 描画 ----------
 
   function markTabs() {
@@ -1112,10 +1341,23 @@
     var top = sc.scrollTop;
     var active = document.activeElement && document.activeElement.id;
 
-    document.getElementById('seg-input').classList.toggle('on', ui.view === 'input');
-    document.getElementById('seg-cf').classList.toggle('on', ui.view === 'cf');
-    document.getElementById('seg-input').setAttribute('aria-selected', ui.view === 'input');
-    document.getElementById('seg-cf').setAttribute('aria-selected', ui.view === 'cf');
+    ['input', 'cf', 'cmp'].forEach(function (v) {
+      var b = document.getElementById('seg-' + v);
+      b.classList.toggle('on', ui.view === v);
+      b.setAttribute('aria-selected', ui.view === v);
+    });
+    document.getElementById('planname').textContent = plan().name;
+    var sheet = document.getElementById('sheetwrap');
+    var wasOpen = !sheet.hidden;
+    sheet.hidden = !ui.sheet;
+    if (ui.sheet) {
+      sheet.innerHTML = sheetHTML();
+      renderBackup();
+      if (!wasOpen) { var t = document.getElementById('sheet-t'); t.tabIndex = -1; t.focus(); }
+    } else if (wasOpen) {
+      sheet.innerHTML = '';
+      document.getElementById('planbtn').focus();
+    }
 
     var summary = document.getElementById('summary');
     summary.hidden = ui.view !== 'input';
@@ -1126,8 +1368,13 @@
     document.getElementById('inputview').hidden = ui.view !== 'input';
     document.getElementById('cfview').hidden = ui.view !== 'cf';
     document.getElementById('wizview').hidden = ui.view !== 'wizard';
+    document.getElementById('cmpview').hidden = ui.view !== 'cmp';
 
-    if (ui.view === 'wizard') {
+    if (ui.view === 'cmp') {
+      var cmp = document.getElementById('cmp');
+      cmp.innerHTML = cmpHTML(cmp.clientWidth - 24);
+      bindCmpChart(cmpLast);
+    } else if (ui.view === 'wizard') {
       document.getElementById('wizview').innerHTML = wizardHTML();
     } else if (ui.view === 'input') {
       document.getElementById('tabs').innerHTML = [['basic', '基本'], ['income', '収入'], ['pension', '年金'], ['expense', '支出'], ['invest', '投資']]
@@ -1160,9 +1407,10 @@
   summaryEl.addEventListener('keydown', function (ev) {
     if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); A.view('cf'); }
   });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && ui.sheet) A.planSheet(); });
   var resizeTimer = null;
   window.addEventListener('resize', function () {
-    if (ui.view !== 'cf') return;
+    if (ui.view !== 'cf' && ui.view !== 'cmp') return;
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(render, 120);
   });
