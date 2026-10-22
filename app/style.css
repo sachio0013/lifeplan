@@ -91,7 +91,7 @@ button { font-family: inherit; color: inherit; }
 #summary .warnline .worst { margin-left: auto; font-size: 16px; font-weight: 900; white-space: nowrap; font-variant-numeric: tabular-nums; }
 #summary .warnline span:first-of-type { white-space: nowrap; }
 #summary svg { display: block; margin-top: 3px; }
-.delta { position: absolute; right: 14px; top: 34px; display: flex; align-items: baseline; gap: 3px; padding: 4px 11px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; opacity: 0; transform: translateY(4px); transition: opacity .2s, transform .2s; pointer-events: none; }
+.delta { position: absolute; left: 12px; top: 4px; display: flex; align-items: baseline; gap: 3px; padding: 4px 11px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; opacity: 0; transform: translateY(4px); transition: opacity .2s, transform .2s; pointer-events: none; }
 .delta.show { opacity: 1; transform: none; }
 .delta .k { font-size: 12.5px; font-weight: 700; color: var(--text-muted); }
 .delta .k:first-child { margin-right: 4px; }
@@ -131,11 +131,8 @@ h2.sec .ic { color: var(--accent); background: var(--accent-soft); border-radius
 select.rq, select.op { -webkit-appearance: none; appearance: none; padding-right: 22px; background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%); background-position: calc(100% - 13px) 55%, calc(100% - 8px) 55%; background-size: 5px 5px; background-repeat: no-repeat; }
 input.num { text-align: right; font-variant-numeric: tabular-nums; }
 
-/* スマホで入力中：上のバーと目次をたたみ、サマリーは1行に */
+/* スマホで入力中：上のバーと目次をたたむ（サマリーとグラフは残す） */
 #shell.kb #topbar, #shell.kb #tabs, #shell.kb #legend { display: none; }
-#shell.kb #summary { height: 44px; padding-top: 10px; }
-#shell.kb #summary svg { display: none; }
-#shell.kb .delta { top: 6px; }
 input::placeholder { color: var(--text-faint); font-weight: 500; }
 
 .lockyear { font-size: 16px; font-weight: 700; padding: 7px 2px 7px 9px; font-variant-numeric: tabular-nums; }
@@ -156,7 +153,12 @@ input::placeholder { color: var(--text-faint); font-weight: 500; }
 .dup .ic { color: var(--accent-ink); }
 .dup .txt { font-size: 12.5px; font-weight: 700; color: var(--accent-ink); line-height: 1.5; }
 .memo { width: 100%; margin-top: 9px; font-weight: 500; }
-input.date { width: 158px; padding-right: 6px; font-variant-numeric: tabular-nums; }
+/* 生年月日：数字で打つ欄＋カレンダーのボタン（上に透明な日付選択を重ねる） */
+.datef { display: inline-flex; align-items: center; gap: 6px; }
+.datef input[type=text] { width: 140px; font-variant-numeric: tabular-nums; }
+.datef .cal { position: relative; width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: var(--accent-soft); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; }
+.datef .cal input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; margin: 0; cursor: pointer; font-size: 16px; }
+.datef .cal input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
 
 /* 入力の確認 */
 .rq.bad, .op.bad { box-shadow: inset 0 0 0 2px var(--neg); }

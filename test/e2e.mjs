@@ -56,7 +56,11 @@ await page.waitForTimeout(200);
 const after = await page.textContent('#summary');
 check('基本生活費を変えるとサマリーの数字が変わる', before !== after, `${before.trim().slice(0, 30)} → ${after.trim().slice(0, 30)}`);
 const deltaText = await page.locator('#delta.show').textContent().catch(() => '');
-check('変えた直後に、終了時点の金融資産の増減が出る', /今の変更で−[\d,]+万円/.test(deltaText), deltaText);
+const pillClear = await page.evaluate(() => {
+  const p = document.getElementById('delta').getBoundingClientRect(), g = document.querySelector('#summary svg[preserveAspectRatio]').getBoundingClientRect();
+  return p.bottom <= g.top + 2;
+});
+check('変えた直後に、終了時点の金融資産の増減が出る（グラフには重ならない）', /今の変更で−[\d,]+万円/.test(deltaText) && pillClear, `${deltaText} 重ならない=${pillClear}`);
 await page.screenshot({ path: join(shots, '1b-delta.png') });
 await page.waitForTimeout(3000);
 check('増減の表示は数秒で消える', (await page.locator('#delta').isHidden()));
@@ -76,6 +80,7 @@ await page.tap('#f-insurance-1-amt');
 await page.waitForTimeout(250);
 const sel = await page.evaluate(() => { const e = document.activeElement; return [e.id, e.selectionStart, e.selectionEnd, e.value.length]; });
 const folded = await page.evaluate(() => document.getElementById('shell').classList.contains('kb') && getComputedStyle(document.getElementById('topbar')).display === 'none');
+const graphWhileTyping = await page.evaluate(() => { const g = document.querySelector('#summary svg[preserveAspectRatio]'); return !!g && g.getBoundingClientRect().height > 20; });
 await page.keyboard.type('２４');
 await page.keyboard.press('Enter');
 await page.waitForTimeout(200);
@@ -84,9 +89,9 @@ const insVal = await page.inputValue('#f-insurance-1-amt');
 await page.evaluate(() => document.activeElement.blur());
 await page.waitForTimeout(300);
 const unfolded = await page.evaluate(() => !document.getElementById('shell').classList.contains('kb'));
-check('数字の欄はタップで全選択・全角も可・Enterで次へ。入力中は上をたたみ、終わると戻る',
-  sel[0] === 'f-insurance-1-amt' && sel[1] === 0 && sel[2] === sel[3] && sel[3] > 0 && folded && insVal === '24' && afterEnter === 'f-insurance-1-memo' && unfolded,
-  `選択=${sel} たたむ=${folded} 値=${insVal} 次=${afterEnter} 戻る=${unfolded}`);
+check('数字の欄はタップで全選択・全角も可・Enterで次へ。入力中は上のバーをたたむがグラフは残し、終わると戻る',
+  sel[0] === 'f-insurance-1-amt' && sel[1] === 0 && sel[2] === sel[3] && sel[3] > 0 && folded && graphWhileTyping && insVal === '24' && afterEnter === 'f-insurance-1-memo' && unfolded,
+  `選択=${sel} たたむ=${folded} グラフ=${graphWhileTyping} 値=${insVal} 次=${afterEnter} 戻る=${unfolded}`);
 await page.fill('#f-insurance-1-amt', '20');
 await page.press('#f-insurance-1-amt', 'Tab');
 await page.evaluate(() => document.activeElement.blur());
@@ -222,14 +227,22 @@ const small = await page.$$eval('#content input, #content select', (els) => els
   .filter((e) => e.offsetParent && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => e.id || e.className));
 check('入力欄・選択欄の文字がすべて16px以上（iPhoneで拡大されない）', small.length === 0, small.slice(0, 5).join(', '));
 
-// 生年月日は日付の選択欄。選び終えて欄を離れたら反映される
-const birthType = await page.getAttribute('#f-fam-3-birth', 'type');
+// 生年月日は数字で打てて（8桁でも）、横のカレンダーからも選べる
 const birthVal = await page.inputValue('#f-fam-3-birth');
-await page.fill('#f-fam-3-birth', '2022-04-01');
-await page.locator('#f-fam-3-birth').blur();
+await page.fill('#f-fam-3-birth', '２０２２０４０１');
+await page.press('#f-fam-3-birth', 'Tab');
 await page.waitForTimeout(150);
+const typed = await page.inputValue('#f-fam-3-birth');
 const eduHead = await page.locator('#content .card', { hasText: '第一子の教育費' }).locator('.cnt').textContent();
-check('生年月日は日付の選択欄で、変えると教育費（早生まれ）に反映される', birthType === 'date' && birthVal === '2022-01-01' && /2022\/04\/01・早生まれ/.test(eduHead), `type=${birthType} value=${birthVal} → ${eduHead}`);
+await page.fill('#f-fam-3-birth-cal', '2022-01-01');
+await page.locator('#f-fam-3-birth-cal').blur();
+await page.waitForTimeout(150);
+const picked = await page.inputValue('#f-fam-3-birth');
+await page.locator('#f-fam-3-birth').scrollIntoViewIfNeeded();
+await page.screenshot({ path: join(shots, '7a-birth.png') });
+check('生年月日は8桁の数字（全角も可）で打てて、カレンダーからも選べる',
+  birthVal === '2022/01/01' && typed === '2022/04/01' && /2022\/04\/01・早生まれ/.test(eduHead) && picked === '2022/01/01',
+  `${birthVal} → 打つ ${typed}（${eduHead}）→ カレンダー ${picked}`);
 
 // 入力の確認：終了年齢を今の年齢より下にすると、欄の下とページ上部で知らせ、CF表も落ちない
 await page.fill('#f-endage', '30');

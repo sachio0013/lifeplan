@@ -145,6 +145,33 @@
     toastTimer = setTimeout(function () { t.hidden = true; undo = null; }, 7000);
   }
 
+  // 生年月日の入力を「1990/04/01」の形にそろえる。8桁の数字・「1990-4-1」・「1990年4月1日」・全角も受け付ける。
+  // 日付として読めないものはそのまま残し、入力の確認で知らせる。
+  function normBirth(v) {
+    var t = String(v == null ? '' : v).trim()
+      .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+      .replace(/[年月\-－.．／]/g, '/').replace(/日/g, '').replace(/\s/g, '');
+    if (!t) return '';
+    var m = /^(\d{4})(\d{2})(\d{2})$/.exec(t) || /^(\d{4})\/(\d{1,2})\/(\d{1,2})\/?$/.exec(t);
+    if (!m) return t;
+    var out = m[1] + '/' + ('0' + m[2]).slice(-2) + '/' + ('0' + m[3]).slice(-2);
+    return E.isDate(out) ? out : t;
+  }
+
+  // 生年月日の欄：数字で打てる文字の欄＋カレンダーのボタン。
+  // ボタンの上に透明な日付選択の欄を重ね、タップするとそのまま端末のカレンダーが開くようにする。
+  // call は「A.birth(3,」のような呼び出しの前半。文字の欄は確定時、カレンダーは選び終えて離れたときに描き直す。
+  function dateField(id, cls, value, call, label) {
+    return '<span class="datef">' +
+      '<input type="text" inputmode="numeric" enterkeyhint="next" autocomplete="off" id="' + id + '" class="' + cls + ' sel" maxlength="12"' +
+        ' placeholder="19900401" aria-label="' + esc(label) + '（8桁の数字でも入力できます）" value="' + esc(value) + '" onchange="' + call + 'this.value)">' +
+      '<span class="cal">' + ic('calendar', 20) +
+        '<input type="date" id="' + id + '-cal" min="1900-01-01" max="2100-12-31" tabindex="-1" aria-label="' + esc(label) + 'をカレンダーから選ぶ"' +
+          ' value="' + isoDate(value) + '" onchange="' + call + 'this.value,this)" onblur="A.flush()" onclick="try{this.showPicker()}catch(e){}">' +
+      '</span>' +
+    '</span>';
+  }
+
   var renderQueued = false;
   function commit() {
     save();
@@ -196,7 +223,7 @@
     // 選んでいる間に描き直すと選択が閉じてしまうので、保存だけして、欄を離れたときに描き直す。
     birth: function (id, v, el) {
       var m = byId(state.family, id); if (!m) return;
-      m.birth = v ? v.replace(/-/g, '/') : '';
+      m.birth = normBirth(v);
       if (el && document.activeElement === el) { save(); pendingRender = true; return; }
       commit();
     },
@@ -353,6 +380,7 @@
   var ICONS = {
     add: '<path d="M12 5v14M5 12h14"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     del: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
     more: '<path d="M6 9l6 6 6-6"/>',
@@ -636,13 +664,12 @@
       return '<div class="member divide">' +
         '<div class="n1">' +
           textInput(fid('fam', m.id, 'name'), cls, 'flex:1;min-width:0', m.name, 'A.fam(' + m.id + ",'name',this.value)", '名前') +
-          '<button class="del" aria-label="詳しく" onclick="A.member(' + m.id + ')">' + chevron(open, 22) + '</button>' +
+          '<span class="badge">' + esc(m.relation) + '</span>' +
+          '<button class="del" style="margin-left:0" aria-label="詳しく" onclick="A.member(' + m.id + ')">' + chevron(open, 22) + '</button>' +
         '</div>' +
         '<div class="n2">' +
-          '<input type="date" id="' + fid('fam', m.id, 'birth') + '" class="' + cls + bad('fam:' + m.id, 'birth') + ' date" min="1900-01-01" max="2100-12-31" aria-label="生年月日"' +
-            ' value="' + isoDate(m.birth) + '" onchange="A.birth(' + m.id + ',this.value,this)" onblur="A.flush()">' +
+          dateField(fid('fam', m.id, 'birth'), cls + bad('fam:' + m.id, 'birth'), m.birth, 'A.birth(' + m.id + ',', '生年月日') +
           '<span class="u">' + ageLabel + '</span>' +
-          '<span class="badge" style="margin-left:auto">' + esc(m.relation) + '</span>' +
         '</div>' +
         vmsgs('fam:' + m.id) +
         (open ? '<div class="expand">' +
@@ -1242,8 +1269,7 @@
     var d = ui.wz.d, err = ui.wz.err[key];
     var id = 'w-' + key;
     var input = opts.date
-      ? '<input type="date" id="' + id + '" class="rq date' + (err ? ' bad' : '') + '" min="1900-01-01" max="2100-12-31" value="' + isoDate(d[key]) + '"' +
-        ' onchange="A.wz(\'' + key + '\',this.value,this)" onblur="A.flush()">'
+      ? dateField(id, 'rq' + (err ? ' bad' : ''), d[key], "A.wz('" + key + "',", label)
       : opts.text
         ? '<input type="text" id="' + id + '" class="op" style="flex:1;min-width:0" value="' + esc(d[key]) + '" placeholder="' + esc(opts.placeholder || '') + '" onchange="A.wz(\'' + key + '\',this.value)">'
         : '<input type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" id="' + id + '" class="' + (opts.optional ? 'op' : 'rq') + (err ? ' bad' : '') + ' num" style="width:' + (opts.width || 110) + 'px" value="' + esc(d[key]) + '" onchange="A.wz(\'' + key + '\',this.value)">';
@@ -1262,8 +1288,7 @@
         '<button class="del" aria-label="この子供を外す" onclick="A.wzKidDel(' + i + ')">' + ic('del', 20) + '</button>' +
       '</div>' +
       '<div class="fi" style="margin-top:8px">' +
-        '<input type="date" id="w-kid-' + i + '" class="rq date' + (err ? ' bad' : '') + '" min="1900-01-01" max="2100-12-31" aria-label="子供' + (i + 1) + 'の生年月日" value="' + isoDate(k.birth) + '"' +
-          ' onchange="A.wzKid(' + i + ',\'birth\',this.value,this)" onblur="A.flush()">' +
+        dateField('w-kid-' + i, 'rq' + (err ? ' bad' : ''), k.birth, 'A.wzKid(' + i + ",'birth',", '子供' + (i + 1) + 'の生年月日') +
         '<span class="u">生まれ（予定でも可）</span>' +
       '</div>' +
       (err ? '<div class="vmsg error">' + ic('warn', 15) + '<span>' + esc(err) + '</span></div>' : '') +
@@ -1342,7 +1367,7 @@
   A.wz = function (key, v, el) {
     var d = ui.wz.d;
     if (key === 'has2') d.has2 = !!v;
-    else if (key.indexOf('birth') === 0) d[key] = v ? v.replace(/-/g, '/') : '';
+    else if (key.indexOf('birth') === 0) d[key] = normBirth(v);
     else if (key === 'name1' || key === 'name2') d[key] = v;
     else d[key] = String(v).trim() === '' ? '' : String(toNum(v));
     delete ui.wz.err[key];
@@ -1351,7 +1376,7 @@
   };
   A.wzKid = function (i, field, v, el) {
     var k = ui.wz.d.kids[i]; if (!k) return;
-    k[field] = field === 'birth' ? (v ? v.replace(/-/g, '/') : '') : v;
+    k[field] = field === 'birth' ? normBirth(v) : v;
     if (field === 'birth') delete ui.wz.err['kid' + i];
     if (el && document.activeElement === el) { pendingRender = true; return; }
     commit();
@@ -1864,7 +1889,7 @@
   // 数字の欄をタップしたら中身を全部選ぶ（そのまま打てば置き換わる。一の位の右を狙ってタップしなくてよい）
   document.addEventListener('focusin', function (ev) {
     var el = ev.target;
-    if (!el.classList || !el.classList.contains('num')) return;
+    if (!el.classList || !(el.classList.contains('num') || el.classList.contains('sel'))) return;
     setTimeout(function () {
       if (document.activeElement === el) { try { el.setSelectionRange(0, el.value.length); } catch (e) { /* 選べない欄は何もしない */ } }
     }, 0);
