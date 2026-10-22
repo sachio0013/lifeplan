@@ -141,5 +141,82 @@
     };
   }
 
-  return { sample: sample, fromAnswers: fromAnswers };
+  // ---- 表紙で選ぶ「家族のかたち」「住まい」と、その参考値 ----
+  //
+  // 参考値は、かんたん入力の欄にあらかじめ入れておく「書き換える前提の目安の例」。統計の平均ではない。
+  // 金額は手取り・年額（万円）。生年月日は人それぞれなので空のまま（入力を求める）。
+
+  var FAMILIES = [
+    { key: 'single', label: 'ひとり暮らし', adults: 1, kids: 0 },
+    { key: 'couple', label: 'ふたり暮らし', adults: 2, kids: 0 },
+    { key: 'kid1', label: '3人家族（子供1人）', adults: 2, kids: 1 },
+    { key: 'kid2', label: '4人家族（子供2人）', adults: 2, kids: 2 },
+    { key: 'kid3', label: '5人家族（子供3人）', adults: 2, kids: 3 }
+  ];
+  var HOMES = [
+    { key: 'rent', label: '賃貸' },
+    { key: 'loan', label: '持ち家（ローン返済中）' },
+    { key: 'owned', label: '持ち家（ローンなし）' },
+    { key: 'parents', label: '実家・社宅など' }
+  ];
+  var NEEDS = [
+    { key: 'house', label: '家を買うか考えたい' },
+    { key: 'edu', label: '子供の教育費が心配' },
+    { key: 'retire', label: '老後のお金が足りるか' },
+    { key: 'invest', label: 'NISAなど積立投資を試したい' },
+    { key: 'work', label: '働き方を考えたい' },
+    { key: 'save', label: '節約したほうがいいか' }
+  ];
+
+  //                    single couple kid1 kid2 kid3
+  var REF = {
+    sal1:      [320, 400, 420, 450, 470],
+    sal2:      [0,   300, 200, 180, 150],
+    living:    [180, 250, 290, 330, 370],
+    insurance: [10,  15,  20,  24,  28],
+    deposit:   [200, 400, 350, 400, 450],
+    pension:   [150, 280, 260, 260, 250],
+    rent:      [84,  120, 132, 144, 156],   // 家賃（月7〜13万円）
+    loan:      [96,  132, 144, 156, 168],   // ローン返済＋管理費・固定資産税など
+    owned:     [30,  40,  40,  45,  45],    // 管理費・修繕・固定資産税など
+    parents:   [24,  36,  36,  40,  40]
+  };
+
+  // かんたん入力の答えのひな形（参考値入り）。_ref は「参考値のままの欄」の印
+  function templateAnswers(familyKey, homeKey, startYear) {
+    var fi = 0;
+    FAMILIES.forEach(function (f, i) { if (f.key === familyKey) fi = i; });
+    var f = FAMILIES[fi];
+    var home = REF[homeKey] ? homeKey : 'rent';
+    var d = {
+      startYear: startYear, endAge: 95, name1: '', birth1: '',
+      has2: f.adults > 1, name2: '', birth2: '', kids: [],
+      deposit: REF.deposit[fi], nisa: 0, ideco: 0, rate: 3,
+      sal1: REF.sal1[fi], retire1: 65, growth: 1, sal2: f.adults > 1 ? REF.sal2[fi] : '', retire2: 65, retireLump: 0,
+      pension: REF.pension[fi], pensionAge: 65,
+      living: REF.living[fi], housing: REF[home][fi], insurance: REF.insurance[fi], inflation: 1,
+      _ref: {}
+    };
+    for (var k = 0; k < f.kids; k++) d.kids.push({ name: '', birth: '' });
+    ['deposit', 'sal1', 'sal2', 'pension', 'living', 'housing', 'insurance'].forEach(function (key) { if (d[key] !== '') d._ref[key] = true; });
+    return d;
+  }
+
+  // 気になることに合わせて、作ったプランに試算の参考値を入れておく
+  function applyNeeds(state, needs) {
+    var sy = state.startYear;
+    var by = parseInt(String((state.family[0] || {}).birth || '').slice(0, 4), 10) || sy - 35;
+    if (needs.indexOf('invest') >= 0) {
+      state.invest[2].add = [{ id: 1, year: sy, toYear: Math.max(sy, by + 59), amount: 36, memo: '参考値：月3万円' }];
+    }
+    if (needs.indexOf('house') >= 0) {
+      state.loanCalc = { start: sy + 2, amount: 4000, years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: '' }], upkeep: 40 };
+    }
+    return state;
+  }
+
+  return {
+    sample: sample, fromAnswers: fromAnswers,
+    FAMILIES: FAMILIES, HOMES: HOMES, NEEDS: NEEDS, templateAnswers: templateAnswers, applyNeeds: applyNeeds
+  };
 }));

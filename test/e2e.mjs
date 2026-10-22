@@ -39,8 +39,24 @@ page.on('console', (m) => {
 });
 
 await page.goto(url);
+await page.waitForSelector('.cover');
+check('はじめて開くと表紙が出る', /のぞいてみよう/.test(await page.textContent('.cover')));
+await page.screenshot({ path: join(shots, '0-cover.png') });
+await page.locator('.cvalt .btn', { hasText: '記入例' }).tap();
 await page.waitForSelector('#f-start');
 await page.waitForTimeout(400);
+
+// 「？」を押すとFPのひとことが出て、もう一度押すと閉じる
+await page.locator('#card-living .hq').tap();
+await page.waitForTimeout(100);
+const helpText = await page.locator('#card-living .helpbox').textContent().catch(() => '');
+await page.locator('#card-living').scrollIntoViewIfNeeded();
+await page.screenshot({ path: join(shots, '0b-help.png') });
+await page.locator('#card-living .hq').tap();
+await page.waitForTimeout(100);
+check('「？」でFPのひとことが開き、もう一度押すと閉じる', /FPのひとこと/.test(helpText) && /食費/.test(helpText) && (await page.locator('.helpbox').count()) === 0, helpText.slice(0, 40));
+const helpCount = await page.$$eval('#content .hq', (els) => els.length);
+check('入力画面の各欄に「？」がある', helpCount >= 18, `${helpCount}個`);
 
 const summaryText = await page.textContent('#summary');
 check('サマリーに終了時点の金融資産が出る', /終了時点|預金が不足/.test(summaryText), summaryText.trim().slice(0, 60));
@@ -283,14 +299,20 @@ check('「年齢」に切り替えると家族１の年齢で入れられ、西�
 await page.fill('#f-living-2-year', '2056');
 await page.press('#f-living-2-year', 'Tab');
 
-// はじめての人：案内から「かんたん入力」で自分のプランを作る
+// はじめての人：表紙で家族のかたちと気になることを選び、参考値入りのかんたん入力で自分のプランを作る
 const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP', acceptDownloads: true });
 const wp = await fresh.newPage();
 wp.on('pageerror', (e) => errors.push(e.message));
 await wp.goto(url);
-await wp.waitForSelector('.welcome');
-check('はじめて開くと記入例の案内が出る', /記入例/.test(await wp.textContent('.welcome')));
-await wp.locator('.welcome .btn', { hasText: 'かんたん入力' }).tap();
+await wp.waitForSelector('.cover');
+await wp.locator('.opt', { hasText: '3人家族' }).tap();
+for (const n of ['家を買う', 'NISA', '節約']) { await wp.locator('.need', { hasText: n }).tap(); await wp.waitForTimeout(120); }
+const coverPicked = await wp.$$eval('.need.on, .opt.on', (els) => els.map((e) => e.textContent.trim()));
+const coverOverflow = await wp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+await wp.locator('.cvcta .btn').scrollIntoViewIfNeeded();
+await wp.screenshot({ path: join(shots, '0c-cover-picked.png') });
+check('表紙で家族のかたち・住まい・気になることを選べる', coverPicked.length === 5 && coverOverflow <= 0, coverPicked.join(' / '));
+await wp.locator('.cvcta .btn').tap();
 await wp.waitForSelector('.wz');
 await wp.locator('.wznav .btn', { hasText: '次へ' }).tap();
 await wp.waitForTimeout(100);
@@ -301,14 +323,20 @@ await wp.fill('#w-birth1', '1986-07-10'); await wp.locator('#w-birth1').blur();
 await wp.screenshot({ path: join(shots, '8-wizard-1.png') });
 const next = () => wp.locator('.wznav .btn', { hasText: /次へ|この内容で計算する/ }).tap().then(() => wp.waitForTimeout(100));
 await next();
-await wp.locator('.check').tap();
+const famPreset = await wp.evaluate(() => [document.querySelector('.check').classList.contains('on'), document.querySelectorAll('.kid').length]);
 await wp.fill('#w-birth2', '1988-02-03'); await wp.locator('#w-birth2').blur();
-await wp.locator('.btn', { hasText: '子供を追加' }).tap();
 await wp.fill('#w-kid-0', '2020-05-05'); await wp.locator('#w-kid-0').blur();
 await wp.waitForTimeout(100);
 await wp.screenshot({ path: join(shots, '9-wizard-2.png') });
 await next();
+const refBefore = await wp.$$eval('.wz .refchip', (els) => els.length);
+const depRef = await wp.inputValue('#w-deposit');
+await wp.screenshot({ path: join(shots, '9b-wizard-ref.png') });
 await wp.fill('#w-deposit', '400'); await wp.press('#w-deposit', 'Tab');
+await wp.waitForTimeout(100);
+const refAfter = await wp.$$eval('.wz .refchip', (els) => els.length);
+check('表紙の選択がかんたん入力に反映され、参考値の印は書き換えると消える',
+  famPreset[0] && famPreset[1] === 1 && refBefore === 1 && depRef === '350' && refAfter === 0, `家族２=${famPreset[0]} 子供=${famPreset[1]} 参考値 ${depRef} 印 ${refBefore}→${refAfter}`);
 await next();
 await wp.fill('#w-sal1', '450'); await wp.press('#w-sal1', 'Tab');
 await wp.fill('#w-sal2', '200'); await wp.press('#w-sal2', 'Tab');
@@ -333,33 +361,36 @@ await next();
 await wp.waitForSelector('#chart');
 const wzCols = await wp.$$eval('table.cf thead th', (ths) => ths.length - 1);
 const wzHero = await wp.textContent('.hero');
-check('かんたん入力を終えると、そのプランのCF表が開く（2026〜1986+90年）', wzCols === 2076 - 2026 + 1 && /2076年/.test(wzHero) && wzOverflow <= 0, `${wzCols}列 ${wzHero.slice(0, 30)}`);
+check('かんたん入力を終えると、そのプランのCF表が開く（2026〜1986+95年）', wzCols === 2081 - 2026 + 1 && /2081年/.test(wzHero) && wzOverflow <= 0, `${wzCols}列 ${wzHero.slice(0, 30)}`);
+const guideItems = await wp.$$eval('#cf .guide .gi .gt', (els) => els.map((e) => e.textContent));
+await wp.screenshot({ path: join(shots, '10b-guide.png') });
+check('CF表の上に、選んだ気になることに合わせた「次の一歩」が出る', JSON.stringify(guideItems) === '["家を買った場合と比べる","積立投資の効果を見る","節約の効果を見る"]', guideItems.join(' / '));
 await wp.reload();
 await wp.waitForSelector('#seg-input');
 await go(wp, '#seg-input');
 await wp.waitForSelector('#f-start');
 const kept = await wp.inputValue('#f-asset-1-amt');
-check('作ったプランは再読み込みしても残り、案内はもう出ない', kept === '400' && (await wp.locator('.welcome').count()) === 0, `普通預金等=${kept}`);
+check('作ったプランは再読み込みしても残り、表紙はもう出ない', kept === '400' && (await wp.locator('.cover').count()) === 0, `普通預金等=${kept}`);
 
 // プランの一覧：記入例とかんたん入力で作ったプランがあり、切り替え・名前の変更・複製・削除ができる
 await go(wp, '#planbtn');
 await wp.waitForSelector('.sheet');
 const planNames = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
 await wp.screenshot({ path: join(shots, '12-plans.png') });
-await wp.fill('#f-planname', 'わが家');
+await wp.fill('#f-planname', 'うちの家計');
 await wp.press('#f-planname', 'Tab');
 await wp.waitForTimeout(100);
 await wp.locator('.sheet .btn', { hasText: '複製' }).tap();
 await wp.waitForTimeout(100);
 const afterDup = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
 const topName = await wp.textContent('#planname');
-check('プランの名前を変えて複製できる', JSON.stringify(planNames) === '["記入例","プラン2"]' && JSON.stringify(afterDup) === '["記入例","わが家","わが家のコピー"]' && topName === 'わが家のコピー', `${planNames} → ${afterDup} / 表示中=${topName}`);
-await wp.locator('.pl', { hasText: 'わが家のコピー' }).locator('button.del').tap();
+check('プランの名前を変えて複製できる', JSON.stringify(planNames) === '["記入例","わが家"]' && JSON.stringify(afterDup) === '["記入例","うちの家計","うちの家計のコピー"]' && topName === 'うちの家計のコピー', `${planNames} → ${afterDup} / 表示中=${topName}`);
+await wp.locator('.pl', { hasText: 'うちの家計のコピー' }).locator('button.del').tap();
 await wp.waitForTimeout(50);
 await wp.locator('.plconfirm .btn', { hasText: '削除する' }).tap();
 await wp.waitForTimeout(100);
 const afterDel = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
-check('削除は確認してから行う', JSON.stringify(afterDel) === '["記入例","わが家"]', `${afterDel}`);
+check('削除は確認してから行う', JSON.stringify(afterDel) === '["記入例","うちの家計"]', `${afterDel}`);
 await wp.locator('.pl .pick', { hasText: '記入例' }).tap();
 await wp.waitForTimeout(150);
 const sheetClosed = (await wp.locator('.sheet').count()) === 0;
@@ -377,7 +408,7 @@ const cbox = await wp.locator('#cmpchart').boundingBox();
 await wp.touchscreen.tap(cbox.x + cbox.width * 0.6, cbox.y + cbox.height * 0.5);
 await wp.waitForTimeout(100);
 const ctip = await wp.locator('#cmptip').textContent();
-check('比較画面に2本の推移・差つきの表・タップで年ごとの値が出る', lines === 2 && JSON.stringify(heads) === '["記入例","わが家"]' && diffs >= 3 && cmpOverflow <= 0 && /年記入例[\d,−]+万わが家/.test(ctip), `lines=${lines} heads=${heads} diffs=${diffs} tip=${ctip}`);
+check('比較画面に2本の推移・差つきの表・タップで年ごとの値が出る', lines === 2 && JSON.stringify(heads) === '["記入例","うちの家計"]' && diffs >= 3 && cmpOverflow <= 0 && /年記入例[\d,−]+万うちの家計/.test(ctip), `lines=${lines} heads=${heads} diffs=${diffs} tip=${ctip}`);
 await wp.screenshot({ path: join(shots, '13-compare.png'), fullPage: false });
 await wp.locator('.tablecard').scrollIntoViewIfNeeded();
 await wp.screenshot({ path: join(shots, '14-compare-table.png') });
@@ -389,14 +420,14 @@ const [dl] = await Promise.all([wp.waitForEvent('download'), wp.locator('.bk .bt
 const dlPath = join(shots, dl.suggestedFilename());
 await dl.saveAs(dlPath);
 const saved = JSON.parse(readFileSync(dlPath, 'utf8'));
-check('バックアップのファイルにすべてのプランが入る', /^lifeplan-backup-\d{8}\.json$/.test(dl.suggestedFilename()) && saved.plans.length === 2 && saved.plans[1].name === 'わが家', `${dl.suggestedFilename()} plans=${saved.plans.map((p) => p.name)}`);
+check('バックアップのファイルにすべてのプランが入る', /^lifeplan-backup-\d{8}\.json$/.test(dl.suggestedFilename()) && saved.plans.length === 2 && saved.plans[1].name === 'うちの家計', `${dl.suggestedFilename()} plans=${saved.plans.map((p) => p.name)}`);
 await wp.setInputFiles('#f-backup-file', dlPath);
 await wp.waitForSelector('.bk .plconfirm');
 await wp.screenshot({ path: join(shots, '15-backup.png') });
 await wp.locator('.bk .btn', { hasText: '追加する' }).tap();
 await wp.waitForTimeout(150);
 const afterImport = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
-check('バックアップを読み込むと、今のプランを残したまま追加される', JSON.stringify(afterImport) === '["記入例","わが家","記入例（2）","わが家（2）"]', `${afterImport}`);
+check('バックアップを読み込むと、今のプランを残したまま追加される', JSON.stringify(afterImport) === '["記入例","うちの家計","記入例（2）","うちの家計（2）"]', `${afterImport}`);
 
 // 細工されたファイルを読み込んでも、文字として表示されるだけで画面に要素が入り込まない
 const evil = JSON.parse(JSON.stringify(saved.plans[0]));
@@ -418,6 +449,26 @@ await wp.waitForTimeout(150);
 const pwned = await wp.evaluate(() => !!document.getElementById('pwn1') || !!document.getElementById('pwn2') || document.title === 'pwn');
 const shownName = await wp.textContent('#planname');
 check('細工されたファイルでも要素が入り込まない', !pwned && shownName === '<img src=x id=pwn1>', `pwned=${pwned} name=${shownName}`);
+
+// 次の一歩：ボタン1つで「積立なし」「家を買う」のプランを作って比較画面で並べる
+await go(wp, '#seg-cf');
+await wp.waitForSelector('#cf .guide');
+await wp.locator('#cf .guide .btn', { hasText: '積立なしと比べる' }).tap();
+await wp.waitForSelector('#cmpchart');
+const g1 = await wp.$$eval('table.cmpt thead th', (els) => els.map((e) => e.textContent).filter(Boolean));
+const g1End = await wp.$$eval('table.cmpt tbody tr:first-child td b', (els) => els.map((e) => e.textContent));
+await go(wp, '#seg-cf');
+await wp.waitForSelector('#cf .guide');
+await wp.locator('#cf .guide .btn', { hasText: '家を買ったプランと比べる' }).tap();
+await wp.waitForSelector('#cmpchart');
+const g2 = await wp.$$eval('table.cmpt thead th', (els) => els.map((e) => e.textContent).filter(Boolean));
+await wp.screenshot({ path: join(shots, '10c-guide-compare.png') });
+await go(wp, '#seg-cf');
+const doneMarks = await wp.$$eval('#cf .guide .gi.done', (els) => els.length);
+check('次の一歩のボタンで、比べるプランができて比較画面に並ぶ',
+  JSON.stringify(g1) === '["うちの家計","うちの家計（積立なし）"]' && g1End[0] !== g1End[1] &&
+  JSON.stringify(g2) === '["うちの家計","うちの家計（家を買う）"]' && doneMarks === 2,
+  `${g1} ${g1End} / ${g2} / 済み${doneMarks}`);
 await fresh.close();
 
 // ダークモード
@@ -428,6 +479,9 @@ await dp.waitForSelector('#chart');
 await dp.waitForTimeout(300);
 await dp.screenshot({ path: join(shots, '5-cf-dark.png') });
 await dp.goto(url);
+await dp.waitForSelector('.cover');
+await dp.screenshot({ path: join(shots, '6a-cover-dark.png') });
+await dp.locator('.cvalt .btn', { hasText: '記入例' }).tap();
 await dp.waitForSelector('#f-start');
 await dp.waitForTimeout(300);
 await dp.screenshot({ path: join(shots, '6-input-dark.png') });

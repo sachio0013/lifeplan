@@ -253,3 +253,22 @@ test('住宅ローンの試算がExcel（入力シート X118・AB118・AE119、
   near(z.phases[0].annual, 120, '金利0%');
   assert.equal(z.phases[0].years, 10);
 });
+
+test('表紙で選んだ家族のかたちの参考値から、確認箇所なしのプランができる', () => {
+  const S = require('../app/sample.js');
+  for (const f of S.FAMILIES) {
+    for (const h of S.HOMES) {
+      const d = S.templateAnswers(f.key, h.key, 2026);
+      d.birth1 = '1990/05/05';
+      if (d.has2) d.birth2 = '1991/06/06';
+      d.kids.forEach((k, i) => { k.birth = `${2020 + i}/07/07`; });
+      const s = S.applyNeeds(S.fromAnswers(d), S.NEEDS.map((n) => n.key));
+      assert.deepEqual(E.validate(s), [], `${f.key}/${h.key}`);
+      assert.equal(s.family.length, f.adults + f.kids);
+      const r = E.compute(s);
+      assert.equal(r.years.at(-1).age, 95);
+      assert.equal(r.years[0].expense.contributions[0], 36);   // 積立投資：NISAに年36万円
+      assert.equal(s.loanCalc.amount, 4000);                    // 住宅購入：ローンの試算に参考値
+    }
+  }
+});

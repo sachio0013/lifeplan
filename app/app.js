@@ -63,7 +63,9 @@
   var store = load();
   var state = plan().state;
   var ui = {
-    view: location.hash === '#cf' ? 'cf' : location.hash === '#cmp' ? 'cmp' : 'input',
+    view: location.hash === '#cf' ? 'cf' : location.hash === '#cmp' ? 'cmp' : store.prefs.welcomed ? 'input' : 'cover',
+    cover: { family: 'kid2', home: 'rent', needs: [] },   // 表紙で選んでいるもの
+    help: '',          // 開いている「？」の説明
     active: 'basic',
     openMember: 0,
     openCalc: 0,
@@ -138,8 +140,13 @@
   var undo = null, toastTimer = null;
   function snapshot(msg) {
     undo = { json: JSON.stringify(store), msg: msg };
+    toast(msg, true);
+  }
+  // 元に戻すのない、お知らせだけの表示
+  function snapshotless(msg) { undo = null; toast(msg, false); }
+  function toast(msg, undoable) {
     var t = document.getElementById('toast');
-    t.innerHTML = '<span>' + esc(msg) + '</span><button onclick="A.undo()">元に戻す</button>';
+    t.innerHTML = '<span>' + esc(msg) + '</span>' + (undoable ? '<button onclick="A.undo()">元に戻す</button>' : '');
     t.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.hidden = true; undo = null; }, 7000);
@@ -382,6 +389,10 @@
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
     calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    home: '<path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9.5h11V10"/><path d="M10 19.5v-5h4v5"/>',
+    school: '<path d="M2.5 9.5 12 5l9.5 4.5L12 14z"/><path d="M6.5 11.8v3.7c1.5 1.4 3.5 2.2 5.5 2.2s4-.8 5.5-2.2v-3.7M21.5 9.5v5"/>',
+    hourglass: '<path d="M7 3.5h10M7 20.5h10M8 3.5c0 4 4 5 4 8.5s-4 4.5-4 8.5M16 3.5c0 4-4 5-4 8.5s4 4.5 4 8.5"/>',
+    yen: '<circle cx="12" cy="12" r="8.5"/><path d="M8.8 7.5 12 12l3.2-4.5M12 12v5M9.3 12.8h5.4M9.3 15h5.4"/>',
     del: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
     more: '<path d="M6 9l6 6 6-6"/>',
     less: '<path d="M6 15l6-6 6 6"/>',
@@ -479,8 +490,9 @@
     var list = state[key] || [];
     var max = opts.max || 5;
 
-    return '<div class="card">' +
-      '<div class="head"><span class="ttl">' + esc(label) + '</span><span class="cnt">' + list.length + ' / ' + max + '行</span></div>' +
+    return '<div class="card" id="card-' + key + '">' +
+      '<div class="head"><span class="ttl">' + esc(label) + '</span>' + helpBtn(key) + '<span class="cnt">' + list.length + ' / ' + max + '行</span></div>' +
+      helpBox(key) +
       (opts.inflation ? '<div class="rowtop divide" style="padding:10px 0"><span class="u">物価上昇率</span>' +
         numInput('f-inflation', 'rq' + bad('infl', 'inflation'), 64, state.inflation, 'A.infl(this.value)', ';margin-left:auto') + '<span class="u">％</span></div>' +
         (issuesAt('infl').length ? '<div style="padding-bottom:10px">' + vmsgs('infl') + '</div>' : '') : '') +
@@ -526,7 +538,8 @@
     return '<div class="card">' +
       '<div class="head"><span class="u">対象者</span>' +
         selectInput(fid('sal', sal.id, 'member'), idx === 0 ? 'rq' : 'op', '', memberOptions, sal.memberId, 'A.salMember(' + sal.id + ',this.value)') +
-        '<span class="cnt">' + sal.rows.length + ' / 8行</span></div>' +
+        helpBtn('salary-' + sal.id, 'salary') + '<span class="cnt">' + sal.rows.length + ' / 8行</span></div>' +
+      helpBox('salary-' + sal.id, 'salary') +
       '<div class="hint" style="padding:6px 0 0">手取り（可処分所得）で入力します。2行目以降の金額は今の水準で入れれば、その行の上昇率で開始年から伸ばして計算します。</div>' +
       rows +
       (sal.rows.length < 8 ? addButton('A.salAdd(' + sal.id + ')', '行を追加') : '') +
@@ -580,8 +593,9 @@
         vmsgs(at) +
       '</div>';
     }).join('');
-    return '<div class="card">' +
-      '<div class="head"><span class="ttl">' + esc(child.name || child.relation) + 'の教育費</span><span class="cnt">' + esc(child.birth) + (early ? '・早生まれ' : '') + '</span></div>' +
+    return '<div class="card" id="card-edu-' + child.id + '">' +
+      '<div class="head"><span class="ttl">' + esc(child.name || child.relation) + 'の教育費</span>' + helpBtn('edu-' + child.id, 'edu') + '<span class="cnt">' + esc(child.birth) + (early ? '・早生まれ' : '') + '</span></div>' +
+      helpBox('edu-' + child.id, 'edu') +
       (d.y ? stages : '<div class="hint divide">家族構成で生年月日を入れると、在学年と金額が自動で入ります</div>') +
       (d.y ? '<div class="total divide"><span class="u" style="font-weight:700">在学中の合計</span><span class="v">' + man(total) + '</span><span class="u" style="font-weight:700">万円</span></div>' +
         '<div class="hint" style="padding-top:0">年も金額も自動で入りますが、進路に合わせて書き換えられます</div>' : '') +
@@ -593,7 +607,7 @@
     var occ = E.carOccurrences(state);
     var total = occ.reduce(function (s, o) { return s + o.amount; }, 0);
     return '<div class="card">' +
-      '<div class="ttl" style="margin-bottom:11px">自動車の購入費</div>' +
+      '<div class="head" style="margin-bottom:9px"><span class="ttl">自動車の購入費</span>' + helpBtn('carBuy') + '</div>' + helpBox('carBuy') +
       '<div class="rowtop" style="flex-wrap:wrap;row-gap:8px">' +
         numInput('f-car-from', 'op', 76, yv(c.fromYear, by), "A.car('fromYear'," + yin(by) + ')') + '<span class="u">' + suf('from') + '</span>' +
         numInput('f-car-every', 'op' + bad('car', 'every'), 52, c.every, "A.car('every',this.value)", ';margin-left:2px') + '<span class="u">年ごとに</span>' +
@@ -632,8 +646,10 @@
         textInput(fid('inv', asset.id, kind, r.id, 'memo'), 'op memo', '', r.memo || '', 'A.inv(' + q + ",'memo',this.value)", '備考') +
       '</div>';
     }).join('');
-    return '<div class="card">' +
-      '<div class="head"><span class="ttl">' + esc(label) + '</span><span class="cnt">' + list.length + ' / 5行</span></div>' +
+    var hk = kind === 'add' ? 'investAdd' : 'investOut';
+    return '<div class="card" id="card-inv-' + asset.id + '-' + kind + '">' +
+      '<div class="head"><span class="ttl">' + esc(label) + '</span>' + helpBtn(hk + '-' + asset.id, hk) + '<span class="cnt">' + list.length + ' / 5行</span></div>' +
+      helpBox(hk + '-' + asset.id, hk) +
       (withRate ? '<div class="rowtop divide" style="padding:10px 0">' +
         '<span class="u">想定利回り</span>' + numInput(fid('rate', asset.id), 'rq' + bad('rate:' + asset.id, 'rate'), 60, asset.rate, 'A.rate(' + asset.id + ',this.value)') + '<span class="u">％</span>' +
         '<span class="u" style="margin-left:auto">税率</span>' +
@@ -684,20 +700,20 @@
 
     return '<h2 class="sec" id="sec-basic">' + ic('tune', 20) + '基本</h2>' +
       '<div class="card">' +
-        '<div class="ttl" style="margin-bottom:11px">シミュレーション期間</div>' +
+        '<div class="head" style="margin-bottom:9px"><span class="ttl">シミュレーション期間</span>' + helpBtn('period') + '</div>' + helpBox('period') +
         '<div class="rowtop"><span class="u" style="width:44px">開始年</span>' +
           numInput('f-start', 'rq' + bad('start', 'start'), 84, state.startYear, 'A.start(this.value)') + '<span class="u">年から</span>' +
           numInput('f-endage', 'op' + bad('start', 'endAge'), 64, state.endAge, 'A.endAge(this.value)', ';margin-left:auto') + '<span class="u">歳まで</span>' +
         '</div>' +
         vmsgs('start') +
       '</div>' +
-      '<div class="card"><div class="ttl" style="margin-bottom:2px">前年末の金融資産</div>' + assets +
+      '<div class="card"><div class="head"><span class="ttl">前年末の金融資産</span>' + helpBtn('assets') + '</div>' + helpBox('assets') + assets +
         '<div class="rowtop divide" style="padding:10px 0"><span class="u">普通預金等の利率</span>' +
           numInput('f-deprate', 'op' + bad('deprate', 'depositRate'), 64, state.depositRate || 0, 'A.depositRate(this.value)', ';margin-left:auto') + '<span class="u">％</span></div>' +
         vmsgs('deprate') +
         '<div class="hint" style="padding-top:0">投資資産の名前は自由に変えられ、投資セクションの見出しに反映されます</div>' +
       '</div>' +
-      '<div class="card"><div class="head"><span class="ttl">家族構成</span><span class="cnt">最大6人</span></div>' + family +
+      '<div class="card" id="card-family"><div class="head"><span class="ttl">家族構成</span>' + helpBtn('family') + '<span class="cnt">最大6人</span></div>' + helpBox('family') + family +
         (state.family.length < 6 ? addButton('A.addFamily()', '家族を追加') : '') +
       '</div>';
   }
@@ -709,7 +725,7 @@
       h += '<div class="vbanner">' + ic('warn', 18) + '<span>確認が必要な入力が ' + issueCount + ' 件あります</span>' +
         '<button class="btn" onclick="A.firstIssue()">見る</button></div>';
     }
-    h += welcomeHTML();
+    h += guideHTML();
     if (ageMode()) h += '<div class="hint" style="padding:8px 2px 0">年の欄は家族１の年齢で入れます（給与はその人の、教育費はその子の年齢）。保存は西暦です。</div>';
     h += basicHTML();
 
@@ -1213,6 +1229,15 @@
     if (!(toNum(lc.amount) > 0) || !sch.phases.length) return;
     if (!sure && loanReplaced(lc).length) { ui.loanConfirm = true; commit(); return; }
     snapshot('住宅費の行を試算の結果にしました');
+    applyLoan(lc);
+    ui.loanConfirm = false;
+    ui.loanOpen = false;
+    commit();
+  };
+
+  // 試算の結果で、借入開始年以降の住宅費の行を置き換える（今の state に対して）
+  function applyLoan(lc) {
+    var sch = E.loanSchedule(lc);
     var start = toNum(lc.start), sy = state.startYear;
     var gen = loanRows(lc, sch);
     var head = state.housing[0] || { id: nid(), year: sy, amount: 0, memo: '' };
@@ -1223,9 +1248,260 @@
     state.housing = [head].concat(keep, gen.filter(function (r) { return r.year > sy; }).map(function (r) {
       return { id: nid(), year: r.year, amount: r.amount, memo: r.memo };
     }));
-    ui.loanConfirm = false;
-    ui.loanOpen = false;
+  }
+
+  // ---------- 「？」で開くFPのひとこと ----------
+
+  var HELP = {
+    period: '計算を始める年と、家族１が何歳になるまで計算するかです。開始年はふつう今年にします。長生きに備えて、90〜100歳くらいまで見ておくと安心です。',
+    assets: '開始年の前の年の12月末の残高を入れます。普通預金・定期預金など、すぐ使えるお金は「普通預金等」に。NISAやiDeCo、投資信託などは今の評価額を入れます。投資の名前は書き換えられます。預金の利率は低めに見ておくのがおすすめで、0のままでも結果はほとんど変わりません。',
+    family: '一緒に暮らす家族を入れます。家族１は家計の中心になる人です。子供の生年月日から、教育費が自動で入ります。4月1日までに生まれた子（早生まれ）は、学年が1つ上になります。',
+    salary: '給与は「手取り」の1年分（ボーナスも含む）で入れます。手取りは、額面から税金と社会保険料を引いた額で、額面の75〜85％くらいが目安です。上昇率は毎年の昇給の目安で、横ばいなら0％。転職や時短で変わるなら、その年から行を足します。',
+    lump: '退職金、相続・贈与、不動産の売却など、一度だけ入るお金です。税金を引いた手取りで入れます。退職金は、会社の退職金規程や見込額の資料で確かめられます。',
+    corpPension: '会社から年金として受け取るお金（企業年金）です。受け取る期間と、1年あたりの額を入れます。',
+    privPension: '個人年金保険など、自分で準備した年金です。保険証券に、受け取りが始まる年齢と年金額が書いてあります。',
+    pubPension: '国の年金（老齢基礎年金・老齢厚生年金）です。ねんきん定期便の見込額が目安で、税・社会保険料が引かれるので手取りはその9割ほどです。受け取り始めを遅らせると増え、早めると減ります。わからなければ下の「試算する」を使ってください。',
+    living: '食費・日用品・水道光熱費・通信費・おこづかいなど、ふだんの生活費の1年分です。住宅費・教育費・保険料・車などは別の欄に入れます。月の額×12で出すと近くなります。物価上昇率は、生活費が毎年どれくらい上がるかで、日本銀行は年2％を目標にしています。控えめに0.5〜1％、慎重に見るなら2％で試してみましょう。',
+    housing: '家賃や住宅ローンの返済、管理費・修繕積立金、固定資産税など、住まいにかかる1年分です。住み替えやローン完済で変わるなら、その年から行を足します。住宅ローンは下の「試算する」で計算できます。',
+    housingLump: '頭金、引っ越し、リフォームなど、住まいのために一度だけ出るお金です。',
+    edu: '子供の生年月日から在学年が自動で入り、公立・私立などを選ぶと目安の金額が入ります。塾や習い事の費用も見込みたいときは、金額を書き換えてください。',
+    insurance: '生命保険・医療保険・学資保険などの保険料の1年分です。自動車保険は「自動車の維持費」に入れます。見直しで変わる予定があれば、その年から行を足します。',
+    carCost: '自動車税、自動車保険、車検、駐車場、ガソリン、メンテナンスなどの1年分です。車を持たないなら空のままにします。',
+    carBuy: '車の買い替えです。最初に買う年、何年ごとに買うか、何歳まで買うか、1回あたりの金額を入れます。回ごとに金額を変えることもできます。',
+    otherFlow: '毎年かかる、ほかの欄に当てはまらない支出です。旅行・趣味・帰省・ペット・仕送りなどをまとめて入れます。',
+    otherLump: '結婚式、出産、子供の結婚の援助、留学、大きな家電など、一度だけ出る支出です。',
+    investAdd: 'NISAやiDeCoなどに、毎年いくら積み立てるかです（月3万円なら36）。積み立てた分は普通預金等から移り、想定利回りで増えていきます。想定利回りは将来の見込みなので、控えめな数字で試すと安心です。税率は、NISA・iDeCoなら0％、それ以外の投資信託や株なら20％を選びます。',
+    investOut: '積み立てた資産を取り崩して、生活費などにあてる予定です。iDeCoは、原則として60歳まで引き出せません。'
+  };
+
+  // 欄の見出しの横の「？」。id は画面上で一つに決まる名前、key は HELP の項目
+  function helpBtn(id, key) {
+    var open = ui.help === id;
+    return '<button class="hq' + (open ? ' on' : '') + '" aria-expanded="' + open + '" aria-label="この欄の説明" onclick="A.help(\'' + id + '\')">?</button>';
+  }
+  function helpBox(id, key) {
+    if (ui.help !== id) return '';
+    return '<div class="helpbox" role="note">' + fpFace(34) +
+      '<div><div class="t">FPのひとこと</div><p>' + esc(HELP[key || id]) + '</p></div></div>';
+  }
+  function fpFace(size) {
+    return '<svg class="fpface" width="' + size + '" height="' + size + '" viewBox="0 0 40 40" aria-hidden="true">' +
+      '<circle cx="20" cy="20" r="19" fill="var(--accent-soft)"/>' +
+      '<path d="M8 19c0-8 5.5-12.5 12-12.5S32 11 32 19c-3-4.5-7.5-6.5-12-6.5S11 14.5 8 19z" fill="var(--accent)"/>' +
+      '<circle cx="15" cy="21" r="1.6" fill="var(--text)"/><circle cx="25" cy="21" r="1.6" fill="var(--text)"/>' +
+      '<ellipse cx="12.5" cy="25" rx="2.4" ry="1.4" fill="var(--c-deposit)" opacity=".45"/><ellipse cx="27.5" cy="25" rx="2.4" ry="1.4" fill="var(--c-deposit)" opacity=".45"/>' +
+      '<path d="M16.5 26c1.9 1.8 5.1 1.8 7 0" fill="none" stroke="var(--text)" stroke-width="1.5" stroke-linecap="round"/>' +
+      '</svg>';
+  }
+  A.help = function (id) { ui.help = ui.help === id ? '' : id; commit(); };
+
+  // ---------- 表紙（はじめの画面） ----------
+  //
+  // 何ができるかと3つの手順を見せ、家族のかたち・住まい・気になることを選んでもらう。
+  // 選んだ内容から参考値入りのかんたん入力を始め、終わったら気になることに合わせた「次の一歩」を出す。
+
+  var NEED_ICONS = { house: 'home', edu: 'school', retire: 'hourglass', invest: 'invest', work: 'work', save: 'yen' };
+
+  function peopleIcon(adults, kids) {
+    var w = (adults * 14) + (kids * 11) + 4, x = 2, g = '';
+    for (var i = 0; i < adults; i++, x += 14) g += '<circle cx="' + (x + 6) + '" cy="7" r="4"/><path d="M' + (x + 0.5) + ' 22v-4.5a5.5 5.5 0 0 1 11 0V22"/>';
+    for (var k = 0; k < kids; k++, x += 11) g += '<circle cx="' + (x + 5) + '" cy="11.5" r="3"/><path d="M' + (x + 1) + ' 22v-3a4 4 0 0 1 8 0v3"/>';
+    return '<svg width="' + w + '" height="24" viewBox="0 0 ' + w + ' 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">' + g + '</svg>';
+  }
+
+  function coverArt() {
+    return '<svg class="cvart" viewBox="0 0 320 170" role="img" aria-label="貯金箱と家と、右肩上がりのグラフのイラスト">' +
+      '<ellipse cx="160" cy="150" rx="140" ry="14" fill="var(--accent-soft)"/>' +
+      '<circle cx="250" cy="62" r="46" fill="var(--fill-opt)"/>' +
+      '<circle cx="78" cy="58" r="34" fill="var(--accent-soft)"/>' +
+      // 右肩上がりのグラフ
+      '<path d="M30 120 L80 104 L120 110 L170 82 L215 70 L280 34" fill="none" stroke="var(--c-invest)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 8"/>' +
+      '<circle cx="280" cy="34" r="6" fill="var(--c-invest)"/>' +
+      // 家
+      '<path d="M196 146v-46l34-26 34 26v46z" fill="var(--surface)" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round"/>' +
+      '<path d="M188 104l42-33 42 33" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<rect x="220" y="116" width="20" height="30" rx="4" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2.5"/>' +
+      '<path d="M224 96h12" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>' +
+      // 貯金箱
+      '<g transform="translate(64 66) scale(4.6)" fill="var(--surface)" stroke="var(--accent)" stroke-width=".7" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M18.5 10.2C18 7.3 15.3 5.2 12 5.2c-3.9 0-7 2.6-7 5.8 0 1.8 1 3.4 2.5 4.4V18h2.6v-1.5c.6.1 1.2.2 1.9.2s1.3-.1 1.9-.2V18h2.6v-2.6c.8-.5 1.4-1.2 1.8-2h1.4v-3.2h-1.2z" fill="var(--accent-soft)"/>' +
+        '<path d="M10 8h3.2" fill="none"/><circle cx="15.6" cy="10.2" r=".55" fill="var(--accent)" stroke="none"/>' +
+        '<ellipse cx="8.6" cy="12.3" rx="1.1" ry=".6" fill="var(--c-deposit)" stroke="none" opacity=".5"/>' +
+      '</g>' +
+      // コイン
+      '<g stroke="var(--gold-ink)" stroke-width="2"><ellipse cx="150" cy="138" rx="15" ry="6" fill="var(--gold)"/><ellipse cx="150" cy="130" rx="15" ry="6" fill="var(--gold)"/><ellipse cx="150" cy="122" rx="15" ry="6" fill="var(--gold)"/></g>' +
+      '<circle cx="160" cy="44" r="11" fill="var(--gold)" stroke="var(--gold-ink)" stroke-width="2"/><path d="M156 40l4 5 4-5M160 45v6M156.5 47h7" fill="none" stroke="var(--gold-ink)" stroke-width="1.8" stroke-linecap="round"/>' +
+      // きらきら
+      '<path d="M40 30l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z" fill="var(--accent)"/>' +
+      '<path d="M300 92l1.8 4.2 4.2 1.8-4.2 1.8-1.8 4.2-1.8-4.2-4.2-1.8 4.2-1.8z" fill="var(--c-invest)"/>' +
+      '<path d="M124 22l1.5 3.5 3.5 1.5-3.5 1.5-1.5 3.5-1.5-3.5-3.5-1.5 3.5-1.5z" fill="var(--gold-ink)"/>' +
+      '</svg>';
+  }
+
+  function coverHTML() {
+    var S = window.LifePlanSample, c = ui.cover;
+    var fam = S.FAMILIES.map(function (f) {
+      var on = c.family === f.key;
+      return '<button class="opt' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" onclick="A.coverSet(\'family\',\'' + f.key + '\')">' +
+        '<span class="pi">' + peopleIcon(f.adults, f.kids) + '</span><span>' + f.label + '</span></button>';
+    }).join('');
+    var homes = S.HOMES.map(function (h) {
+      var on = c.home === h.key;
+      return '<button class="opt sm' + (on ? ' on' : '') + '" role="radio" aria-checked="' + on + '" onclick="A.coverSet(\'home\',\'' + h.key + '\')">' + h.label + '</button>';
+    }).join('');
+    var needs = S.NEEDS.map(function (n) {
+      var on = c.needs.indexOf(n.key) >= 0;
+      return '<button class="need' + (on ? ' on' : '') + '" aria-pressed="' + on + '" onclick="A.coverNeed(\'' + n.key + '\')">' +
+        '<span class="ni">' + ic(NEED_ICONS[n.key], 22) + '</span><span>' + n.label + '</span>' + (on ? '<span class="tick">' + ic('check', 16) + '</span>' : '') + '</button>';
+    }).join('');
+    var hasOwn = store.plans.some(function (p) { return p.name !== '記入例'; });
+    var steps = [
+      ['家族のかたちと、気になることを選ぶ', '下の3つの質問に答えます'],
+      ['質問に答えて、金額を入れる', '参考値が入っているので、自分の数字に書き換えるだけ'],
+      ['グラフで見て、比べる', '90代までの貯金・資産の流れと、条件を変えたときの違いがわかります']
+    ];
+    return '<div class="cover">' +
+      '<div class="cvhero">' + coverArt() +
+        '<h1>わが家のお金の未来を、<br>のぞいてみよう</h1>' +
+        '<p>家族と収入・支出を入れるだけで、これから先の貯金と資産の流れがグラフで見られます。住宅購入、教育費、老後、積立投資の「もしも」も試せます。</p>' +
+      '</div>' +
+      '<ol class="cvsteps">' + steps.map(function (st, i) {
+        return '<li><span class="no">' + (i + 1) + '</span><div><b>' + st[0] + '</b><span>' + st[1] + '</span></div></li>';
+      }).join('') + '</ol>' +
+      '<section class="cvq"><h2><span class="qn">Q1</span>家族のかたちは？</h2><div class="opts" role="radiogroup" aria-label="家族のかたち">' + fam + '</div></section>' +
+      '<section class="cvq"><h2><span class="qn">Q2</span>住まいは？</h2><div class="opts two" role="radiogroup" aria-label="住まい">' + homes + '</div></section>' +
+      '<section class="cvq"><h2><span class="qn">Q3</span>気になることは？<small>いくつでも</small></h2><div class="needs">' + needs + '</div></section>' +
+      '<div class="cvcta">' +
+        '<button class="btn big" onclick="A.coverStart()">参考値を入れてはじめる</button>' +
+        '<p>金額は、家族のかたちに合わせた目安の例です。質問に答えながら、ご自分の数字に書き換えていきます（6ステップ・生年月日だけは必ず入れます）。</p>' +
+      '</div>' +
+      '<div class="cvalt">' +
+        (hasOwn ? '<button class="btn ghost" onclick="A.coverLeave(\'input\')">保存したプランの続きから</button>' : '') +
+        '<button class="btn ghost" onclick="A.coverExample()">記入例（共働きの夫婦と子供2人）を見てみる</button>' +
+      '</div>' +
+      '<p class="cvnote">入力した内容は、この端末のブラウザの中だけに保存されます。計算は、Excel「ライフプラン表」と同じです。</p>' +
+    '</div>';
+  }
+
+  A.coverSet = function (field, v) { ui.cover[field] = v; commit(); };
+  A.coverNeed = function (k) {
+    var n = ui.cover.needs, i = n.indexOf(k);
+    if (i >= 0) n.splice(i, 1); else n.push(k);
     commit();
+  };
+  A.coverOpen = function () { ui.sheet = false; ui.view = 'cover'; commit(); document.getElementById('scroll').scrollTop = 0; };
+  A.coverLeave = function (v) { store.prefs.welcomed = true; ui.view = v; commit(); document.getElementById('scroll').scrollTop = 0; };
+  A.coverExample = function () {
+    var ex = store.plans.filter(function (p) { return p.name === '記入例'; })[0];
+    if (!ex) { ex = { id: store.nextPlanId++, name: uniqueName('記入例'), state: window.LifePlanSample.sample() }; store.plans.push(ex); }
+    switchTo(ex.id);
+    A.coverLeave('input');
+  };
+  A.coverStart = function () {
+    var c = ui.cover;
+    var d = window.LifePlanSample.templateAnswers(c.family, c.home, new Date().getFullYear());
+    // 選んだ順ではなく、表紙に並んでいる順で覚えておく
+    var needs = window.LifePlanSample.NEEDS.map(function (n) { return n.key; }).filter(function (k) { return c.needs.indexOf(k) >= 0; });
+    A.wizOpen(d, needs);
+  };
+
+  // ---------- FPからの次の一歩（表紙で選んだ「気になること」に合わせて） ----------
+  //
+  // store.guide = { planId, needs, done: [], hidden }。比べるためのプランは、guide.planId のプランを複製して作る。
+
+  var GUIDE = {
+    house: { t: '家を買った場合と比べる', p: '住宅ローンの試算に参考値（4,000万円・35年）を入れてあります。家を買ったプランを作って、今の住まいのままと並べてみましょう。',
+      a: [['家を買ったプランと比べる', 'house'], ['ローンの条件を見る', 'loan']] },
+    edu: { t: '教育費を確かめる', p: '子供の生年月日から、在学年と金額が自動で入っています。公立・私立など進路を選ぶと金額が変わります。教育費が重なる時期の預金の減り方も、CF表で見てみましょう。',
+      a: [['教育費を見る', 'edu']] },
+    retire: { t: '老後のお金を確かめる', p: '公的年金の見込額は参考値です。試算で自分の数字にすると、老後の見通しがぐっと確かになります。CF表で、65歳以降に預金がどう減っていくかを見てみましょう。',
+      a: [['年金を試算する', 'pension'], ['CF表を見る', 'cf']] },
+    invest: { t: '積立投資の効果を見る', p: 'NISAに月3万円（年36万円）の積立を参考値で入れてあります。積み立てなかった場合のプランと比べてみましょう。',
+      a: [['積立なしと比べる', 'invest'], ['積立の条件を見る', 'investCard']] },
+    work: { t: '働き方を変えたら？', p: '時短勤務、転職、共働きなど、働き方を変えたプランを作って比べます。作ったプランの給与を書き換えてから、比較画面で並べてみましょう。',
+      a: [['働き方を変えたプランを作る', 'work']] },
+    save: { t: '節約の効果を見る', p: '基本生活費を1割減らしたプランを作って、今のままと比べてみましょう。月に直すといくらの節約になるかも出ます。',
+      a: [['1割節約したプランと比べる', 'save']] }
+  };
+
+  function guideHTML() {
+    var g = store.guide;
+    if (!g || g.hidden || !g.needs.length || !byId(store.plans, g.planId)) return '';
+    var items = g.needs.map(function (k) {
+      var it = GUIDE[k], done = g.done.indexOf(k) >= 0;
+      var text = it.p;
+      if (k === 'edu' && !E.children(byId(store.plans, g.planId).state).length) text = '子供の欄を足して生年月日を入れると、在学年と教育費が自動で入ります。';
+      if (k === 'save') {
+        var lv = (byId(store.plans, g.planId).state.living[0] || {}).amount;
+        if (toNum(lv)) text += '（今の基本生活費 年' + man(lv) + '万円 → 1割で年' + (Math.round(toNum(lv) / 10 * 10) / 10) + '万円、月' + (Math.round(toNum(lv) / 120 * 10) / 10) + '万円）';
+      }
+      return '<div class="gi' + (done ? ' done' : '') + '">' +
+        '<div class="gt">' + (done ? '<span class="ok">' + ic('check', 14) + '</span>' : '<span class="dot"></span>') + it.t + '</div>' +
+        '<p>' + esc(text) + '</p>' +
+        '<div class="row">' + it.a.map(function (a, i) {
+          return '<button class="btn' + (i ? ' ghost' : '') + '" onclick="A.guideAct(\'' + k + '\',\'' + a[1] + '\')">' + a[0] + '</button>';
+        }).join('') + '</div>' +
+      '</div>';
+    }).join('');
+    return '<div class="guide">' +
+      '<div class="gh">' + fpFace(40) + '<div><div class="t">FPからの次の一歩</div><div class="s">選んだ「気になること」に合わせて、やってみるとよいことです</div></div>' +
+        '<button class="del" aria-label="次の一歩を閉じる" onclick="A.guideHide()">' + ic('close', 20) + '</button></div>' +
+      items +
+    '</div>';
+  }
+
+  // 比べるためのプランを作る（guide のプランを複製し、change で書き換える）
+  function guideCopy(suffix, change) {
+    var base = byId(store.plans, store.guide.planId) || plan();
+    var p = { id: store.nextPlanId++, name: uniqueName(base.name + '（' + suffix + '）'), state: JSON.parse(JSON.stringify(base.state)) };
+    change(p.state);
+    store.plans.splice(store.plans.indexOf(base) + 1, 0, p);
+    return { base: base, copy: p };
+  }
+  function compareNow(pair) {
+    switchTo(pair.base.id);
+    ui.cmp = [pair.base.id, pair.copy.id];
+    ui.view = 'cmp';
+    commit();
+    document.getElementById('scroll').scrollTop = 0;
+  }
+  function jumpTo(id) {
+    ui.view = 'input';
+    render();
+    var el = document.getElementById(id), sc = document.getElementById('scroll');
+    if (el && sc) sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 150;
+  }
+
+  A.guideHide = function () { if (store.guide) store.guide.hidden = true; commit(); };
+  A.guideAct = function (need, act) {
+    var g = store.guide; if (!g) return;
+    if (g.done.indexOf(need) < 0) g.done.push(need);
+    if (byId(store.plans, g.planId) && store.activeId !== g.planId && /^(loan|edu|pension|cf|investCard)$/.test(act)) switchTo(g.planId);
+    if (act === 'house') {
+      compareNow(guideCopy('家を買う', function (st) {
+        var keep = state; state = st;
+        if (!st.loanCalc) st.loanCalc = { start: st.startYear + 2, amount: 4000, years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: '' }], upkeep: 40 };
+        applyLoan(st.loanCalc);
+        state = keep;
+      }));
+    } else if (act === 'invest') {
+      compareNow(guideCopy('積立なし', function (st) {
+        Object.keys(st.invest || {}).forEach(function (k) { st.invest[k].add = []; });
+      }));
+    } else if (act === 'save') {
+      compareNow(guideCopy('1割節約', function (st) {
+        st.living.forEach(function (r) { r.amount = Math.round(toNum(r.amount) * 0.9 * 10) / 10; });
+      }));
+    } else if (act === 'work') {
+      var pair = guideCopy('働き方を変える', function () {});
+      switchTo(pair.copy.id);
+      jumpTo('sec-income');
+      snapshotless('「' + pair.copy.name + '」を作りました。給与を書き換えて、比較画面で並べてみましょう');
+    } else if (act === 'loan') { ui.loanOpen = true; jumpTo('card-housing'); }
+    else if (act === 'pension') { ui.penOpen.state = true; jumpTo('card-pubPension'); }
+    else if (act === 'edu') { var kid = E.children(state)[0]; jumpTo(kid ? 'card-edu-' + kid.id : 'card-family'); }
+    else if (act === 'investCard') jumpTo('sec-invest');
+    else if (act === 'cf') { ui.view = 'cf'; commit(); document.getElementById('scroll').scrollTop = 0; }
   };
 
   // ---------- かんたん入力（必須の項目だけを順に聞く） ----------
@@ -1273,7 +1549,8 @@
       : opts.text
         ? '<input type="text" id="' + id + '" class="op" style="flex:1;min-width:0" value="' + esc(d[key]) + '" placeholder="' + esc(opts.placeholder || '') + '" onchange="A.wz(\'' + key + '\',this.value)">'
         : '<input type="text" inputmode="decimal" enterkeyhint="next" autocomplete="off" id="' + id + '" class="' + (opts.optional ? 'op' : 'rq') + (err ? ' bad' : '') + ' num" style="width:' + (opts.width || 110) + 'px" value="' + esc(d[key]) + '" onchange="A.wz(\'' + key + '\',this.value)">';
-    return '<div class="fl"><label class="lb" for="' + id + '">' + label + '</label>' +
+    var ref = d._ref && d._ref[key] ? '<span class="refchip">参考値</span>' : '';
+    return '<div class="fl"><label class="lb" for="' + id + '">' + label + ref + '</label>' +
       '<div class="fi">' + input + (unit ? '<span class="u">' + unit + '</span>' : '') + '</div>' +
       (err ? '<div class="vmsg error">' + ic('warn', 15) + '<span>' + esc(err) + '</span></div>' : '') +
       (opts.hint ? '<div class="hint" style="padding:6px 0 0">' + opts.hint + '</div>' : '') +
@@ -1355,8 +1632,9 @@
     '</div>';
   }
 
-  A.wizOpen = function () {
-    ui.wz = { step: 0, d: wzDraft(), err: {}, from: ui.view === 'wizard' ? 'input' : ui.view };
+  // d：答えのひな形（表紙から来たときは参考値入り）、needs：表紙で選んだ気になること
+  A.wizOpen = function (d, needs) {
+    ui.wz = { step: 0, d: d || wzDraft(), needs: needs || [], err: {}, from: ui.view === 'wizard' ? 'input' : ui.view };
     ui.penOpen.wz = false;
     store.prefs.welcomed = true;
     ui.view = 'wizard';
@@ -1371,6 +1649,7 @@
     else if (key === 'name1' || key === 'name2') d[key] = v;
     else d[key] = String(v).trim() === '' ? '' : String(toNum(v));
     delete ui.wz.err[key];
+    if (d._ref) delete d._ref[key];
     if (el && document.activeElement === el) { pendingRender = true; return; }
     commit();
   };
@@ -1390,10 +1669,11 @@
     if (Object.keys(w.err).length) { commit(); return; }
     if (w.step < WZ_STEPS.length - 1) { w.step++; commit(); document.getElementById('scroll').scrollTop = 0; return; }
     // 完成：新しいプランとして加え、そのプランのCF表を開く
-    var n = store.plans.length + 1;
-    var p = { id: store.nextPlanId++, name: 'プラン' + n, state: window.LifePlanSample.fromAnswers(w.d) };
-    while (store.plans.some(function (x) { return x.name === p.name; })) p.name = 'プラン' + (++n);
+    var st = window.LifePlanSample.applyNeeds(window.LifePlanSample.fromAnswers(w.d), w.needs);
+    var p = { id: store.nextPlanId++, name: uniqueName(w.d._ref ? 'わが家' : 'プラン' + (store.plans.length + 1)), state: st };
     store.plans.push(p);
+    if (w.needs.length) store.guide = { planId: p.id, needs: w.needs.slice(), done: [], hidden: false };
+    store.prefs.welcomed = true;
     store.activeId = p.id;
     state = p.state;
     ui.wz = null; ui.view = 'cf'; ui.active = 'basic'; ui.inputScroll = 0; ui.openMember = 0; ui.openCalc = 0;
@@ -1401,18 +1681,6 @@
     commit();
     document.getElementById('scroll').scrollTop = 0;
   };
-  A.welcomeDone = function () { store.prefs.welcomed = true; commit(); };
-
-  function welcomeHTML() {
-    if (store.prefs.welcomed) return '';
-    return '<div class="welcome">' +
-      '<div class="t">ようこそ</div>' +
-      '<p>いま入っているのは記入例（共働きの夫婦と子供2人）です。数字を書き換えると、上の資産の見通しがその場で変わります。</p>' +
-      '<p>ご自分の家計で試すなら、必須の項目だけを順に聞く「かんたん入力」が手早いです（6ステップ）。</p>' +
-      '<div class="row"><button class="btn" onclick="A.wizOpen()">かんたん入力で始める</button><button class="btn ghost" onclick="A.welcomeDone()">記入例を見る</button></div>' +
-    '</div>';
-  }
-
   // ---------- プラン（保存した複数の入力）の切り替えと比較 ----------
 
   function switchTo(id) {
@@ -1639,6 +1907,7 @@
           '<div class="fi"><input type="text" id="f-planname" class="op" style="flex:1;min-width:0" maxlength="30" value="' + esc(plan().name) + '" onchange="A.planRename(this.value)"></div></div>' +
         '<div class="sheetbtns">' +
           '<button class="btn ghost" onclick="A.planDup()">表示中のプランを複製</button>' +
+          '<button class="btn ghost" onclick="A.coverOpen()">表紙（はじめの画面）を開く</button>' +
           '<button class="btn" onclick="A.planNew()">＋ かんたん入力で作る</button>' +
         '</div>' +
         '<div id="backup"></div>' +
@@ -1846,8 +2115,12 @@
     document.getElementById('cfview').hidden = ui.view !== 'cf';
     document.getElementById('wizview').hidden = ui.view !== 'wizard';
     document.getElementById('cmpview').hidden = ui.view !== 'cmp';
+    document.getElementById('coverview').hidden = ui.view !== 'cover';
+    document.getElementById('topbar').hidden = ui.view === 'cover';
 
-    if (ui.view === 'cmp') {
+    if (ui.view === 'cover') {
+      document.getElementById('coverview').innerHTML = coverHTML();
+    } else if (ui.view === 'cmp') {
       var cmp = document.getElementById('cmp');
       cmp.innerHTML = cmpHTML(cmp.clientWidth - 24);
       bindCmpChart(cmpLast);
@@ -1867,7 +2140,7 @@
       document.getElementById('content').innerHTML = inputHTML();
     } else {
       var cf = document.getElementById('cf');
-      cf.innerHTML = cfHTML(cf.clientWidth - 24);
+      cf.innerHTML = guideHTML() + cfHTML(cf.clientWidth - 24);
       bindChart();
     }
 
