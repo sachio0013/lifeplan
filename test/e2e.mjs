@@ -314,6 +314,13 @@ await wp.screenshot({ path: join(shots, '0c-cover-picked.png') });
 check('表紙で家族のかたち・住まい・気になることを選べる', coverPicked.length === 5 && coverOverflow <= 0, coverPicked.join(' / '));
 await wp.locator('.cvcta .btn').tap();
 await wp.waitForSelector('.wz');
+await wp.fill('#w-name1', 'わたし'); await wp.press('#w-name1', 'Tab');
+await wp.locator('.wzhead button').tap();
+await wp.waitForTimeout(100);
+const askClose = await wp.locator('.wz .plconfirm').textContent().catch(() => '');
+await wp.locator('.wz .plconfirm .btn', { hasText: '続ける' }).tap();
+await wp.waitForTimeout(100);
+check('かんたん入力を途中で閉じるときは確かめる', /保存されません/.test(askClose) && (await wp.inputValue('#w-name1')) === 'わたし', askClose);
 await wp.locator('.wznav .btn', { hasText: '次へ' }).tap();
 await wp.waitForTimeout(100);
 const needBirth = await wp.locator('.wz .vmsg').textContent().catch(() => '');
@@ -470,6 +477,42 @@ check('次の一歩のボタンで、比べるプランができて比較画面�
   JSON.stringify(g2) === '["うちの家計","うちの家計（家を買う）"]' && doneMarks === 2,
   `${g1} ${g1End} / ${g2} / 済み${doneMarks}`);
 await fresh.close();
+
+// 品質テストで見つけた点の再発防止
+{
+  // 入力欄にはすべて読み上げ用の名前がある
+  const unnamed = await page.$$eval('#content input, #content select, #content textarea', (els) => els
+    .filter((e) => e.offsetParent && e.type !== 'file' && !e.getAttribute('aria-label') && !(e.id && document.querySelector(`label[for="${e.id}"]`)))
+    .map((e) => e.id));
+  check('入力欄・選択欄すべてに読み上げ用の名前がある', unnamed.length === 0, unnamed.slice(0, 5).join(', '));
+  // 家族１の続柄は変えられない
+  await page.locator('#content .member button.del').first().tap();
+  await page.waitForTimeout(100);
+  const relSelect = await page.locator('#f-fam-1-rel').count();
+  await page.locator('#content .member button.del').first().tap();
+  check('家族１の続柄は変えられない（家計の中心のまま）', relSelect === 0);
+  // CF表と比較に、試算であることの注意書きがある
+  await go(page, '#seg-cf');
+  await page.waitForSelector('#chart');
+  const disc = await page.locator('#cf .disclaimer').textContent().catch(() => '');
+  const tableFocusable = await page.getAttribute('.tablewrap', 'tabindex');
+  await go(page, '#seg-input');
+  check('CF表に試算の注意書きがあり、表はキーボードでも横に動かせる', /試算/.test(disc) && tableFocusable === '0', disc.slice(0, 30));
+}
+for (const [label, init, expect] of [
+  ['保存できない設定', () => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } }); }, /保存できません/],
+  ['読めない保存データ', () => { if (!sessionStorage.getItem('t')) { localStorage.setItem('lifeplan.v2', '{broken'); sessionStorage.setItem('t', '1'); } }, /読み込めなかった/],
+]) {
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await c.addInitScript(init);
+  const p = await c.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  await p.goto(url);
+  await p.waitForSelector('.cover');
+  const note = await p.locator('.vbanner.notice').textContent().catch(() => '');
+  const kept = label === '読めない保存データ' ? await p.evaluate(() => localStorage.getItem('lifeplan.v2.broken')) : '{broken';
+  check(`${label}でも開き、その旨を知らせる（読めないデータは消さずに取っておく）`, expect.test(note) && kept === '{broken' && !errs.length, `${note.slice(0, 30)} ${errs.join('/')}`);
+  await c.close();
+}
 
 // ダークモード
 const dark = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'dark' });

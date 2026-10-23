@@ -29,9 +29,15 @@
     };
   }
 
+  // 保存の問題：'blocked'（ブラウザの設定で保存できない）か 'broken'（保存されていたデータが読めない）
+  var storageProblem = '', brokenRaw = '';
+
   function load() {
+    try { localStorage.setItem('lifeplan.check', '1'); localStorage.removeItem('lifeplan.check'); }
+    catch (e) { storageProblem = 'blocked'; return freshStore(); }
+    var raw = null;
     try {
-      var raw = localStorage.getItem(STORE_KEY);
+      raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         var st = JSON.parse(raw);
         if (st && st.version === 2 && Array.isArray(st.plans)) {
@@ -49,7 +55,12 @@
         var s = JSON.parse(old);
         if (okState(s)) return { version: 2, activeId: 1, nextPlanId: 2, plans: [{ id: 1, name: 'プラン1', state: s }], prefs: { yearMode: 'year', welcomed: true } };
       }
-    } catch (e) { /* 保存領域が使えない環境では毎回記入例から始める */ }
+    } catch (e) { /* 読めないデータは下で取っておく */ }
+    // 読めなかったデータは上書きで消さないよう、別の名前で取っておき、ファイルにも保存できるようにする
+    if (raw) {
+      storageProblem = 'broken'; brokenRaw = raw;
+      try { localStorage.setItem(STORE_KEY + '.broken', raw); } catch (e) { /* 取っておけなくても、画面からファイルに保存できる */ }
+    }
     return freshStore();
   }
 
@@ -178,6 +189,61 @@
       '</span>' +
     '</span>';
   }
+
+  function noticeHTML() {
+    if (!storageProblem) return '';
+    var text = storageProblem === 'blocked'
+      ? 'このブラウザの設定では入力を保存できません。画面を閉じると消えるので、プランの一覧から「ファイルに保存」でバックアップしてください。'
+      : '保存されていたデータを読み込めなかったので、記入例から始めています。読めなかったデータは消さずに取ってあります。';
+    return '<div class="vbanner notice">' + ic('warn', 18) + '<span>' + text + '</span>' +
+      (storageProblem === 'broken' ? '<button class="btn" onclick="A.saveBroken()">ファイルに保存</button>' : '') +
+      '<button class="del" style="margin:0" aria-label="このお知らせを閉じる" onclick="A.noticeHide()">' + ic('close', 18) + '</button></div>';
+  }
+  var DISCLAIMER = '<p class="disclaimer">この結果は、入力した条件にもとづく試算です。将来の収入・物価・運用成果を約束するものではなく、特定の金融商品をすすめるものでもありません。税金・社会保険料・年金などは簡易な計算です。大切な判断の前には、専門家にもご相談ください。</p>';
+
+  // 入力欄に、読み上げ用の名前を付ける（見出し・行の番号・欄の前後の文字から）
+  function autoLabel(root) {
+    var labelled = {};
+    Array.prototype.forEach.call(root.querySelectorAll('label[for]'), function (l) { labelled[l.getAttribute('for')] = true; });
+    Array.prototype.forEach.call(root.querySelectorAll('input, select, textarea'), function (el) {
+      if (el.type === 'hidden' || el.type === 'file' || el.getAttribute('aria-label') || labelled[el.id]) return;
+      var card = el.closest('.card'), ttl = card && card.querySelector('.ttl');
+      var who = el.closest('.penp'), whoEl = who && who.querySelector('.pnm');
+      var row = el.closest('.rowline, .stage, .member, .occ'), idx = '';
+      if (row && row.parentNode) {
+        var sibs = Array.prototype.filter.call(row.parentNode.children, function (x) { return x.classList.contains(row.classList[0]); });
+        if (sibs.length > 1) idx = (sibs.indexOf(row) + 1) + '行目';
+      }
+      var prev = el.previousElementSibling, next = el.nextElementSibling;
+      var pre = prev && prev.classList.contains('u') ? prev.textContent.trim() : '';
+      var post = next && next.classList.contains('u') ? next.textContent.trim() : '';
+      var line = el.closest('.rowtop, .calcrow'), lead = '';
+      if (!pre && line && line.firstElementChild && line.firstElementChild !== el) {
+        var f = line.firstElementChild;
+        lead = f.tagName === 'INPUT' ? f.value : f.tagName === 'SPAN' && !f.classList.contains('u') ? f.textContent.trim() : '';
+      }
+      var label = [ttl ? ttl.textContent.trim() : '', whoEl ? whoEl.textContent.trim() : '', idx, pre || lead, el.getAttribute('placeholder') && !pre && !post ? el.getAttribute('placeholder') : '', post]
+        .filter(Boolean).join(' ');
+      if (label) el.setAttribute('aria-label', label);
+    });
+  }
+
+  // 中身を作り直すとき、変わっていない見出しやカードはそのまま残し、変わったものだけ入れ替える。
+  // 入力画面は1000要素ほどあり、毎回すべて作り直すと、廉価なスマホでは入力のたびに0.5秒ほど待たされるため。
+  function patchChildren(box, html) {
+    var tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    var next = Array.prototype.slice.call(tpl.content.children);
+    var cur = Array.prototype.slice.call(box.children);
+    if (next.length !== cur.length || tpl.content.childNodes.length !== next.length) { box.innerHTML = html; cacheHtml(box); return; }
+    next.forEach(function (n, i) {
+      var h = n.outerHTML;
+      if (cur[i]._h === h) return;
+      n._h = h;
+      box.replaceChild(n, cur[i]);
+    });
+  }
+  function cacheHtml(box) { Array.prototype.forEach.call(box.children, function (c) { c._h = c.outerHTML; }); }
 
   var renderQueued = false;
   function commit() {
@@ -350,6 +416,15 @@
       document.getElementById('toast').hidden = true;
       ui.confirmDelMember = 0; ui.confirmDelPlan = 0; ui.confirmReset = false; ui.loanConfirm = false;
       commit();
+    },
+    noticeHide: function () { storageProblem = ''; commit(); },
+    saveBroken: function () {
+      try {
+        var url = URL.createObjectURL(new Blob([brokenRaw], { type: 'application/json' }));
+        var a = document.createElement('a'); a.href = url; a.download = 'lifeplan-unreadable.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      } catch (e) { /* 保存できない画面では何もしない */ }
     },
     yearMode: function (m) { store.prefs.yearMode = m; quiet = true; commit(); },
     jump: function (key) {
@@ -689,11 +764,13 @@
         '</div>' +
         vmsgs('fam:' + m.id) +
         (open ? '<div class="expand">' +
-          selectInput(fid('fam', m.id, 'gender'), 'op', '', [{ value: '', label: '性別' }, '男性', '女性'], m.gender || '',
+          selectInput(fid('fam', m.id, 'gender'), 'op', '',  [{ value: '', label: '性別' }, '男性', '女性'], m.gender || '',
  'A.fam(' + m.id + ",'gender',this.value)") +
-          selectInput(fid('fam', m.id, 'rel'), 'op', '', REL, m.relation, 'A.fam(' + m.id + ",'relation',this.value)") +
+          (i === 0 ? '' : selectInput(fid('fam', m.id, 'rel'), 'op', '', REL.filter(function (r) { return r !== '家族１' || m.relation === '家族１'; }), m.relation, 'A.fam(' + m.id + ",'relation',this.value)")) +
           selectInput(fid('fam', m.id, 'job'), 'op', '', JOBS, m.job, 'A.fam(' + m.id + ",'job',this.value)") +
           (i > 0 ? '<button class="btn ghost" style="margin-left:auto" onclick="A.delFamily(' + m.id + ')">' + (ui.confirmDelMember === m.id ? 'もう一度押すと削除' : 'この人を削除') + '</button>' : '') +
+          (ui.confirmDelMember === m.id && state.salaries.some(function (sl) { return sl.memberId === m.id; })
+            ? '<div class="hint" style="flex-basis:100%;padding:4px 0 0">この人の給与の欄は消えずに、「その他」の人の収入として残ります。いらなければ、収入の欄で「この対象者を外す」を押します。</div>' : '') +
         '</div>' : '') +
       '</div>';
     }).join('');
@@ -725,6 +802,7 @@
       h += '<div class="vbanner">' + ic('warn', 18) + '<span>確認が必要な入力が ' + issueCount + ' 件あります</span>' +
         '<button class="btn" onclick="A.firstIssue()">見る</button></div>';
     }
+    h += noticeHTML();
     h += guideHTML();
     if (ageMode()) h += '<div class="hint" style="padding:8px 2px 0">年の欄は家族１の年齢で入れます（給与はその人の、教育費はその子の年齢）。保存は西暦です。</div>';
     h += basicHTML();
@@ -973,15 +1051,16 @@
         '<div class="v">' + man(result.endTotal) + '<small> 万円</small></div>' +
         '<div class="note">うち普通預金等 ' + man(last.assets.deposit) + '万円・投資資産 ' + man(last.assets.investTotal) + '万円</div></div>' +
       (sf ? '<div class="alert">' + ic('warn', 19) + '<span>' + sf.year + '年（家族１が' + sf.age + '歳）に普通預金等がマイナスになります。最も少ない年で ' + man(sf.minDeposit) + '万円です。</span></div>' : '') +
-      '<div class="card chartcard"><h3>金融資産残高の推移</h3>' +
+      '<div class="card chartcard"><h2 class="h3">金融資産残高の推移</h2>' +
         '<div class="keys"><span><i style="background:var(--c-deposit)"></i>普通預金等</span><span><i style="background:var(--c-invest)"></i>投資資産</span></div>' +
         chartSVG(width) +
         '<div class="tip" id="tip" hidden></div>' +
       '</div>' +
-      '<div class="card tablecard"><h3>キャッシュフロー表</h3><div class="sub">単位：万円。横にスクロールできます。</div>' +
-        '<div class="tablewrap">' + tableHTML() + '</div>' +
+      '<div class="card tablecard"><h2 class="h3">キャッシュフロー表</h2><div class="sub">単位：万円。横にスクロールできます。</div>' +
+        '<div class="tablewrap" tabindex="0" role="region" aria-label="キャッシュフロー表（横にスクロールできます）">' + tableHTML() + '</div>' +
       '</div>' +
-      '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>';
+      '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>' +
+      DISCLAIMER;
   }
 
   // ---------- 公的年金の試算（入力シート T85:AL91） ----------
@@ -1360,7 +1439,7 @@
       ['質問に答えて、金額を入れる', '参考値が入っているので、自分の数字に書き換えるだけ'],
       ['グラフで見て、比べる', '90代までの貯金・資産の流れと、条件を変えたときの違いがわかります']
     ];
-    return '<div class="cover">' +
+    return noticeHTML() + '<div class="cover">' +
       '<div class="cvhero">' + coverArt() +
         '<h1>わが家のお金の未来を、<br>のぞいてみよう</h1>' +
         '<p>家族と収入・支出を入れるだけで、これから先の貯金と資産の流れがグラフで見られます。住宅購入、教育費、老後、積立投資の「もしも」も試せます。</p>' +
@@ -1380,6 +1459,7 @@
         '<button class="btn ghost" onclick="A.coverExample()">記入例（共働きの夫婦と子供2人）を見てみる</button>' +
       '</div>' +
       '<p class="cvnote">入力した内容は、この端末のブラウザの中だけに保存されます。計算は、Excel「ライフプラン表」と同じです。</p>' +
+      DISCLAIMER +
     '</div>';
   }
 
@@ -1617,10 +1697,12 @@
     var last = s === WZ_STEPS.length - 1;
     return '<div class="wz">' +
       '<div class="wzhead">' +
-        '<button class="del" style="margin:0" aria-label="かんたん入力を閉じる" onclick="A.wizClose()">' + ic('close', 22) + '</button>' +
+        '<button class="del" style="margin:0" aria-label="かんたん入力を閉じる" onclick="A.wizClose(false)">' + ic('close', 22) + '</button>' +
         '<div class="dots" aria-hidden="true">' + WZ_STEPS.map(function (x, i) { return '<i class="' + (i < s ? 'done' : i === s ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
         '<span class="u">' + (s + 1) + ' / ' + WZ_STEPS.length + '</span>' +
       '</div>' +
+      (w.closeAsk ? '<div class="plconfirm" style="margin-top:10px"><span>ここまでの答えは保存されません。閉じますか？</span>' +
+        '<button class="btn danger" onclick="A.wizClose(true)">閉じる</button><button class="btn ghost" onclick="A.wizStay()">続ける</button></div>' : '') +
       '<h2 class="wzt">' + WZ_STEPS[s] + '</h2>' +
       '<p class="wzlead">' + lead + '</p>' +
       '<div class="card">' + body + '</div>' +
@@ -1641,7 +1723,13 @@
     commit();
     document.getElementById('scroll').scrollTop = 0;
   };
-  A.wizClose = function () { ui.view = ui.wz ? ui.wz.from : 'input'; ui.wz = null; commit(); };
+  // 答えを入れ始めていたら、閉じる前に確かめる（閉じると答えは残らない）
+  A.wizClose = function (sure) {
+    var w = ui.wz;
+    if (w && !sure && (w.step > 0 || w.d.birth1 || w.d.name1)) { w.closeAsk = true; commit(); return; }
+    ui.view = w ? w.from : 'input'; ui.wz = null; commit();
+  };
+  A.wizStay = function () { ui.wz.closeAsk = false; commit(); };
   A.wz = function (key, v, el) {
     var d = ui.wz.d;
     if (key === 'has2') d.has2 = !!v;
@@ -1796,7 +1884,7 @@
       '<div class="hint" style="padding:0 0 8px">入力はこの端末のこのブラウザの中だけに保存されています。ファイルにしておくと、機種変更やデータの削除のあとでも戻せます。</div>' +
       '<div class="sheetbtns" style="margin:0">' +
         '<button class="btn ghost" onclick="A.backupSave()">すべてのプランをファイルに保存</button>' +
-        '<label class="btn ghost" for="f-backup-file" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click();}">ファイルから読み込む</label>' +
+        '<button class="btn ghost" onclick="document.getElementById(\'f-backup-file\').click()">ファイルから読み込む</button>' +
         '<input type="file" id="f-backup-file" accept=".json,application/json,text/plain" hidden onchange="A.backupFile(this)">' +
       '</div>' +
       msg + pending +
@@ -2050,12 +2138,12 @@
       '</tbody></table>';
     return '<div class="hero"><div class="k">プランの比較</div><div class="note">比べるプランを3つまで選べます</div></div>' +
       '<div class="chips">' + chips + '</div>' +
-      '<div class="card chartcard"><h3>金融資産の推移</h3>' +
+      '<div class="card chartcard"><h2 class="h3">金融資産の推移</h2>' +
         '<div class="keys">' + series.map(function (s) { return '<span><i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>'; }).join('') + '</div>' +
         cmpChartSVG(width, series) + '<div class="tip" id="cmptip" hidden></div>' +
       '</div>' +
-      '<div class="card tablecard"><h3>主な数字</h3><div class="sub">単位：万円。2つ目以降の小さな数字は、1つ目のプランとの差です。</div>' +
-        '<div class="tablewrap">' + table + '</div></div>';
+      '<div class="card tablecard"><h2 class="h3">主な数字</h2><div class="sub">単位：万円。2つ目以降の小さな数字は、1つ目のプランとの差です。</div>' +
+        '<div class="tablewrap" tabindex="0" role="region" aria-label="比較の表">' + table + '</div></div>' + DISCLAIMER;
   }
 
   // ---------- 描画 ----------
@@ -2137,13 +2225,16 @@
             var on = store.prefs.yearMode === m[0];
             return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.yearMode(\'' + m[0] + '\')">' + m[1] + '</button>';
           }).join('') + '</span></span>';
-      document.getElementById('content').innerHTML = inputHTML();
+      patchChildren(document.getElementById('content'), inputHTML());
     } else {
       var cf = document.getElementById('cf');
       cf.innerHTML = guideHTML() + cfHTML(cf.clientWidth - 24);
       bindChart();
     }
 
+    // 表示中の画面とプランの一覧だけ（隠れている画面の古い入力欄まで調べると遅くなる）
+    autoLabel(document.getElementById({ input: 'inputview', cf: 'cfview', cmp: 'cmpview', wizard: 'wizview', cover: 'coverview' }[ui.view] || 'inputview'));
+    if (ui.sheet) autoLabel(document.getElementById('sheetwrap'));
     sc.scrollTop = top;
     if (active) {
       var el = document.getElementById(active);

@@ -272,3 +272,47 @@ test('表紙で選んだ家族のかたちの参考値から、確認箇所な�
     }
   }
 });
+
+test('ありえない率でも計算があふれず、100％を超える率はエラーとして知らせる', () => {
+  const s = sample();
+  s.inflation = 1e9;
+  s.salaries[0].rows[0].growth = 1e9;
+  s.assets[1].rate = -1e9;
+  const r = E.compute(s);
+  for (const y of r.years) assert.ok(Number.isFinite(y.assets.total) && Number.isFinite(y.balance), `${y.year}年`);
+  const v = E.validate(s).filter((i) => i.level === 'error').map((i) => i.field).sort();
+  assert.deepEqual(v, ['growth', 'inflation', 'rate']);
+});
+
+test('1人目の続柄が家族１でなければ知らせる', () => {
+  const s = sample();
+  s.family[0].relation = '子供１';
+  assert.ok(E.validate(s).some((i) => i.at === 'fam:1' && i.field === 'relation' && i.level === 'error'));
+});
+
+// 乱数で作ったさまざまな入力（ありえない値も含む）で、計算が落ちず、∞やNaNが出ず、収支と残高のつじつまが合う
+test('どんな入力でも計算が落ちず、つじつまが合う（乱数で800通り）', () => {
+  const S = require('../app/sample.js');
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const pick = (a) => a[Math.floor(rnd() * a.length)];
+  const odd = [0, -50, 1e9, 0.5, '', '12', 'abc', null, undefined, 99999];
+  for (let n = 0; n < 800; n++) {
+    const d = S.templateAnswers(pick(S.FAMILIES).key, pick(S.HOMES).key, 2026);
+    d.birth1 = `${1940 + Math.floor(rnd() * 70)}/05/15`;
+    if (d.has2) d.birth2 = '1990/02/02';
+    d.kids.forEach((k) => { k.birth = `${2000 + Math.floor(rnd() * 40)}/04/01`; });
+    const st = S.applyNeeds(S.fromAnswers(d), S.NEEDS.map((x) => x.key));
+    st.inflation = pick(odd); st.assets[1].rate = pick(odd); st.assets[0].amount = pick(odd);
+    st.salaries[0].rows[0].growth = pick(odd); st.endAge = pick([60, 90, 120, '', 150]);
+    st.living.push({ id: 99, year: pick([2030, '', 3000]), amount: pick(odd) });
+    const r = E.compute(st);
+    E.validate(st);
+    for (const y of r.years) {
+      for (const v of [y.balance, y.income.total, y.expense.total, y.assets.deposit, y.assets.total]) assert.ok(Number.isFinite(v), `${n}: ${y.year}年`);
+      const tol = 1e-9 * Math.max(1, Math.abs(y.income.total) + Math.abs(y.expense.total));
+      assert.ok(Math.abs(y.balance - (y.income.total - y.expense.total)) <= tol, `${n}: 収支 ${y.year}年`);
+      assert.ok(Math.abs(y.assets.total - y.assets.deposit - y.assets.investTotal) <= 1e-9 * Math.max(1, Math.abs(y.assets.total)), `${n}: 残高 ${y.year}年`);
+    }
+  }
+});

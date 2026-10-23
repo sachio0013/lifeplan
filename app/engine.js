@@ -35,6 +35,9 @@
 
   function num(v) { var n = typeof v === 'number' ? v : parseFloat(v); return isFinite(n) ? n : 0; }
   function pct(v) { return num(String(v).replace('%', '')) / 100; }
+  // 上昇率・利回り・物価上昇率は −100％〜1000％に収める（ありえない率で計算があふれて ∞ や NaN にならないように）。
+  // 入力の確認では、100％を超える率をエラーとして知らせる。
+  function growthRate(v) { return Math.max(-1, Math.min(10, pct(v))); }
 
   function parseDate(s) {
     // 「1990/04/01」（Excelと同じ）と「1990-04-01」（日付入力欄の値）のどちらも受け付ける
@@ -157,13 +160,13 @@
     } else {
       var exact = rows.filter(function (r) { return num(r.year) === y; });
       if (exact.length) {
-        v = exact.reduce(function (s, r) { return s + num(r.amount) * Math.pow(1 + pct(r.growth), y - sy); }, 0);
+        v = exact.reduce(function (s, r) { return s + num(r.amount) * Math.pow(1 + growthRate(r.growth), y - sy); }, 0);
       } else {
         var before = rows.filter(function (r) { return num(r.year) < y; });
         if (!before.length) v = 0;
         else {
           var last = before.reduce(function (a, r) { return num(r.year) >= num(a.year) ? r : a; });
-          v = prev * (1 + pct(last.growth));
+          v = prev * (1 + growthRate(last.growth));
         }
       }
     }
@@ -180,7 +183,7 @@
   // 1行目の金額から始め、変更年は「今の価値で入れた金額」を開始年からの物価上昇で膨らませる（Excel: FV）。
   // それ以外は 前年 ×（1＋物価上昇率）。
   function livingAt(state, y, prev) {
-    var infl = pct(state.inflation);
+    var infl = growthRate(state.inflation);
     var sy = num(state.startYear);
     var rows = state.living || [];
     if (y === sy) return rows.length ? num(rows[0].amount) : 0;
@@ -201,7 +204,7 @@
     var fam = state.family || [];
     var invAssets = (state.assets || []).filter(function (a) { return !a.fixed; });
     var cashAsset = (state.assets || []).filter(function (a) { return a.fixed; })[0] || { amount: 0 };
-    var depositRate = pct(state.depositRate || 0);
+    var depositRate = growthRate(state.depositRate || 0);
     var kids = children(state).map(function (c) { return eduPlan(state, c); });
     var cars = carOccurrences(state);
 
@@ -266,7 +269,7 @@
       // 年末残高
       var deposit = (prevDeposit + balance) * (1 + depositRate * 0.8);
       var invBalances = invAssets.map(function (a, i) {
-        var r = pct(a.rate), t = pct(a.tax);
+        var r = growthRate(a.rate), t = pct(a.tax);
         return (prevInv[i] - flows[i].withdrawal) * (1 + r * (1 - t)) + flows[i].contribution;
       });
       var invTotal = invBalances.reduce(function (s, v) { return s + v; }, 0);
@@ -392,6 +395,7 @@
       }
       if (!isDate(m.birth)) { add(at, 'birth', 'error', '生年月日が正しい日付になっていません'); return; }
       var b = parseDate(m.birth).y;
+      if (i === 0 && m.relation !== '家族１') add(at, 'relation', 'error', '1人目は家計の中心になる人（家族１）にしてください');
       if (i === 0 && b > sy) add(at, 'birth', 'error', '家族１が開始年より後に生まれています');
       else if (i === 0 && sy - b < 18) add(at, 'birth', 'warn', '家族１は開始年に' + (sy - b) + '歳です。家計の中心になる人を家族１にします');
     });
@@ -405,7 +409,8 @@
     var outside = '計算期間（' + sy + '〜' + ey + '年）の外なので、計算に入りません';
 
     function rate(at, field, v) {
-      if (Math.abs(num(v)) > 10) add(at, field, 'warn', num(v) + '％はとても大きな率です。1.5％なら「1.5」と入れます');
+      if (Math.abs(num(v)) > 100) add(at, field, 'error', num(v) + '％は計算に使えない大きさです。1.5％なら「1.5」と入れます');
+      else if (Math.abs(num(v)) > 10) add(at, field, 'warn', num(v) + '％はとても大きな率です。1.5％なら「1.5」と入れます');
     }
     function amount(at, r) {
       if (num(r.amount) < 0) add(at, 'amount', 'warn', 'マイナスの金額になっています');
