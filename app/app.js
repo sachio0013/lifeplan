@@ -25,7 +25,8 @@
     return {
       version: 2, activeId: 1, nextPlanId: 2,
       plans: [{ id: 1, name: '記入例', state: window.LifePlanSample.sample() }],
-      prefs: { yearMode: 'year', welcomed: false }
+      prefs: { yearMode: 'year', welcomed: false },
+      book: { years: {}, nextId: 1 }
     };
   }
 
@@ -45,6 +46,7 @@
           if (st.plans.length) {
             if (!byId(st.plans, st.activeId)) st.activeId = st.plans[0].id;
             st.prefs = st.prefs || { yearMode: 'year', welcomed: true };
+            if (!st.book || typeof st.book.years !== 'object') st.book = { years: {}, nextId: 1 };
             return st;
           }
         }
@@ -53,7 +55,7 @@
       var old = localStorage.getItem(OLD_KEY);
       if (old) {
         var s = JSON.parse(old);
-        if (okState(s)) return { version: 2, activeId: 1, nextPlanId: 2, plans: [{ id: 1, name: 'プラン1', state: s }], prefs: { yearMode: 'year', welcomed: true } };
+        if (okState(s)) return { version: 2, activeId: 1, nextPlanId: 2, plans: [{ id: 1, name: 'プラン1', state: s }], prefs: { yearMode: 'year', welcomed: true }, book: { years: {}, nextId: 1 } };
       }
     } catch (e) { /* 読めないデータは下で取っておく */ }
     // 読めなかったデータは上書きで消さないよう、別の名前で取っておき、ファイルにも保存できるようにする
@@ -74,9 +76,10 @@
   var store = load();
   var state = plan().state;
   var ui = {
-    view: location.hash === '#cf' ? 'cf' : location.hash === '#cmp' ? 'cmp' : store.prefs.welcomed ? 'input' : 'cover',
+    view: location.hash === '#cf' ? 'cf' : location.hash === '#cmp' ? 'cmp' : location.hash === '#book' ? 'book' : store.prefs.welcomed ? 'input' : 'cover',
     cover: { family: 'kid2', home: 'rent', needs: [] },   // 表紙で選んでいるもの
     help: '',          // 開いている「？」の説明
+    book: { year: new Date().getFullYear(), month: new Date().getMonth(), mode: 'month', edit: false, picks: {}, target: 0 },  // 家計簿の表示
     active: 'basic',
     openMember: 0,
     openCalc: 0,
@@ -417,6 +420,7 @@
       ui.confirmDelMember = 0; ui.confirmDelPlan = 0; ui.confirmReset = false; ui.loanConfirm = false;
       commit();
     },
+    privacy: function () { snapshotless('入力した家計簿とプランは、この端末のブラウザの中だけに保存されます。どこにも送られません'); },
     noticeHide: function () { storageProblem = ''; commit(); },
     saveBroken: function () {
       try {
@@ -441,6 +445,7 @@
       if (ui.view === 'wizard') ui.wz = null;
       if (ui.view === 'input') ui.inputScroll = sc.scrollTop;
       ui.view = v;
+      if (v === 'book') ui.book.shown = '';
       render();
       sc.scrollTop = v === 'input' ? ui.inputScroll : 0;
     },
@@ -464,6 +469,14 @@
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
     calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    prev: '<path d="M14.5 6l-6 6 6 6"/>',
+    next: '<path d="M9.5 6l6 6-6 6"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2.5"/>',
+    book: '<path d="M6 4.5h11.5a1.5 1.5 0 0 1 1.5 1.5v14.5H8a2 2 0 0 1-2-2z"/><path d="M6 18.5a2 2 0 0 1 2-2h11M9.5 8.5h6M9.5 11.5h4"/>',
+    plan: '<path d="M4.5 6h10M4.5 11h7M4.5 16h4.5"/><path d="M13.5 19.5l.7-3.2 5.6-5.6a1.6 1.6 0 0 1 2.3 2.3l-5.6 5.6z"/>',
+    chart: '<path d="M4 19.5h16"/><rect x="5.5" y="11" width="3" height="6" rx="1"/><rect x="10.5" y="7.5" width="3" height="9.5" rx="1"/><rect x="15.5" y="4.5" width="3" height="12.5" rx="1"/>',
+    compare: '<path d="M4 18l4.5-5 3.5 3L19.5 7"/><path d="M4 9.5l4.5 3 4-3.5 7 4"/>',
+    copy: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
     home: '<path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9.5h11V10"/><path d="M10 19.5v-5h4v5"/>',
     school: '<path d="M2.5 9.5 12 5l9.5 4.5L12 14z"/><path d="M6.5 11.8v3.7c1.5 1.4 3.5 2.2 5.5 2.2s4-.8 5.5-2.2v-3.7M21.5 9.5v5"/>',
     hourglass: '<path d="M7 3.5h10M7 20.5h10M8 3.5c0 4 4 5 4 8.5s-4 4.5-4 8.5M16 3.5c0 4-4 5-4 8.5s4 4.5 4 8.5"/>',
@@ -1047,7 +1060,10 @@
         '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>';
     }
     var sf = result.shortfall;
-    return '<div class="hero"><div class="k">終了時点（' + last.year + '年・家族１ ' + last.age + '歳）の金融資産</div>' +
+    var basis = state.bookBasis;
+    var basisRel = basis ? window.LifePlanBook.reliability(basis.months, basis.matched) : null;
+    return (basis ? '<button class="basis lv' + basisRel.level + '" onclick="A.view(\'book\')">' + ic('book', 18) + '<span>家計簿（' + basis.year + '年・' + basis.months + 'か月分）の実績にもとづくプラン<b>信頼度：' + basisRel.label + '</b></span></button>' : '') +
+      '<div class="hero"><div class="k">終了時点（' + last.year + '年・家族１ ' + last.age + '歳）の金融資産</div>' +
         '<div class="v">' + man(result.endTotal) + '<small> 万円</small></div>' +
         '<div class="note">うち普通預金等 ' + man(last.assets.deposit) + '万円・投資資産 ' + man(last.assets.investTotal) + '万円</div></div>' +
       (sf ? '<div class="alert">' + ic('warn', 19) + '<span>' + sf.year + '年（家族１が' + sf.age + '歳）に普通預金等がマイナスになります。最も少ない年で ' + man(sf.minDeposit) + '万円です。</span></div>' : '') +
@@ -1350,6 +1366,8 @@
     otherFlow: '毎年かかる、ほかの欄に当てはまらない支出です。旅行・趣味・帰省・ペット・仕送りなどをまとめて入れます。',
     otherLump: '結婚式、出産、子供の結婚の援助、留学、大きな家電など、一度だけ出る支出です。',
     investAdd: 'NISAやiDeCoなどに、毎年いくら積み立てるかです（月3万円なら36）。積み立てた分は普通預金等から移り、想定利回りで増えていきます。想定利回りは将来の見込みなので、控えめな数字で試すと安心です。税率は、NISA・iDeCoなら0％、それ以外の投資信託や株なら20％を選びます。',
+    bookIncome: '給与やボーナスは、口座に振り込まれた手取りの額を入れます。種類（給与・ボーナス・その他）は「項目・口座を編集する」で変えられ、ライフプランへの反映のときに、だれの収入かを見分けるのに使います。',
+    bookAccounts: '月末の口座の残高を入れると、「前年末の残高＋その年の収支」と比べて差額を出します。差額が0なら、その月の記録に漏れがないということです。家計簿の正しさの裏付けになり、ライフプランの信頼度も上がります。',
     investOut: '積み立てた資産を取り崩して、生活費などにあてる予定です。iDeCoは、原則として60歳まで引き出せません。'
   };
 
@@ -1435,15 +1453,17 @@
     }).join('');
     var hasOwn = store.plans.some(function (p) { return p.name !== '記入例'; });
     var steps = [
-      ['家族のかたちと、気になることを選ぶ', '下の3つの質問に答えます'],
+      ['家族のかたちと、気になることを選ぶ', '下の3つの質問に答えます（あとから変えられます）'],
       ['質問に答えて、金額を入れる', '参考値が入っているので、自分の数字に書き換えるだけ'],
-      ['グラフで見て、比べる', '90代までの貯金・資産の流れと、条件を変えたときの違いがわかります']
+      ['グラフで見て、比べる', '90代までの貯金・資産の流れと、条件を変えたときの違いがわかります'],
+      ['月に1回、家計簿をつける', '実績からプランを作り直すほど、未来の見通しが確かになります']
     ];
     return noticeHTML() + '<div class="cover">' +
       '<div class="cvhero">' + coverArt() +
         '<h1>わが家のお金の未来を、<br>のぞいてみよう</h1>' +
         '<p>家族と収入・支出を入れるだけで、これから先の貯金と資産の流れがグラフで見られます。住宅購入、教育費、老後、積立投資の「もしも」も試せます。</p>' +
       '</div>' +
+      '<div class="trust"><span>' + ic('lock', 16) + '登録いらず</span><span>' + ic('lock', 16) + 'データを外に送らない</span><span>' + ic('lock', 16) + '商品の勧誘なし</span></div>' +
       '<ol class="cvsteps">' + steps.map(function (st, i) {
         return '<li><span class="no">' + (i + 1) + '</span><div><b>' + st[0] + '</b><span>' + st[1] + '</span></div></li>';
       }).join('') + '</ol>' +
@@ -1582,6 +1602,447 @@
     else if (act === 'edu') { var kid = E.children(state)[0]; jumpTo(kid ? 'card-edu-' + kid.id : 'card-family'); }
     else if (act === 'investCard') jumpTo('sec-invest');
     else if (act === 'cf') { ui.view = 'cf'; commit(); document.getElementById('scroll').scrollTop = 0; }
+  };
+
+  // ---------- 家計簿（年間収支） ----------
+  //
+  // 1年を1枚にまとめる（Excelの家計簿シートと同じ）。月ごとの入力、1年の表、ライフプランへの反映の3つの画面。
+  // データは store.book = { years: { '2026': 1年分 }, nextId }。プランとは別に、家計（世帯）に1つ。
+
+  var BK = window.LifePlanBook;
+  var MONTHS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+
+  function bookYear() { return store.book.years[ui.book.year] || null; }
+  function yen(v) { var n = Math.round(BK.num(v)); return (n < 0 ? '−' : '') + Math.abs(n).toLocaleString('ja-JP'); }
+  function yenIn(v) { return BK.filled(v) ? Math.round(BK.num(v)).toLocaleString('ja-JP') : ''; }
+  function catColor(no) { return 'var(--k' + no + ')'; }
+  // 今日の月に記録が無ければ、家計簿のタブに印を付ける（家計簿を始めた人だけ）
+  function bookDue() {
+    if (!Object.keys(store.book.years).length) return false;
+    var d = new Date(), y = store.book.years[d.getFullYear()];
+    if (!y) return true;
+    return !BK.summarize(y).months[d.getMonth()].recorded;
+  }
+
+  function bookHeaderHTML() {
+    var y = bookYear(), s = y ? BK.summarize(y) : null;
+    var modes = [['month', '月ごと'], ['year', '1年の表'], ['plan', 'プランへ']];
+    return '<div class="bkhead">' +
+      '<div class="bkyear">' +
+        '<button class="del" aria-label="前の年" onclick="A.bkYear(-1)">' + ic('prev', 22) + '</button>' +
+        '<span class="y">' + ui.book.year + '年の家計簿</span>' +
+        '<button class="del" aria-label="次の年" onclick="A.bkYear(1)">' + ic('next', 22) + '</button>' +
+      '</div>' +
+      (y ? '<div class="mini bkmodes" role="tablist" aria-label="家計簿の表示">' + modes.map(function (m) {
+        var on = ui.book.mode === m[0];
+        return '<button role="tab" aria-selected="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.bkMode(\'' + m[0] + '\')">' + m[1] + '</button>';
+      }).join('') + '</div>' : '') +
+      (y && ui.book.mode === 'month' ? '<div class="bkmonths" role="tablist" aria-label="月">' + MONTHS.map(function (label, i) {
+        var on = ui.book.month === i, rec = s.months[i].recorded, ok = s.months[i].diff != null && Math.abs(s.months[i].diff) < 1;
+        return '<button role="tab" id="bkm-' + i + '" aria-selected="' + on + '" class="' + (on ? 'on' : '') + (rec ? ' rec' : '') + '" onclick="A.bkMonth(' + i + ')">' +
+          label + (ok ? '<span class="ok" aria-label="残高と一致">' + ic('check', 11) + '</span>' : rec ? '<span class="dot" aria-label="記録あり"></span>' : '') + '</button>';
+      }).join('') + '</div>' : '') +
+    '</div>';
+  }
+
+  function bookEmptyHTML() {
+    var prev = store.book.years[ui.book.year - 1];
+    return '<div class="bkempty">' + bookArt() +
+      '<h2>' + ui.book.year + '年の家計簿をはじめよう</h2>' +
+      '<p>毎日つけなくて大丈夫。<b>月に1回</b>、カードの明細や通帳を見ながら、項目ごとの合計を入れるだけです。1年が1枚の表にまとまります。</p>' +
+      '<ul class="bkpoints">' +
+        '<li>' + ic('lock', 18) + '<span><b>データは端末の外に送りません。</b>登録も、口座の連携もいりません。</span></li>' +
+        '<li>' + ic('check', 18) + '<span><b>口座の残高と照らし合わせて</b>、記録に漏れがないかを確かめられます。</span></li>' +
+        '<li>' + ic('chart', 18) + '<span><b>実績からライフプランを作れます。</b>記録した月が増えるほど、未来の見通しが確かになります。</span></li>' +
+      '</ul>' +
+      '<div class="cvalt">' +
+        '<button class="btn big" onclick="A.bkCreate(false)">' + (prev ? ui.book.year - 1 + '年の項目を引き継いではじめる' : 'この年の家計簿をはじめる') + '</button>' +
+        '<button class="btn ghost" onclick="A.bkCreate(true)">記入例（Excelのサンプル）を入れて見てみる</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function bookArt() {
+    return '<svg class="bkart" viewBox="0 0 220 120" aria-hidden="true">' +
+      '<ellipse cx="110" cy="110" rx="96" ry="8" fill="var(--accent-soft)"/>' +
+      '<rect x="44" y="18" width="92" height="86" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="3"/>' +
+      '<path d="M58 40h50M58 54h64M58 68h40M58 82h56" stroke="var(--fill-opt)" stroke-width="6" stroke-linecap="round"/>' +
+      '<path d="M58 40h22M58 54h34M58 68h14M58 82h28" stroke="var(--accent)" stroke-width="6" stroke-linecap="round"/>' +
+      '<rect x="44" y="18" width="12" height="86" rx="6" fill="var(--accent)"/>' +
+      '<g transform="translate(132 46) scale(3.1)" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width=".8" stroke-linejoin="round">' +
+        '<path d="M18.5 10.2C18 7.3 15.3 5.2 12 5.2c-3.9 0-7 2.6-7 5.8 0 1.8 1 3.4 2.5 4.4V18h2.6v-1.5c.6.1 1.2.2 1.9.2s1.3-.1 1.9-.2V18h2.6v-2.6c.8-.5 1.4-1.2 1.8-2h1.4v-3.2h-1.2z"/>' +
+        '<circle cx="15.6" cy="10.2" r=".55" fill="var(--accent)" stroke="none"/></g>' +
+      '<circle cx="176" cy="26" r="10" fill="var(--gold)" stroke="var(--gold-ink)" stroke-width="2"/>' +
+      '<path d="M26 30l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="var(--accent)"/>' +
+    '</svg>';
+  }
+
+  // ---- 月ごと ----
+
+  function ringSVG(pct) {
+    var p = Math.max(0, Math.min(100, pct)), r = 26, c = 2 * Math.PI * r;
+    return '<svg class="ring" width="70" height="70" viewBox="0 0 70 70" role="img" aria-label="貯蓄・投資に回せた割合 ' + p + '％">' +
+      '<circle cx="35" cy="35" r="' + r + '" fill="none" stroke="var(--fill-opt)" stroke-width="9"/>' +
+      '<circle cx="35" cy="35" r="' + r + '" fill="none" stroke="var(--good)" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (c * p / 100).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 35 35)"/>' +
+      '<text x="35" y="39" text-anchor="middle">' + p + '%</text></svg>';
+  }
+
+  function bookMonthHTML(y) {
+    var i = ui.book.month, s = BK.summarize(y), m = s.months[i];
+    var edit = ui.book.edit;
+    var saveRate = m.income > 0 ? Math.round((m.income - m.expense + m.cats[6]) / m.income * 100) : 0;
+    var bar = '', legend = '';
+    var spend = m.expense;
+    BK.CATS.forEach(function (c) {
+      var v = m.cats[c.no];
+      if (spend > 0 && v > 0) bar += '<span style="width:' + (v / spend * 100).toFixed(2) + '%;background:' + catColor(c.no) + '"></span>';
+      legend += '<span><i style="background:' + catColor(c.no) + '"></i>' + c.label + '<b>' + yen(v) + '</b></span>';
+    });
+    var summary = '<div class="card bksum">' +
+      '<div class="bkrow1"><div><div class="k">' + MONTHS[i] + 'の収支</div><div class="v ' + (m.balance < 0 ? 'neg' : '') + '">' + (m.balance > 0 ? '＋' : '') + yen(m.balance) + '<small>円</small></div>' +
+        '<div class="io"><span>収入 <b>' + yen(m.income) + '</b></span><span>支出 <b>' + yen(m.expense) + '</b></span></div></div>' +
+        (m.income > 0 ? '<div class="ringwrap">' + ringSVG(saveRate) + '<span>貯蓄・投資に<br>回せた割合</span></div>' : '') + '</div>' +
+      (spend > 0 ? '<div class="catbar" role="img" aria-label="区分ごとの支出の割合">' + bar + '</div>' : '') +
+      '<div class="catlegend">' + legend + '</div>' +
+      (m.diff != null ? '<div class="diffline ' + (Math.abs(m.diff) < 1 ? 'ok' : 'ng') + '">' + ic(Math.abs(m.diff) < 1 ? 'check' : 'warn', 16) +
+        (Math.abs(m.diff) < 1 ? '記録と口座の残高が一致しています' : '記録と口座の残高の差額 ' + yen(m.diff) + '円（0になれば、記録に漏れなし）') + '</div>' : '') +
+    '</div>';
+
+    var tips = BK.insights(y, i, store.book.years[ui.book.year - 1]);
+    var review = tips.length ? '<div class="card bkreview">' + '<div class="gh">' + fpFace(36) + '<div class="t">' + MONTHS[i] + 'のふりかえり</div></div>' +
+      '<ul>' + tips.map(function (t) { return '<li class="' + t.kind + '">' + esc(t.text) + '</li>'; }).join('') + '</ul></div>' : '';
+
+    var prevRec = i > 0 && s.months[i - 1].recorded;
+    var hasEmpty = y.items.some(function (it) { return !BK.filled(it.m[i]) && BK.filled(it.m[i - 1] || ''); }) ||
+      y.incomes.some(function (r) { return !BK.filled(r.m[i]) && BK.filled(r.m[i - 1] || ''); });
+    var copy = prevRec && hasEmpty && !edit
+      ? '<button class="btn ghost bkcopy" onclick="A.bkCopyPrev()">' + ic('copy', 18) + MONTHS[i - 1] + 'と同じ金額を、空いている欄に入れる</button>' : '';
+
+    var groups = BK.CATS.map(function (c) {
+      var rows = y.items.filter(function (it) { return it.cat === c.no; });
+      if (!rows.length && !edit) return '';
+      var sub = rows.reduce(function (t, it) { return t + BK.num(it.m[i]); }, 0);
+      return '<div class="card bkgroup" id="bkg-' + c.no + '">' +
+        '<div class="head"><span class="cdot" style="background:' + catColor(c.no) + '"></span><span class="ttl">' + c.label + '</span>' +
+          '<span class="map">→ ' + c.plan + '</span><span class="sub">' + yen(sub) + '円</span></div>' +
+        rows.map(function (it) { return bookItemRow(it, i, edit); }).join('') +
+        (edit ? '<div class="addwrap divide"><button class="btn ghost" onclick="A.bkAdd(\'item\',' + c.no + ')">＋ ' + c.label + 'の項目を足す</button></div>' : '') +
+      '</div>';
+    }).join('');
+
+    var incomes = '<div class="card bkgroup" id="bkg-income"><div class="head"><span class="cdot" style="background:var(--good)"></span><span class="ttl">手取収入</span>' + helpBtn('bookIncome') +
+        '<span class="sub">' + yen(m.income) + '円</span></div>' + helpBox('bookIncome') +
+      y.incomes.map(function (r) { return bookIncomeRow(r, i, edit); }).join('') +
+      (edit ? '<div class="addwrap divide"><button class="btn ghost" onclick="A.bkAdd(\'income\')">＋ 収入の項目を足す</button></div>' : '') +
+      '<div class="rowtop divide" style="padding:10px 0"><span class="u">備考</span>' +
+        '<input type="text" id="f-bk-note" class="op" style="flex:1;min-width:0" aria-label="' + MONTHS[i] + 'の備考" placeholder="児童手当、定期代など" value="' + esc(y.notes[i] || '') + '" onchange="A.bkNote(this.value)"></div>' +
+    '</div>';
+
+    var accounts = '<div class="card bkgroup" id="bkg-accounts"><div class="head"><span class="cdot" style="background:var(--c-deposit)"></span><span class="ttl">' + MONTHS[i] + '末の口座残高</span>' + helpBtn('bookAccounts') + '<span class="sub">任意</span></div>' +
+      helpBox('bookAccounts') +
+      y.accounts.map(function (a) {
+        if (edit) {
+          return '<div class="bkrow edit divide">' +
+            '<input type="text" id="f-bk-acn-' + a.id + '" class="op" style="flex:1;min-width:0" aria-label="口座の名前" value="' + esc(a.name) + '" onchange="A.bkField(\'account\',' + a.id + ',\'name\',this.value)">' +
+            '<span class="u">前年末</span>' + bookAmountInput('f-bk-acs-' + a.id, a.start, "A.bkField('account'," + a.id + ",'start',this.value)", a.name + 'の前年末の残高', 'rq') +
+            '<button class="del" aria-label="この口座を外す" onclick="A.bkDel(\'account\',' + a.id + ')">' + ic('del', 20) + '</button></div>';
+        }
+        return '<div class="bkrow divide"><span class="nm">' + esc(a.name) + '<small>前年末 ' + (BK.filled(a.start) ? yen(a.start) + '円' : '未入力') + '</small></span>' +
+          bookAmountInput('f-bk-ac-' + a.id, a.m[i], "A.bkAmt('account'," + a.id + ',this.value)', a.name + 'の' + MONTHS[i] + '末の残高', 'op') + '</div>';
+      }).join('') +
+      (edit ? '<div class="addwrap divide"><button class="btn ghost" onclick="A.bkAdd(\'account\')">＋ 口座を足す</button></div>' : '') +
+    '</div>';
+
+    return (y.sample ? '<div class="vbanner notice sample">' + ic('book', 18) + '<span>これは記入例（Excelのサンプル）です。自分の家計簿にするときは消してから始めます。</span><button class="btn" onclick="A.bkClear()">記入例を消す</button></div>' : '') +
+      summary + review + copy +
+      '<div class="bkedit"><button class="btn ghost" aria-pressed="' + edit + '" onclick="A.bkEdit()">' + ic(edit ? 'check' : 'tune', 18) + (edit ? '項目の編集を終える' : '項目・口座を編集する') + '</button></div>' +
+      groups + incomes + accounts;
+  }
+
+  function bookAmountInput(id, v, handler, label, cls) {
+    return '<input type="text" inputmode="numeric" enterkeyhint="next" autocomplete="off" id="' + id + '" class="' + (cls || 'op') + ' num yen" aria-label="' + esc(label) + '（円）" value="' + yenIn(v) + '" onchange="' + handler + '"><span class="u">円</span>';
+  }
+
+  function bookItemRow(it, i, edit) {
+    if (edit) {
+      return '<div class="bkrow edit divide">' +
+        '<input type="text" id="f-bk-itn-' + it.id + '" class="op" style="flex:1 1 100%;min-width:0" aria-label="項目の名前" value="' + esc(it.name) + '" onchange="A.bkField(\'item\',' + it.id + ',\'name\',this.value)">' +
+        selectInput('f-bk-itc-' + it.id, 'op', '', BK.CATS.map(function (c) { return { value: c.no, label: c.no + ' ' + c.label }; }), it.cat, "A.bkField('item'," + it.id + ",'cat',this.value)") +
+        '<input type="text" id="f-bk-itp-' + it.id + '" class="op" style="width:118px" list="bk-pays" aria-label="決済手段" placeholder="決済手段" value="' + esc(it.pay) + '" onchange="A.bkField(\'item\',' + it.id + ',\'pay\',this.value)">' +
+        '<input type="text" id="f-bk-itd-' + it.id + '" class="op" style="width:92px" aria-label="引落日" placeholder="引落日" value="' + esc(it.day) + '" onchange="A.bkField(\'item\',' + it.id + ',\'day\',this.value)">' +
+        '<button class="del" aria-label="「' + esc(it.name) + '」を外す" onclick="A.bkDel(\'item\',' + it.id + ')">' + ic('del', 20) + '</button>' +
+      '</div>';
+    }
+    var sub = [it.pay, it.day].filter(Boolean).join('・');
+    var prev = i > 0 && BK.filled(it.m[i - 1]) ? '先月 ' + yen(it.m[i - 1]) : '';
+    return '<div class="bkrow divide"><span class="nm">' + esc(it.name) + (sub || prev ? '<small>' + esc([sub, prev].filter(Boolean).join('　')) + '</small>' : '') + '</span>' +
+      bookAmountInput('f-bk-it-' + it.id, it.m[i], "A.bkAmt('item'," + it.id + ',this.value)', it.name + '（' + MONTHS[i] + '）', 'op') + '</div>';
+  }
+
+  function bookIncomeRow(r, i, edit) {
+    if (edit) {
+      return '<div class="bkrow edit divide">' +
+        '<input type="text" id="f-bk-inn-' + r.id + '" class="op" style="flex:1 1 100%;min-width:0" aria-label="収入の名前" value="' + esc(r.name) + '" onchange="A.bkField(\'income\',' + r.id + ',\'name\',this.value)">' +
+        selectInput('f-bk-ink-' + r.id, 'op', '', BK.INCOME_KINDS.map(function (k) { return { value: k.key, label: k.label }; }), r.kind, "A.bkField('income'," + r.id + ",'kind',this.value)") +
+        '<button class="del" aria-label="「' + esc(r.name) + '」を外す" onclick="A.bkDel(\'income\',' + r.id + ')">' + ic('del', 20) + '</button></div>';
+    }
+    return '<div class="bkrow divide"><span class="nm">' + esc(r.name) + '</span>' +
+      bookAmountInput('f-bk-in-' + r.id, r.m[i], "A.bkAmt('income'," + r.id + ',this.value)', r.name + '（' + MONTHS[i] + '）', 'op') + '</div>';
+  }
+
+  // ---- 1年の表 ----
+
+  function bookChartSVG(s, width) {
+    var W = Math.max(300, width), H = 210, L = 54, R = 8, T = 12, B = 26, pw = W - L - R, ph = H - T - B;
+    var top = 0;
+    s.months.forEach(function (m) { top = Math.max(top, m.expense, m.income); });
+    var step = niceStep(top || 1, 4), yMax = Math.ceil((top || 1) / step) * step;
+    var sy = function (v) { return T + (yMax - v) / yMax * ph; };
+    var slot = pw / 12, bw = Math.min(22, slot * 0.6);
+    var g = '';
+    for (var t = 0; t <= yMax + 1e-9; t += step) {
+      g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + sy(t).toFixed(1) + '" y2="' + sy(t).toFixed(1) + '" stroke="var(--line)"/>' +
+        '<text x="' + (L - 6) + '" y="' + (sy(t) + 3.5).toFixed(1) + '" text-anchor="end">' + (t / 10000).toLocaleString('ja-JP') + '万</text>';
+    }
+    var bars = '';
+    s.months.forEach(function (m, i) {
+      var x = L + i * slot + (slot - bw) / 2, acc = 0;
+      BK.CATS.forEach(function (c) {
+        var v = m.cats[c.no]; if (v <= 0) return;
+        bars += '<rect x="' + x.toFixed(1) + '" y="' + sy(acc + v).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(0, sy(acc) - sy(acc + v) - 0.8).toFixed(1) + '" fill="' + catColor(c.no) + '"/>';
+        acc += v;
+      });
+      if (m.income > 0) bars += '<line x1="' + (x - 3).toFixed(1) + '" x2="' + (x + bw + 3).toFixed(1) + '" y1="' + sy(m.income).toFixed(1) + '" y2="' + sy(m.income).toFixed(1) + '" stroke="var(--text)" stroke-width="2.5" stroke-linecap="round"/>';
+      bars += '<text x="' + (L + i * slot + slot / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + (i + 1) + '</text>';
+    });
+    return '<svg id="bkchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="月ごとの支出（区分ごとの積み上げ）と収入（横線）">' + g + bars + '</svg>';
+  }
+
+  function bookYearHTML(y, width) {
+    var s = BK.summarize(y);
+    var head = '<tr><th>項目</th>' + MONTHS.map(function (m) { return '<th>' + m + '</th>'; }).join('') + '<th>合計</th></tr>';
+    var cell = function (v, cls) { var n = Math.round(BK.num(v)); return '<td' + (cls ? ' class="' + cls + '"' : n < 0 ? ' class="neg"' : n === 0 ? ' class="z"' : '') + '>' + (n === 0 ? '' : yen(n)) + '</td>'; };
+    var row = function (label, arr, total, cls, sw) {
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + (sw ? '<span class="sw" style="background:' + sw + '"></span>' : '') + esc(label) + '</td>' + arr.map(function (v) { return cell(v); }).join('') + cell(total) + '</tr>';
+    };
+    var grp = function (label) { return '<tr class="grp"><td>' + label + '</td>' + MONTHS.map(function () { return '<td></td>'; }).join('') + '<td></td></tr>'; };
+    var h = grp('１．支出');
+    y.items.forEach(function (it) { h += row(it.name, it.m, BK.num(it.m.reduce(function (a, v) { return a + BK.num(v); }, 0)), '', catColor(it.cat)); });
+    h += row('支出計', s.months.map(function (m) { return m.expense; }), s.expense, 'sum');
+    h += grp('２．決済手段別');
+    Object.keys(s.byPay).forEach(function (k) { h += row(k, s.byPay[k], s.byPay[k].reduce(function (a, v) { return a + v; }, 0)); });
+    h += grp('３．区分別（→ ライフプラン）');
+    BK.CATS.forEach(function (c) { h += row(c.no + ' ' + c.label, s.months.map(function (m) { return m.cats[c.no]; }), s.catTotals[c.no], '', catColor(c.no)); });
+    h += grp('４．手取収入');
+    y.incomes.forEach(function (r) { h += row(r.name, r.m, r.m.reduce(function (a, v) { return a + BK.num(v); }, 0)); });
+    h += row('収入計', s.months.map(function (m) { return m.income; }), s.income, 'sum');
+    h += '<tr class="note"><td>備考</td>' + y.notes.map(function (n) { return '<td>' + esc(n || '') + '</td>'; }).join('') + '<td></td></tr>';
+    h += grp('５．収支／残高');
+    h += row('収支', s.months.map(function (m) { return m.balance; }), s.balance, 'sum');
+    h += '<tr><td>残高（記録）</td>' + s.months.map(function (m) { return cell(m.running); }).join('') + '<td></td></tr>';
+    h += '<tr><td>口座残高（実際）</td>' + s.months.map(function (m) { return m.actual == null ? '<td></td>' : cell(m.actual); }).join('') + '<td></td></tr>';
+    h += '<tr><td>差額（0になること）</td>' + s.months.map(function (m) {
+      return m.diff == null ? '<td></td>' : Math.abs(m.diff) < 1 ? '<td class="okc">0 ✓</td>' : cell(m.diff, 'neg');
+    }).join('') + '<td></td></tr>';
+
+    var inv = y.invests.map(function (v) {
+      return '<div class="bkrow divide"><span class="nm">' + esc(v.name) + '</span>' +
+        '<span class="u">前年末</span>' + bookAmountInput('f-bk-ivs-' + v.id, v.start, "A.bkInv(" + v.id + ",'start',this.value)", v.name + 'の前年末', 'op').replace('<span class="u">円</span>', '') +
+        '<span class="u">今年末（予想）</span>' + bookAmountInput('f-bk-ive-' + v.id, v.end, "A.bkInv(" + v.id + ",'end',this.value)", v.name + 'の今年末（予想）', 'op') + '</div>';
+    }).join('');
+    var invTotal = y.invests.reduce(function (t, v) { return [t[0] + BK.num(v.start), t[1] + BK.num(v.end)]; }, [0, 0]);
+
+    return '<div class="card chartcard"><h2 class="h3">月ごとの支出と収入</h2>' +
+        '<div class="keys">' + BK.CATS.map(function (c) { return '<span><i style="background:' + catColor(c.no) + '"></i>' + c.label + '</span>'; }).join('') +
+        '<span><i style="background:var(--text);height:3px"></i>収入</span></div>' + bookChartSVG(s, width) + '</div>' +
+      '<div class="yeartotals">' +
+        '<div><span>収入</span><b>' + yen(s.income) + '</b></div><div><span>支出</span><b>' + yen(s.expense) + '</b></div>' +
+        '<div><span>収支</span><b class="' + (s.balance < 0 ? 'neg' : 'pos') + '">' + (s.balance > 0 ? '＋' : '') + yen(s.balance) + '</b></div></div>' +
+      '<div class="card tablecard"><h2 class="h3">' + ui.book.year + '年の年間収支</h2><div class="sub">単位：円。Excelの家計簿シートと同じ並びです。横にスクロールできます。</div>' +
+        '<div class="tablewrap" tabindex="0" role="region" aria-label="年間収支の表"><table class="cf bk">' + '<thead>' + head + '</thead><tbody>' + h + '</tbody></table></div></div>' +
+      '<div class="card bkgroup"><div class="head"><span class="ttl">投資資産の残高（NISA・iDeCo・株など）</span></div>' + inv +
+        '<div class="total divide"><span class="u" style="font-weight:700">合計</span><span class="v">' + yen(invTotal[0]) + ' → ' + yen(invTotal[1]) + '円</span></div></div>';
+  }
+
+  // ---- ライフプランへ反映 ----
+
+  // 反映できる項目。get は今のプランの値（万円）、set はプランに書き込む
+  function bookTargets(st, bp) {
+    var fam1 = st.family[0], fam2 = st.family.filter(function (m) { return m.relation === '家族２'; })[0];
+    var salOf = function (m) { return m && st.salaries.filter(function (s) { return s.memberId === m.id; })[0]; };
+    var invAsset = function (name) { return st.assets.filter(function (a) { return !a.fixed && String(a.name).toUpperCase() === String(name).toUpperCase(); })[0]; };
+    var firstInv = st.assets.filter(function (a) { return !a.fixed; })[0];
+    var row = function (key, label, val, get, set, note) { return { key: key, label: label, val: val, now: get(), set: set, note: note || '' }; };
+    var firstAmt = function (list) { return list && list[0] ? toNum(list[0].amount) : null; };
+    var setFirst = function (key, memo) {
+      return function (v) {
+        var list = st[key] = st[key] || [];
+        if (list[0]) { list[0].amount = v; if (!list[0].memo) list[0].memo = memo; }
+        else list.push({ id: st.nextId++, year: st.startYear, amount: v, memo: memo });
+      };
+    };
+    var out = [
+      row('living', '基本生活費', bp.living, function () { return firstAmt(st.living); }, setFirst('living', '家計簿の実績')),
+      row('housing', '住宅費', bp.housing, function () { return firstAmt(st.housing); }, setFirst('housing', '家計簿の実績')),
+      row('insurance', '保険料', bp.insurance, function () { return firstAmt(st.insurance); }, setFirst('insurance', '家計簿の実績')),
+      row('car', '自動車の維持費', bp.car, function () { return firstAmt(st.carCost); }, setFirst('carCost', '家計簿の実績（車関連）'))
+    ];
+    if (firstInv) {
+      out.push(row('invest', firstInv.name + 'への積立（年額）', bp.invest, function () {
+        var add = ((st.invest || {})[firstInv.id] || {}).add || []; return add[0] ? toNum(add[0].amount) : null;
+      }, function (v) {
+        var iv = st.invest[firstInv.id] = st.invest[firstInv.id] || { add: [], out: [] };
+        var by = E.baseBirthYear(st);
+        if (iv.add[0]) iv.add[0].amount = v;
+        else iv.add.push({ id: st.nextId++, year: st.startYear, toYear: Math.max(st.startYear, by + 59), amount: v, memo: '家計簿の実績' });
+      }));
+    }
+    [[fam1, 'sal1'], [fam2, 'sal2']].forEach(function (p) {
+      if (!p[0] || !bp[p[1]]) return;
+      var m = p[0], who = memberName(m.id);
+      out.push(row(p[1], who + 'の手取り収入（ボーナス込み）', bp[p[1]], function () { var s = salOf(m); return s && s.rows[0] ? toNum(s.rows[0].amount) : null; }, function (v) {
+        var s = salOf(m);
+        if (!s) { s = { id: st.nextId++, memberId: m.id, who: who, retireAge: 65, rows: [{ id: st.nextId++, year: st.startYear, amount: 0, growth: 0 }] }; st.salaries.push(s); }
+        s.rows[0].amount = v;
+      }));
+    });
+    var yearNote = ui.book.year !== toNum(st.startYear) ? 'この家計簿の前年末は' + (ui.book.year - 1) + '年末、プランの開始年は' + st.startYear + '年です' : '';
+    out.push(row('cash', '前年末の普通預金等', bp.cash, function () { var a = st.assets.filter(function (x) { return x.fixed; })[0]; return a ? toNum(a.amount) : null; }, function (v) {
+      var a = st.assets.filter(function (x) { return x.fixed; })[0]; if (a) a.amount = v;
+    }, yearNote));
+    bp.invests.forEach(function (v) {
+      var a = invAsset(v.name);
+      if (!a) return;
+      out.push(row('inv-' + a.id, '前年末の' + a.name, v.start, function () { return toNum(a.amount); }, function (x) { a.amount = x; }, yearNote));
+    });
+    return out;
+  }
+
+  function bookPlanHTML(y) {
+    var bp = BK.toPlan(y);
+    var s = BK.summarize(y);
+    var rel = BK.reliability(bp ? bp.months : 0, bp ? bp.matched : 0);
+    var meter = '<div class="meter" role="img" aria-label="記録した月 ' + s.recorded + 'か月、うち残高と一致 ' + s.matched + 'か月">' + s.months.map(function (m, i) {
+      var ok = m.diff != null && Math.abs(m.diff) < 1;
+      return '<span class="' + (ok ? 'ok' : m.recorded ? 'rec' : '') + '">' + (i + 1) + '</span>';
+    }).join('') + '</div>';
+    var head = '<div class="card bkrel">' +
+      '<div class="t">家計簿からライフプランを作る</div>' +
+      '<p>記録した月の実績から1年分の金額を出し、ライフプランに入れます。予想ではなく<b>実績</b>にもとづくので、未来の見通しが確かになります。</p>' +
+      meter +
+      '<div class="lv lv' + rel.level + '"><span>信頼度</span><b>' + rel.label + '</b></div>' +
+      '<p class="hint" style="padding:4px 0 0">' + esc(rel.text) + (bp && bp.months < 12 ? '　記録した' + bp.months + 'か月の平均×12で、1年分にしています。' : '') + '</p>' +
+    '</div>';
+    if (!bp) return head;
+    var target = byId(store.plans, ui.book.target) || plan();
+    var rows = bookTargets(target.state, bp);
+    var picks = ui.book.picks;
+    var table = rows.map(function (r) {
+      var on = picks[r.key] !== undefined ? picks[r.key] : r.val > 0;
+      var d = r.now == null ? null : Math.round((r.val - r.now) * 10) / 10;
+      return '<label class="maprow' + (on ? ' on' : '') + '"><input type="checkbox" id="f-bkp-' + r.key + '"' + (on ? ' checked' : '') + ' onchange="A.bkPick(\'' + r.key + '\',this.checked)">' +
+        '<span class="lb2">' + esc(r.label) + (r.note ? '<small>' + esc(r.note) + '</small>' : '') + '</span>' +
+        '<span class="vals"><b>' + man1(r.val) + '</b><small>今 ' + (r.now == null ? '—' : man1(r.now)) + (d ? '（' + (d > 0 ? '＋' : '−') + man1(Math.abs(d)) + '）' : '') + '</small></span></label>';
+    }).join('');
+    var n = rows.filter(function (r) { return picks[r.key] !== undefined ? picks[r.key] : r.val > 0; }).length;
+    var planOpts = store.plans.map(function (p) { return { value: p.id, label: p.name }; });
+    return head +
+      '<div class="card bkmap">' +
+        '<div class="rowtop" style="padding-bottom:8px"><span class="u">反映するプラン</span>' + selectInput('f-bk-target', 'rq', 'flex:1;min-width:0', planOpts, target.id, 'A.bkTarget(this.value)') + '</div>' +
+        '<div class="maphead"><span>項目</span><span>家計簿から（年額・万円）</span></div>' + table +
+        '<p class="hint">教育費（家計簿では年' + man1(bp.edu) + '万円）は、子供の年齢と進路から計算するので反映しません。家計簿の教育費と比べて、進路や金額を見直す目安にしてください。' +
+          (bp.other ? '児童手当などその他の収入（年' + man1(bp.other) + '万円）も、続く期間が人によって違うので反映しません。' : '') + '</p>' +
+        '<button class="btn block big" onclick="A.bkApply()"' + (n ? '' : ' disabled') + '>チェックした' + n + '項目を「' + esc(target.name) + '」に反映する</button>' +
+      '</div>';
+  }
+  function man1(v) { return (Math.round(v * 10) / 10).toLocaleString('ja-JP'); }
+
+  function bookHTML(width) {
+    var y = bookYear();
+    var body = !y ? bookEmptyHTML() : ui.book.mode === 'year' ? bookYearHTML(y, width) : ui.book.mode === 'plan' ? bookPlanHTML(y) : bookMonthHTML(y);
+    return bookHeaderHTML() + '<div class="bkbody">' + body + '</div>' +
+      '<datalist id="bk-pays"><option value="現金"><option value="カード"><option value="口座振替"><option value="電子マネー"></datalist>';
+  }
+
+  // ---- 操作 ----
+
+  function bkFind(kind, id) {
+    var y = bookYear(); if (!y) return null;
+    var list = kind === 'item' ? y.items : kind === 'income' ? y.incomes : kind === 'account' ? y.accounts : y.invests;
+    return { list: list, row: byId(list, id), y: y };
+  }
+  function yenVal(v) { return String(v).trim() === '' ? '' : Math.round(toNum(v)); }
+
+  A.bkYear = function (d) { ui.book.year += d; ui.book.edit = false; ui.book.picks = {}; commit(); };
+  A.bkMonth = function (i) { ui.book.month = i; commit(); };
+  A.bkMode = function (m) { ui.book.mode = m; ui.book.edit = false; commit(); document.getElementById('scroll').scrollTop = 0; };
+  A.bkEdit = function () { ui.book.edit = !ui.book.edit; commit(); };
+  A.bkCreate = function (sample) {
+    var prev = store.book.years[ui.book.year - 1];
+    store.book.years[ui.book.year] = sample ? BK.sampleYear(store.book) : BK.newYear(store.book, prev || null);
+    ui.book.mode = 'month';
+    commit();
+  };
+  A.bkClear = function () {
+    snapshot('記入例の家計簿を消しました');
+    delete store.book.years[ui.book.year];
+    commit();
+  };
+  A.bkAmt = function (kind, id, v) {
+    var f = bkFind(kind, id); if (!f || !f.row) return;
+    f.row.m[ui.book.month] = yenVal(v);
+    commit();
+  };
+  A.bkNote = function (v) { var y = bookYear(); if (y) y.notes[ui.book.month] = String(v).slice(0, 60); commit(); };
+  A.bkField = function (kind, id, field, v) {
+    var f = bkFind(kind, id); if (!f || !f.row) return;
+    if (field === 'cat') f.row.cat = toNum(v);
+    else if (field === 'start') f.row.start = yenVal(v);
+    else f.row[field] = String(v).slice(0, 30);
+    commit();
+  };
+  A.bkInv = function (id, field, v) { var f = bkFind('invest', id); if (f && f.row) f.row[field] = yenVal(v); commit(); };
+  A.bkAdd = function (kind, cat) {
+    var y = bookYear(); if (!y) return;
+    var blank = function () { return ['', '', '', '', '', '', '', '', '', '', '', '']; };
+    var id = store.book.nextId++;
+    if (kind === 'item') {
+      // 同じ区分の最後の項目の後ろに足す（年間の表でも区分ごとにまとまるように）
+      var at = -1; y.items.forEach(function (it, k) { if (it.cat === cat) at = k; });
+      y.items.splice(at < 0 ? y.items.length : at + 1, 0, { id: id, name: '新しい項目', cat: cat, pay: '', day: '', m: blank() });
+    } else if (kind === 'income') y.incomes.push({ id: id, name: '新しい収入', kind: 'other', m: blank() });
+    else if (kind === 'account') y.accounts.push({ id: id, name: '新しい口座', start: '', m: blank() });
+    commit();
+  };
+  A.bkDel = function (kind, id) {
+    var f = bkFind(kind, id); if (!f || !f.row) return;
+    snapshot('「' + f.row.name + '」を外しました');
+    f.list.splice(f.list.indexOf(f.row), 1);
+    commit();
+  };
+  // 前の月に金額があって、この月がまだ空の欄だけに、前の月と同じ金額を入れる（毎月同じ固定費の手間を省く）
+  A.bkCopyPrev = function () {
+    var y = bookYear(), i = ui.book.month; if (!y || i < 1) return;
+    snapshot(MONTHS[i - 1] + 'と同じ金額を入れました');
+    y.items.concat(y.incomes).forEach(function (r) { if (!BK.filled(r.m[i]) && BK.filled(r.m[i - 1])) r.m[i] = r.m[i - 1]; });
+    commit();
+  };
+  A.bkTarget = function (v) { ui.book.target = toNum(v); ui.book.picks = {}; commit(); };
+  A.bkPick = function (k, on) { ui.book.picks[k] = !!on; commit(); };
+  A.bkApply = function () {
+    var y = bookYear(), bp = y && BK.toPlan(y); if (!bp) return;
+    var target = byId(store.plans, ui.book.target) || plan();
+    snapshot('家計簿の実績を「' + target.name + '」に反映しました');
+    var rows = bookTargets(target.state, bp);
+    var keep = state; state = target.state;
+    rows.forEach(function (r) { if (ui.book.picks[r.key] !== undefined ? ui.book.picks[r.key] : r.val > 0) r.set(r.val); });
+    state = keep;
+    target.state.bookBasis = { year: ui.book.year, months: bp.months, matched: bp.matched };
+    ui.book.picks = {};
+    switchTo(target.id);
+    ui.view = 'cf';
+    commit();
+    document.getElementById('scroll').scrollTop = 0;
   };
 
   // ---------- かんたん入力（必須の項目だけを順に聞く） ----------
@@ -1850,10 +2311,32 @@
     return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? v : '';
   }
 
+  // 読み込んだ家計簿は、金額を数値に、文字を短い文字列にそろえる（画面に出すときに部品が入り込まないように）
+  function cleanBook(b) {
+    if (!b || typeof b.years !== 'object') return null;
+    var str = function (v, n) { return typeof v === 'string' ? v.slice(0, n || 30) : ''; };
+    var amt = function (v) { return v === '' || v == null ? '' : Math.round(toNum(v)); };
+    var m12 = function (a) { var o = []; for (var i = 0; i < 12; i++) o.push(amt(Array.isArray(a) ? a[i] : '')); return o; };
+    var years = {};
+    Object.keys(b.years).forEach(function (k) {
+      var y = b.years[k];
+      if (!/^\d{4}$/.test(k) || !y || !Array.isArray(y.items)) return;
+      years[k] = {
+        items: y.items.map(function (it) { return { id: 0, name: str(it.name), cat: Math.min(6, Math.max(1, Math.round(toNum(it.cat)) || 1)), pay: str(it.pay), day: str(it.day, 20), m: m12(it.m) }; }),
+        incomes: (y.incomes || []).map(function (r) { return { id: 0, name: str(r.name), kind: /^(sal1|bonus1|sal2|bonus2|other)$/.test(r.kind) ? r.kind : 'other', m: m12(r.m) }; }),
+        notes: m12([]).map(function (x, i) { return str((y.notes || [])[i], 60); }),
+        accounts: (y.accounts || []).map(function (a) { return { id: 0, name: str(a.name), start: amt(a.start), m: m12(a.m) }; }),
+        invests: (y.invests || []).map(function (v) { return { id: 0, name: str(v.name), start: amt(v.start), end: amt(v.end) }; })
+      };
+    });
+    return Object.keys(years).length ? years : null;
+  }
+
   function backupText() {
     return JSON.stringify({
       app: 'lifeplan', kind: 'backup', version: 2, savedAt: new Date().toISOString(),
-      plans: store.plans.map(function (p) { return { name: p.name, state: p.state }; })
+      plans: store.plans.map(function (p) { return { name: p.name, state: p.state }; }),
+      book: store.book
     }, null, 1);
   }
 
@@ -1866,8 +2349,9 @@
     list = list.filter(function (p) { return okState(p.state); }).map(function (p) {
       return { name: String(p.name || '読み込んだプラン').slice(0, 30), state: clean(p.state, null, false) };
     });
-    if (!list.length) return { error: '読み込めるプランが見つかりませんでした' };
-    return { plans: list };
+    var book = cleanBook(o && o.book);
+    if (!list.length && !book) return { error: '読み込めるプランが見つかりませんでした' };
+    return { plans: list, book: book };
   }
 
   function renderBackup() {
@@ -1875,8 +2359,11 @@
     if (!el) return;
     var b = ui.backup;
     var msg = b.msg ? '<div class="vmsg ' + (b.level || 'ok') + '">' + ic(b.level === 'error' ? 'warn' : 'check', 15) + '<span>' + esc(b.msg) + '</span></div>' : '';
+    var newYears = b.pendingBook ? Object.keys(b.pendingBook).filter(function (k) { return !store.book.years[k]; }) : [];
     var pending = b.pending
-      ? '<div class="plconfirm ok"><span>' + b.pending.length + '件のプラン（' + b.pending.map(function (p) { return '「' + esc(p.name) + '」'; }).join('') + '）を追加します。今あるプランはそのまま残ります。</span>' +
+      ? '<div class="plconfirm ok"><span>' + (b.pending.length ? b.pending.length + '件のプラン（' + b.pending.map(function (p) { return '「' + esc(p.name) + '」'; }).join('') + '）を追加します。' : '') +
+        (newYears.length ? '家計簿（' + newYears.join('年・') + '年）を追加します。' : b.pendingBook ? '家計簿は、同じ年がもうあるので読み込みません。' : '') +
+        '今あるプランと家計簿はそのまま残ります。</span>' +
         '<button class="btn" onclick="A.backupAdd()">追加する</button><button class="btn ghost" onclick="A.backupCancel()">やめる</button></div>'
       : '';
     el.innerHTML = '<div class="bk">' +
@@ -1927,7 +2414,7 @@
   function received(text) {
     var r = parseBackup(text);
     if (r.error) { ui.backup.pending = null; backupNote(r.error, 'error'); return; }
-    ui.backup.pending = r.plans; ui.backup.msg = '';
+    ui.backup.pending = r.plans; ui.backup.pendingBook = r.book; ui.backup.msg = '';
     renderBackup();
   }
   A.backupFile = function (input) {
@@ -1959,15 +2446,24 @@
   A.backupCancel = function () { ui.backup.pending = null; renderBackup(); };
   A.backupAdd = function () {
     var list = ui.backup.pending; if (!list) return;
-    var first = null;
+    var first = null, addedYears = [];
+    if (ui.backup.pendingBook) {
+      Object.keys(ui.backup.pendingBook).forEach(function (k) {
+        if (store.book.years[k]) return;
+        var y = ui.backup.pendingBook[k];
+        y.items.concat(y.incomes, y.accounts, y.invests).forEach(function (r) { r.id = store.book.nextId++; });
+        store.book.years[k] = y;
+        addedYears.push(k);
+      });
+    }
     list.forEach(function (p) {
       var np = { id: store.nextPlanId++, name: uniqueName(p.name), state: p.state };
       np.state.nextId = Math.max(toNum(np.state.nextId), 500);
       store.plans.push(np);
       if (!first) first = np;
     });
-    switchTo(first.id);
-    ui.backup = { msg: list.length + '件のプランを追加し、「' + first.name + '」を表示しています', level: 'ok', text: false, pending: null };
+    if (first) switchTo(first.id);
+    ui.backup = { msg: (first ? list.length + '件のプランを追加し、「' + first.name + '」を表示しています。' : '') + (addedYears.length ? '家計簿（' + addedYears.join('年・') + '年）を追加しました。' : ''), level: 'ok', text: false, pending: null };
     store.prefs.welcomed = true;
     commit();
   };
@@ -2175,11 +2671,13 @@
     var top = sc.scrollTop;
     var active = document.activeElement && document.activeElement.id;
 
-    ['input', 'cf', 'cmp'].forEach(function (v) {
+    ['book', 'input', 'cf', 'cmp'].forEach(function (v) {
       var b = document.getElementById('seg-' + v);
       b.classList.toggle('on', ui.view === v);
-      b.setAttribute('aria-selected', ui.view === v);
+      b.setAttribute('aria-current', ui.view === v ? 'page' : 'false');
     });
+    document.getElementById('seg-book').classList.toggle('due', bookDue());
+    document.getElementById('tabbar').hidden = ui.view === 'cover' || ui.view === 'wizard';
     document.getElementById('planname').textContent = plan().name;
     var sheet = document.getElementById('sheetwrap');
     var wasOpen = !sheet.hidden;
@@ -2204,10 +2702,20 @@
     document.getElementById('wizview').hidden = ui.view !== 'wizard';
     document.getElementById('cmpview').hidden = ui.view !== 'cmp';
     document.getElementById('coverview').hidden = ui.view !== 'cover';
+    document.getElementById('bookview').hidden = ui.view !== 'book';
     document.getElementById('topbar').hidden = ui.view === 'cover';
 
     if (ui.view === 'cover') {
       document.getElementById('coverview').innerHTML = coverHTML();
+    } else if (ui.view === 'book') {
+      var bv = document.getElementById('bookview');
+      patchChildren(bv, bookHTML(bv.clientWidth - 56));
+      // 選んでいる月を、月の並びの見える位置に（月を変えたときと、家計簿を開いたとき）
+      var mk = ui.book.year + '-' + ui.book.month;
+      if (ui.book.shown !== mk) {
+        var row = bv.querySelector('.bkmonths'), chip = document.getElementById('bkm-' + ui.book.month);
+        if (row && chip) { row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2; ui.book.shown = mk; }
+      }
     } else if (ui.view === 'cmp') {
       var cmp = document.getElementById('cmp');
       cmp.innerHTML = cmpHTML(cmp.clientWidth - 24);
@@ -2233,7 +2741,7 @@
     }
 
     // 表示中の画面とプランの一覧だけ（隠れている画面の古い入力欄まで調べると遅くなる）
-    autoLabel(document.getElementById({ input: 'inputview', cf: 'cfview', cmp: 'cmpview', wizard: 'wizview', cover: 'coverview' }[ui.view] || 'inputview'));
+    autoLabel(document.getElementById({ input: 'inputview', cf: 'cfview', cmp: 'cmpview', wizard: 'wizview', cover: 'coverview', book: 'bookview' }[ui.view] || 'inputview'));
     if (ui.sheet) autoLabel(document.getElementById('sheetwrap'));
     sc.scrollTop = top;
     if (active) {

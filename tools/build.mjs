@@ -13,6 +13,7 @@ const body = read('app/index.html')
   .replace('/*@STYLE@*/', () => read('app/style.css'))
   .replace('/*@ENGINE@*/', () => safeJs(read('app/engine.js')))
   .replace('/*@SAMPLE@*/', () => safeJs(read('app/sample.js')))
+  .replace('/*@BOOK@*/', () => safeJs(read('app/book.js')))
   .replace('/*@APP@*/', () => safeJs(read('app/app.js')));
 
 mkdirSync(join(root, 'dist'), { recursive: true });

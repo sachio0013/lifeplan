@@ -478,6 +478,91 @@ check('次の一歩のボタンで、比べるプランができて比較画面�
   `${g1} ${g1End} / ${g2} / 済み${doneMarks}`);
 await fresh.close();
 
+// 家計簿：月ごとに入れ、残高と照らし合わせ、1年の表にまとまり、ライフプランに反映できる
+{
+  await go(page, '#seg-book');
+  await page.waitForSelector('.bkempty');
+  const emptyText = await page.textContent('.bkempty');
+  await page.locator('.bkempty .btn.big').tap();
+  await page.waitForSelector('.bksum');
+  const thisMonth = new Date().getMonth();
+  // 1か月目：食費（全角・カンマ付きでも可）と給与を入れる
+  const food = await page.$$eval('.bkrow', (rows) => { const r = rows.find((x) => x.querySelector('.nm') && /食費/.test(x.querySelector('.nm').textContent)); return r && r.querySelector('input').id; });
+  const sal = await page.$$eval('.bkrow', (rows) => { const r = rows.find((x) => x.querySelector('.nm') && /給与手取り（家族１）/.test(x.querySelector('.nm').textContent)); return r && r.querySelector('input').id; });
+  await page.fill(`#${food}`, '５２，０００'); await page.press(`#${food}`, 'Tab');
+  await page.fill(`#${sal}`, '300000'); await page.press(`#${sal}`, 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
+  const sumText = await page.textContent('.bksum');
+  const foodShown = await page.inputValue(`#${food}`);
+  check('家計簿：はじめ方の案内から始め、月の金額を入れると収支が出る（全角・カンマも可）',
+    /データは端末の外に送りません/.test(emptyText) && /＋248,000/.test(sumText) && foodShown === '52,000', `${sumText.slice(0, 40)} / 食費=${foodShown}`);
+  await page.screenshot({ path: join(shots, '20-book-month.png') });
+
+  // 口座残高を入れると、記録との差額が0なら「一致」
+  // 前年末の残高を編集で入れる（100万円）→ 今月末の残高に、前年末＋今月の収支を入れる
+  await page.locator('.bkedit .btn').tap(); await page.waitForTimeout(100);
+  const acs = await page.$eval('#bkg-accounts input[id^="f-bk-acs-"]', (e) => e.id);
+  await page.fill(`#${acs}`, '1000000'); await page.press(`#${acs}`, 'Tab');
+  await page.evaluate(() => document.activeElement.blur());
+  await page.locator('.bkedit .btn').tap(); await page.waitForTimeout(100);
+  const ac = await page.$eval('#bkg-accounts input[id^="f-bk-ac-"]', (e) => e.id);
+  await page.fill(`#${ac}`, '1248000'); await page.press(`#${ac}`, 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
+  const diffOk = await page.textContent('.diffline').catch(() => '');
+  const chipOk = await page.locator(`#bkm-${thisMonth} .ok`).count();
+  check('家計簿：口座残高が「前年末＋収支」と一致すると、そう知らせ、月にも印が付く', /一致しています/.test(diffOk) && chipOk === 1, diffOk);
+
+  // 次の月：前の月と同じ金額を入れるボタン
+  if (thisMonth < 11) {
+    await page.locator(`#bkm-${thisMonth + 1}`).tap(); await page.waitForTimeout(150);
+    await page.locator('.bkcopy').tap(); await page.waitForTimeout(150);
+    const copied = await page.inputValue(`#${food}`);
+    const review = await page.textContent('.bkreview').catch(() => '');
+    check('家計簿：前の月と同じ金額を、空いている欄に入れられる。ふりかえりも出る', copied === '52,000' && /2か月続けて記録しています/.test(review), `${copied} / ${review.slice(0, 60)}`);
+    await page.locator(`#bkm-${thisMonth}`).tap(); await page.waitForTimeout(100);
+  }
+
+  // 項目の編集：足して、外して、元に戻す
+  await page.locator('.bkedit .btn').tap(); await page.waitForTimeout(100);
+  const before = await page.$$eval('#bkg-1 .bkrow', (e) => e.length);
+  await page.locator('#bkg-1 .addwrap .btn').tap(); await page.waitForTimeout(100);
+  const added = await page.$$eval('#bkg-1 .bkrow', (e) => e.length);
+  await page.locator('#bkg-1 .bkrow').last().locator('button.del').tap(); await page.waitForTimeout(100);
+  const removed = await page.$$eval('#bkg-1 .bkrow', (e) => e.length);
+  await page.locator('#toast button').tap(); await page.waitForTimeout(100);
+  const undone = await page.$$eval('#bkg-1 .bkrow', (e) => e.length);
+  await page.locator('.bkedit .btn').tap(); await page.waitForTimeout(100);
+  check('家計簿：項目を足し・外し・元に戻せる', added === before + 1 && removed === before && undone === before + 1, `${before}→${added}→${removed}→${undone}`);
+
+  // 家計簿の入力欄にもすべて読み上げ用の名前がある
+  const unnamedBook = await page.$$eval('#bookview input, #bookview select', (els) => els.filter((e) => e.offsetParent && !e.getAttribute('aria-label') && !(e.id && document.querySelector(`label[for="${e.id}"]`))).map((e) => e.id));
+  check('家計簿の入力欄すべてに読み上げ用の名前がある', unnamedBook.length === 0, unnamedBook.slice(0, 4).join(', '));
+
+  // 1年の表とプランへの反映
+  await page.locator('.bkmodes button', { hasText: '1年の表' }).tap(); await page.waitForTimeout(150);
+  const totals = await page.textContent('.yeartotals');
+  const bkOverflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  await page.screenshot({ path: join(shots, '21-book-year.png') });
+  await page.locator('.bkmodes button', { hasText: 'プランへ' }).tap(); await page.waitForTimeout(150);
+  const rel = await page.textContent('.bkrel .lv');
+  await page.screenshot({ path: join(shots, '22-book-plan.png') });
+  const months = thisMonth < 11 ? 2 : 1;
+  const living = await page.$eval('.maprow:has(#f-bkp-living) .vals b', (e) => e.textContent);
+  await page.locator('.bkmap .btn.big').tap();
+  await page.waitForSelector('#chart');
+  const basis = await page.textContent('.basis').catch(() => '');
+  await go(page, '#seg-input');
+  const planLiving = await page.inputValue('#f-living-1-amt');
+  const inc = (300000 * months).toLocaleString('ja-JP'), exp = (52000 * months).toLocaleString('ja-JP'), bal = (248000 * months).toLocaleString('ja-JP');
+  check('家計簿：1年の表に月ごとの記録が集計される', totals.includes(inc) && totals.includes(exp) && totals.includes('＋' + bal), `${totals.replace(/\s+/g, ' ').trim()}`);
+  check('家計簿からプランへ：基本生活費＝食費52,000円×12＝62.4万円、信頼度と根拠が出る',
+    living === '62.4' && planLiving === '62.4' && /ひとまずの目安/.test(rel) && new RegExp(`${months}か月分`).test(basis) && bkOverflow <= 0,
+    `反映=${living} プラン=${planLiving} 信頼度=${rel} ${basis.slice(0, 40)}`);
+  await page.locator('#toast button').tap(); await page.waitForTimeout(150);   // 反映は元に戻して、以降のテストに影響させない
+  const restored = await page.inputValue('#f-living-1-amt');
+  check('プランへの反映も「元に戻す」で戻せる', restored === '360', restored);
+}
+
 // 品質テストで見つけた点の再発防止
 {
   // 入力欄にはすべて読み上げ用の名前がある
