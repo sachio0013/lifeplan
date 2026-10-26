@@ -409,3 +409,115 @@ test('投資シミュレーション：目標額から毎年の積立額を逆�
   assert.ok(Math.abs(need - 36) < 1e-6, String(need));
   assert.equal(E.investNeed(o, 0), 0);                       // 残高だけで届くなら0
 });
+
+// ---- 公的年金の見込み（額面基準・プランの給与から） ----
+function penState(over = {}) {
+  const st = {
+    startYear: 2026, endAge: 95, inflation: 0, depositRate: 0,
+    family: [{ id: 1, relation: '家族１', birth: '1991/06/01' }],
+    assets: [{ id: 1, name: '普通預金等', fixed: true, amount: 0 }],
+    salaries: [{ id: 1, memberId: 1, retireAge: 65, rows: [{ id: 1, year: 2026, amount: E.takeHome({ income: 600 }).net, growth: 0 }] }],
+    pubPension: [], lump: [], corpPension: [], privPension: [], living: [], housing: [], insurance: [], carCost: [], otherFlow: [], otherLump: [],
+    housingLump: [], carBuy: {}, carBuyOverride: {}, invest: {}, edu: {}, eduAmount: {}, eduSpan: {},
+    penAuto: true, penPlan: { adjust: 90, people: {} }
+  };
+  return Object.assign(st, over);
+}
+
+test('公的年金：厚生年金の上限は今の年収1,080万円から、2027〜2029年の引き上げを経て2030年から1,200万円（月75万円）', () => {
+  assert.equal(E.pensionCap(2026), 1080);
+  assert.equal(E.pensionCap(2027), 1092);
+  assert.equal(E.pensionCap(2028), 1128);
+  assert.equal(E.pensionCap(2029), 1168);
+  assert.equal(E.pensionCap(2030), 1200);
+  assert.equal(E.pensionCap(2050), 1200);
+  assert.ok(Math.abs(E.grossFromNet(E.takeHome({ income: 600 }).net) - 600) < 0.01);   // 手取りから額面へ
+  assert.ok(Math.abs(E.grossFromNet(E.takeHome({ income: 2000 }).net) - 2000) < 0.01);
+});
+
+test('公的年金：プランの給与（額面に直す）× 5.481/1000 を働く年ごとに足し、これまでの分は1年目の年収から直線で推測', () => {
+  const st = penState({ penPlan: { adjust: 90, people: { 1: { mode: 'first', firstAge: 22, firstIncome: 300 } } } });
+  const p = E.pensionPlan(st).people[0];
+  // これから：2026〜2055年（35〜64歳）の30年×600万円
+  assert.equal(p.futureYears, 30);
+  assert.ok(Math.abs(p.future - Math.round(30 * 600 * 0.005481 * 10) / 10) < 0.11, String(p.future));
+  // これまで：22〜34歳の13年、300万円から600万円へ直線（合計5,700万円）
+  assert.equal(p.pastYears, 13);
+  assert.ok(Math.abs(p.past - 5700 * 0.005481) < 0.06, String(p.past));
+  assert.equal(p.basic, 83.2);
+  const gross = 30 * 600 * 0.005481 + 5700 * 0.005481 + 83.2;
+  assert.ok(Math.abs(p.gross - gross) < 0.2, `${p.gross} ≠ ${gross}`);
+  assert.equal(p.amount, Math.round(E.pensionNet(p.gross).net * 0.9 * 10) / 10);
+  // CF表：65歳（2056年）からその額
+  const r = E.compute(st);
+  assert.equal(r.years.find((y) => y.year === 2056).income.pension, p.amount);
+  assert.equal(r.years.find((y) => y.year === 2055).income.pension, 0);
+});
+
+test('公的年金：年収2,000万円でも上限（2030年からは1,200万円）で計算する', () => {
+  const st = penState();
+  st.salaries[0].rows[0].amount = E.takeHome({ income: 2000 }).net;
+  const p = E.pensionPlan(st).people[0];
+  let expect = 0;
+  for (let y = 2026; y <= 2055; y++) expect += E.pensionCap(y) * 0.005481;
+  assert.equal(p.cappedYears, 30);
+  assert.ok(Math.abs(p.future - expect) < 0.11, `${p.future} ≠ ${expect}`);
+});
+
+test('公的年金：役職定年（55歳で減額）や再雇用（60〜65歳）の給与がそのまま反映される', () => {
+  const base = E.pensionPlan(penState()).people[0];
+  const st = penState();
+  st.salaries[0].retireAge = 66;
+  st.salaries[0].rows.push({ id: 2, year: 2046, amount: E.takeHome({ income: 450 }).net, growth: 0 });   // 55歳で役職定年
+  st.salaries[0].rows.push({ id: 3, year: 2051, amount: E.takeHome({ income: 300 }).net, growth: 0 });   // 60歳から嘱託、65歳まで
+  const p = E.pensionPlan(st).people[0];
+  const expect = (20 * 600 + 5 * 450 + 6 * 300) * 0.005481;
+  assert.equal(p.futureYears, 31);
+  assert.ok(Math.abs(p.future - expect) < 0.11, `${p.future} ≠ ${expect}`);
+  assert.ok(p.future < base.future);
+});
+
+test('公的年金：ねんきん定期便（50歳未満は実績＋これから、50歳以上は60歳までの見込みを給与の変化で直す）', () => {
+  const young = E.pensionPlan(penState({ penPlan: { people: { 1: { mode: 'teiki', teikiEarn: 25 } } } })).people[0];
+  assert.ok(Math.abs(young.earn - (25 + young.future)) < 0.11);
+  // 52歳（1974年生まれ）：定期便の見込額100万円は60歳まで今の600万円が続く前提。55歳から450万円に下がるなら、その分を引く
+  const st = penState({ family: [{ id: 1, relation: '家族１', birth: '1974/06/01' }], penPlan: { people: { 1: { mode: 'teiki', teikiEarn: 100, teikiBasic: 80 } } } });
+  st.salaries[0].retireAge = 65;
+  st.salaries[0].rows.push({ id: 2, year: 2029, amount: E.takeHome({ income: 450 }).net, growth: 0 });
+  const old = E.pensionPlan(st).people[0];
+  assert.ok(old.over50);
+  const expect = 100 - 5 * 150 * 0.005481 + 5 * 450 * 0.005481;   // 55〜59歳の5年は150万円下がる、60〜64歳の5年は450万円で上乗せ
+  assert.ok(Math.abs(old.earn - expect) < 0.2, `${old.earn} ≠ ${expect}`);
+  assert.equal(old.basic, 80);
+});
+
+test('公的年金：繰下げ（70歳で42％増）・繰上げ（60歳で24％減）、給与の無い人は会社員だった年数から、基礎年金は納めた年数で', () => {
+  const at = (startAge) => E.pensionPlan(penState({ penPlan: { people: { 1: { startAge } } } })).people[0];
+  const p65 = at(65), p70 = at(70), p60 = at(60);
+  assert.ok(Math.abs(p70.gross - p65.gross * 1.42) < 0.2);
+  assert.ok(Math.abs(p60.gross - p65.gross * 0.76) < 0.2);
+  assert.equal(p70.startYear, 1991 + 70);
+  const st = penState({ salaries: [], penPlan: { people: { 1: { pastYears: 8, pastIncome: 350, basicYears: 30 } } } });
+  const h = E.pensionPlan(st).people[0];
+  assert.ok(Math.abs(h.earn - 8 * 350 * 0.005481) < 0.06);
+  assert.equal(h.basic, 62.4);
+});
+
+test('公的年金：受け取りはじめる年が違う夫婦は、CF表の行を年ごとの合計にする', () => {
+  const st = penState({
+    family: [{ id: 1, relation: '家族１', birth: '1991/06/01' }, { id: 2, relation: '家族２', birth: '1994/06/01' }],
+    penPlan: { people: {} }
+  });
+  const plan = E.pensionPlan(st);
+  const [a, b] = plan.people;
+  assert.deepEqual(plan.rows.map((r) => r.year), [2056, 2059]);
+  assert.equal(plan.rows[0].amount, a.amount);
+  assert.ok(Math.abs(plan.rows[1].amount - (a.amount + b.amount)) < 0.11);
+  assert.equal(b.future, 0);            // 給与の無い家族２は基礎年金だけ
+  assert.equal(b.basic, 83.2);
+});
+
+test('手取額：健康保険は年収2,241万円で頭打ち（雇用保険は上限なし）', () => {
+  const a = E.takeHome({ income: 2500, health: 'kyokai', age: 45 }).social;
+  assert.ok(Math.abs(a - (2241 * 0.058 + 2500 * 0.0055 + 1080 * 0.0915)) < 0.01, String(a));
+});

@@ -75,14 +75,6 @@
       calc: { income: 600, spouse: 'なし', kids: 0 },
       // 住宅ローンの試算（入力シート T115:AH121 のサンプル。返済総額5,810万円）
       loanCalc: { start: 2027, amount: 4500, years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: '' }], upkeep: 50 },
-      // 公的年金の試算（入力シート T85:AL91 のサンプル。合計289.8万円）
-      penCalc: {
-        adjust: 90,
-        people: {
-          1: { from: 2013, to: 2051, payFrom: 300, payTo: 700, basic: 70 },
-          2: { from: 2013, to: 2051, payFrom: 300, payTo: 400, basic: 70 }
-        }
-      },
       nextId: 500
     };
   }
@@ -122,7 +114,10 @@
       lump: n(d.retireLump) > 0 && n(d.retire1) ? [{ id: 1, year: by + n(d.retire1), amount: n(d.retireLump), memo: '退職金' }] : [],
       corpPension: [],
       privPension: [],
-      pubPension: [{ id: 1, year: by + n(d.pensionAge), amount: n(d.pension), memo: '' }],
+      // 公的年金は、額を入れていなければ自動で見込む（給与から）
+      pubPension: n(d.pension) > 0 ? [{ id: 1, year: by + n(d.pensionAge), amount: n(d.pension), memo: '' }] : [],
+      penAuto: n(d.pension) > 0 ? undefined : true,
+      penPlan: d.penPlan ? JSON.parse(JSON.stringify(d.penPlan)) : { adjust: 90, people: {} },
       living: [{ id: 1, year: sy, amount: n(d.living), memo: '' }],
       inflation: n(d.inflation),
       housing: [{ id: 1, year: sy, amount: n(d.housing), memo: '' }],
@@ -135,8 +130,6 @@
       otherLump: [],
       invest: { 2: { add: [], out: [] }, 3: { add: [], out: [] } },
       calc: { income: 600, spouse: 'なし', kids: 0 },
-      // 年金のステップで試算した場合は、その入力も引き継ぐ（家族１・家族２の id は 1・2）
-      penCalc: d.penCalc ? JSON.parse(JSON.stringify(d.penCalc)) : undefined,
       nextId: 500
     };
   }
@@ -175,7 +168,6 @@
     living:    [180, 250, 290, 330, 370],
     insurance: [10,  15,  20,  24,  28],
     deposit:   [200, 400, 350, 400, 450],
-    pension:   [150, 280, 260, 260, 250],
     rent:      [84,  120, 132, 144, 156],   // 家賃（月7〜13万円）
     loan:      [96,  132, 144, 156, 168],   // ローン返済＋管理費・固定資産税など
     owned:     [30,  40,  40,  45,  45],    // 管理費・修繕・固定資産税など
@@ -193,7 +185,7 @@
       has2: f.adults > 1, name2: '', birth2: '', kids: [],
       deposit: REF.deposit[fi], nisa: 0, ideco: 0, rate: 3,
       sal1: REF.sal1[fi], retire1: 65, growth: 1, sal2: f.adults > 1 ? REF.sal2[fi] : '', retire2: 65, retireLump: 0,
-      pension: REF.pension[fi], pensionAge: 65,
+      pension: '', pensionAge: 65,     // 公的年金は給与から自動で見込む
       living: REF.living[fi], housing: REF[home][fi], insurance: REF.insurance[fi], inflation: 1,
       _ref: {}
     };

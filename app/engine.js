@@ -210,6 +210,8 @@
 
     var prevSalary = (state.salaries || []).map(function () { return 0; });
     var prevLiving = 0;
+    // 公的年金：自動（penAuto）なら、プランの給与から見込んだ額を使う
+    var pubRows = state.penAuto ? pensionPlan(state).rows : state.pubPension;
     var prevDeposit = num(cashAsset.amount);
     var prevInv = invAssets.map(function (a) { return num(a.amount); });
 
@@ -230,7 +232,7 @@
         lumpAt(state.lump, y) +
         rangeAt(state.corpPension, y) +
         rangeAt(state.privPension, y) +
-        changeAt(state.pubPension, y);
+        changeAt(pubRows, y);
 
       // 支出
       var living = livingAt(state, y, prevLiving); prevLiving = living;
@@ -329,6 +331,163 @@
   // 試算の初期値（Excel: 入社は生年＋22年、最終退職は入社＋38年、基礎年金70万円）
   function pensionDefaults(birthYear) {
     return { from: birthYear + 22, to: birthYear + 60, payFrom: '', payTo: '', basic: 70 };
+  }
+
+  // ---- 公的年金の見込み（額面基準。プランの給与から計算する） ----
+  //
+  // 老齢厚生年金（報酬比例）＝ 額面の年収（上限あり）× 5.481/1000 を、厚生年金に入る年ごとに足す（2003年4月以降の式）
+  //   これから：開始年から70歳になる年の前まで、プランの給与（手取り）を額面に直して使う。役職定年や再雇用の減額もそのまま入る
+  //   これまで：次のどれか
+  //     auto  … 働きはじめた年齢（既定22歳）から、今の年収を年齢ごとの賃金カーブでさかのぼって推測
+  //     first … 働きはじめた年齢とその年の年収から、今の年収まで直線で推測
+  //     teiki … ねんきん定期便の老齢厚生年金の額。50歳未満は「これまでの加入実績」なので、これからの分を足す。
+  //             50歳以上は「60歳まで今の条件で入った場合の見込額」なので、60歳までの給与の変化（プランの給与−今の給与）と60歳以降の分を足し引きする
+  //   今は給与の無い人は、会社員だった年数とそのころの年収（額面）から
+  // 老齢基礎年金 ＝ 満額 83.2万円（2025年度、1956年4月2日以降生まれ）× 納めた年数 ÷ 40
+  // 受け取りはじめる年齢で、繰上げ（1か月0.4％減）・繰下げ（1か月0.7％増）
+  // 手取り ＝ 額面 − 国民健康保険・介護保険 − 所得税・住民税（おおよそ）、それに将来の目減り（既定90％）を掛ける
+  var PEN_RATE = 5.481 / 1000;
+  var BASIC_FULL = 83.2;
+  // 年齢ごとの賃金の目安（50〜54歳を100。賃金構造基本統計調査の所定内給与・男女計をもとにした概数）
+  var WAGE_CURVE = [[22, 59], [27, 68], [32, 76], [37, 84], [42, 91], [47, 95], [52, 100], [57, 99], [62, 79]];
+  function wageCurve(age) {
+    var c = WAGE_CURVE;
+    if (age <= c[0][0]) return c[0][1];
+    for (var i = 1; i < c.length; i++) {
+      if (age <= c[i][0]) { var a = c[i - 1], b = c[i]; return a[1] + (b[1] - a[1]) * (age - a[0]) / (b[0] - a[0]); }
+    }
+    return c[c.length - 1][1];
+  }
+  // 厚生年金の標準報酬の上限を年収に直したもの（月額の上限×12＋賞与1回150万円×2回）。
+  // 2025年の年金制度改正で、月額の上限65万円を2027年9月に68万円、2028年9月に71万円、2029年9月に75万円へ引き上げる
+  function pensionCap(y) {
+    if (y >= 2030) return 75 * 12 + 300;
+    if (y === 2029) return 71 * 8 + 75 * 4 + 300;
+    if (y === 2028) return 68 * 8 + 71 * 4 + 300;
+    if (y === 2027) return 65 * 8 + 68 * 4 + 300;
+    if (y >= 2021) return 65 * 12 + 300;
+    return 62 * 12 + 300;
+  }
+  // 手取りから額面を逆算する（手取額計算の式。扶養なし・社会保険料は年収の15.5％）
+  function grossFromNet(net) {
+    if (!(net > 0)) return 0;
+    var lo = net, hi = net * 2 + 300;
+    for (var i = 0; i < 40; i++) {
+      var mid = (lo + hi) / 2;
+      if (takeHome({ income: mid }).net < net) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+  // 公的年金の手取り（65歳以上・単身とみなした、おおよその額）
+  function pensionDeduction(g) { return g <= 330 ? 110 : g <= 410 ? g * 0.25 + 27.5 : g <= 770 ? g * 0.15 + 68.5 : g <= 1000 ? g * 0.05 + 145.5 : 195.5; }
+  function pensionNet(g) {
+    if (!(g > 0)) return { net: 0, social: 0, tax: 0 };
+    var income = Math.max(0, g - pensionDeduction(g));
+    // 国民健康保険（75歳からは後期高齢者医療）：所得割10％＋均等割4万円、介護保険：4万円＋所得の2％ほど。所得が少なければ軽減
+    var social = income > 43 ? (income - 43) * 0.1 + 4 + 4 + income * 0.02 : 3.2;
+    var taxable = Math.max(0, income - social - bracket(DEDUCT_BASIC, income)[1]);
+    var ti = bracket(TAX_INCOME, taxable);
+    var incomeTax = (taxable * ti[1] + ti[2]) * 1.021;
+    var rBase = income - social - 43;
+    var resident = rBase > 0 ? rBase * 0.1 + 0.5 : 0;
+    var r2 = function (v) { return Math.round(v * 100) / 100; };
+    return { net: r2(g - social - incomeTax - resident), social: r2(social), tax: r2(incomeTax + resident) };
+  }
+  // 開始年から、給与ごとの毎年の手取り（compute と同じ計算）
+  function salarySeries(state) {
+    var sy = num(state.startYear), endYear = baseBirthYear(state) + num(state.endAge);
+    var list = state.salaries || [];
+    var out = list.map(function () { return {}; }), prev = list.map(function () { return 0; });
+    for (var y = sy; y <= endYear && y < sy + 120; y++) {
+      list.forEach(function (sal, i) { var v = salaryAt(state, sal, y, prev[i]); prev[i] = v; out[i][y] = v; });
+    }
+    return out;
+  }
+  function pensionFactor(startAge) {
+    var a = Math.max(60, Math.min(75, startAge));
+    return a >= 65 ? 1 + 0.084 * (a - 65) : 1 - 0.048 * (65 - a);
+  }
+
+  // state.penPlan = { adjust（％、既定90）, people: { 家族のid: { mode, firstAge, firstIncome, pastYears, pastIncome, teikiEarn, teikiBasic, basicYears, startAge } } }
+  function pensionPlan(state) {
+    var pp = state.penPlan || {};
+    var adjust = pp.adjust === undefined || pp.adjust === '' ? 90 : num(pp.adjust);
+    var sy = num(state.startYear);
+    var series = salarySeries(state);
+    var r1 = function (v) { return Math.round(v * 10) / 10; };
+    var people = (state.family || []).filter(function (m) {
+      return (m.relation === '家族１' || m.relation === '家族２') && parseDate(m.birth).y;
+    }).map(function (m) {
+      var s = (pp.people && pp.people[m.id]) || {};
+      var by = parseDate(m.birth).y, age0 = sy - by;
+      // 額面の年収（その人の給与の合計）。手取りの計算で年収（額面）を入れていれば、その比率で合わせる
+      var gross = {};
+      (state.salaries || []).forEach(function (sal, i) {
+        if (sal.memberId !== m.id) return;
+        var net0 = series[i][sy] || 0, k = 1, c = sal.calc;
+        var cg = c ? (c.mode === 'slip' ? num(c.gPay) / 10000 : num(c.income)) : 0;
+        if (cg > 0 && net0 > 0) { var gg = grossFromNet(net0); if (gg > 0 && cg / gg > 0.7 && cg / gg < 1.5) k = cg / gg; }
+        Object.keys(series[i]).forEach(function (y) { var n = series[i][y]; if (n > 0) gross[y] = (gross[y] || 0) + grossFromNet(n) * k; });
+      });
+      var g0 = gross[sy] || 0;
+      // これから
+      var future = 0, futureYears = 0, cappedYears = 0, futureBefore60 = 0, before60Now = 0, lastWork = 0;
+      for (var y = sy; y < by + 70; y++) {
+        var g = gross[y] || 0, cap = pensionCap(y);
+        if (y - by < 60) before60Now += Math.min(g0, cap) * PEN_RATE;
+        if (!g) continue;
+        var a = Math.min(g, cap) * PEN_RATE;
+        future += a; futureYears++; lastWork = y - by;
+        if (g > cap) cappedYears++;
+        if (y - by < 60) futureBefore60 += a;
+      }
+      // これまで
+      var mode = s.mode === 'first' || s.mode === 'teiki' ? s.mode : 'auto';
+      var over50 = age0 >= 50;
+      var past = 0, pastYears = 0, earn;
+      var firstAge = s.firstAge !== undefined && s.firstAge !== '' ? num(s.firstAge) : 22;
+      if (mode === 'teiki') {
+        past = num(s.teikiEarn);
+        // 50歳以上の定期便は60歳まで今の給与が続く前提なので、その分を入れ替える
+        earn = over50 ? past - before60Now + future : past + future;
+      } else {
+        if (g0 > 0) {
+          var fi = num(s.firstIncome);
+          for (var age = firstAge; age < age0; age++) {
+            var gp = mode === 'first' && fi > 0 ? fi + (g0 - fi) * (age - firstAge) / Math.max(1, age0 - firstAge) : g0 * wageCurve(age) / wageCurve(age0);
+            past += Math.min(gp, pensionCap(by + age)) * PEN_RATE;
+            pastYears++;
+          }
+        } else {
+          pastYears = Math.max(0, num(s.pastYears));
+          past = pastYears * Math.min(num(s.pastIncome), pensionCap(sy - 1)) * PEN_RATE;
+        }
+        earn = past + future;
+      }
+      earn = Math.max(0, earn);
+      var basicYears = s.basicYears !== undefined && s.basicYears !== '' ? Math.max(0, Math.min(40, num(s.basicYears))) : 40;
+      var basic = mode === 'teiki' && over50 && num(s.teikiBasic) > 0 ? num(s.teikiBasic) : BASIC_FULL * basicYears / 40;
+      var startAge = s.startAge !== undefined && s.startAge !== '' ? Math.max(60, Math.min(75, Math.round(num(s.startAge)))) : 65;
+      var factor = pensionFactor(startAge);
+      var grossPension = (earn + basic) * factor;
+      var pn = pensionNet(grossPension);
+      return {
+        memberId: m.id, birthYear: by, age: age0, mode: mode, over50: over50, firstAge: firstAge,
+        current: r1(g0), past: r1(past), pastYears: pastYears, future: r1(future), futureYears: futureYears, lastWork: lastWork,
+        cappedYears: cappedYears, futureBefore60: r1(futureBefore60), before60Now: r1(before60Now),
+        earn: r1(earn), basic: r1(basic), basicYears: basicYears, startAge: startAge, startYear: by + startAge, factor: factor,
+        gross: r1(grossPension), net: r1(pn.net), social: pn.social, tax: pn.tax, amount: r1(pn.net * adjust / 100)
+      };
+    });
+    // CF表の公的年金の行（変更型）：受け取りはじめる年ごとに、その時点の合計
+    var rows = [], sum = 0;
+    people.slice().sort(function (a, b) { return a.startYear - b.startYear; }).forEach(function (p) {
+      sum = r1(sum + p.amount);
+      var last = rows[rows.length - 1];
+      if (last && last.year === p.startYear) last.amount = sum;
+      else rows.push({ year: p.startYear, amount: sum });
+    });
+    return { people: people, rows: rows, adjust: adjust };
   }
 
   // ---- 住宅ローンの試算（入力シート T114:AH125、住宅ローン返済表シート） ----
@@ -438,7 +597,7 @@
         if (num(r.year) < sy || num(r.year) > ey) add(at, 'year', 'warn', outside);
       });
     });
-    ['pubPension', 'insurance', 'carCost', 'otherFlow', 'living', 'housing'].forEach(function (key) {
+    (state.penAuto ? [] : ['pubPension']).concat(['insurance', 'carCost', 'otherFlow', 'living', 'housing']).forEach(function (key) {
       var anchoredKey = key === 'living' || key === 'housing';
       (state[key] || []).forEach(function (r, i) {
         var at = 'row:' + key + ':' + r.id;
@@ -530,13 +689,14 @@
   // 社会保険料の本人負担の率（％、目安）。健康保険の種類と年齢（40〜64歳は介護保険料あり）で変える。
   //   協会けんぽ：健康保険 5.0（全国平均10.0％の半分）、介護 0.8、厚生年金 9.15、雇用保険 0.55
   //   健康保険組合：健康保険 4.2、介護 0.8（組合の平均的な料率と会社負担の多さから。組合ごとに違う）
-  // 厚生年金は標準報酬月額65万円・賞与1回150万円が上限なので、年収1,080万円（65万×12＋150万×2）を上限とみなす。
+  // 厚生年金は標準報酬月額65万円・賞与1回150万円が上限なので、年収1,080万円（65万×12＋150万×2）を上限とみなす（今年の手取りなので今の上限）。
   var HEALTH = { kyokai: { health: 5.0, care: 0.8 }, kumiai: { health: 4.2, care: 0.8 } };
   function socialInsurance(income, health, age) {
     var h = HEALTH[health];
     if (!h) return Math.min(income * 0.155, 180);    // Excelの手取額計算シートと同じ（年収×15.5％、上限180）
     var care = age >= 40 && age < 65 ? h.care : 0;
-    return income * (h.health + care + 0.55) / 100 + Math.min(income, 1080) * 0.0915;
+    // 健康保険・介護保険は標準報酬月額139万円・標準賞与額 年573万円が上限（年収2,241万円とみなす）。雇用保険は上限なし
+    return Math.min(income, 2241) * (h.health + care) / 100 + income * 0.55 / 100 + Math.min(income, 1080) * 0.0915;
   }
 
   // o: { income, spouse（扶養配偶者 'あり'/'なし'）, spouseIncome（配偶者の年収）, g16, g19, elderAway, elderLive（人数）,
@@ -655,6 +815,7 @@
     parseDate: parseDate, isDate: isDate, validate: validate, isEarlyBorn: isEarlyBorn, baseBirthYear: baseBirthYear,
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
     eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
-    compute: compute, takeHome: takeHome, takeHomeFromSlip: takeHomeFromSlip, investSim: investSim, investNeed: investNeed, dependentGroup: dependentGroup, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults, loanSchedule: loanSchedule
+    compute: compute, takeHome: takeHome, takeHomeFromSlip: takeHomeFromSlip, investSim: investSim, investNeed: investNeed, dependentGroup: dependentGroup, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults,
+    pensionPlan: pensionPlan, pensionCap: pensionCap, pensionNet: pensionNet, grossFromNet: grossFromNet, wageCurve: wageCurve, salarySeries: salarySeries, loanSchedule: loanSchedule
   };
 }));

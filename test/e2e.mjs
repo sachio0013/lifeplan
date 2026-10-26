@@ -154,21 +154,26 @@ await page.waitForTimeout(150);
 const eduAmt = await page.inputValue('#f-edu-3-2-amt');
 check('教育費の段階を変えると相場の金額が入る', eduAmt === '185', `小学校（私）=${eduAmt}`);
 
-// 公的年金の試算：サンプルはExcelと同じ289.8万円。変えると再計算し、1行目に反映できる
-await page.locator('#content .card', { hasText: '公的年金' }).locator('.toggle').tap();
-await page.waitForSelector('#f-pen-state-1-payTo');
-const penTotal0 = await page.locator('.calcresult', { hasText: '受け取る年金' }).textContent();
-await page.fill('#f-pen-state-1-payTo', '800');
-await page.press('#f-pen-state-1-payTo', 'Tab');
-await page.waitForTimeout(150);
-const penTotal1 = await page.locator('.calcresult', { hasText: '受け取る年金' }).textContent();
-await page.locator('#content .card', { hasText: '公的年金' }).locator('.penp').first().scrollIntoViewIfNeeded();
+// 公的年金：自動で見込む（プランの給与を額面に直して）。「もっと正確に」で変えられ、自分で入力する行にも入れられる
+await page.locator('#card-pubPension .penmode button', { hasText: '自動で見込む' }).tap();
+await page.waitForSelector('#card-pubPension .ppres');
+const ppAuto = await page.$$eval('#card-pubPension .ppres b', (els) => els.map((e) => e.textContent));
+await page.locator('#card-pubPension .penp .toggle').first().tap();
+await page.locator('#card-pubPension .ppset button', { hasText: '1年目の年収' }).tap();
+await page.waitForSelector('#f-pp-state-1-firstIncome');
+await page.fill('#f-pp-state-1-firstIncome', '300'); await page.press('#f-pp-state-1-firstIncome', 'Tab');
+await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+const ppFirst = await page.$$eval('#card-pubPension .ppres b', (els) => els.map((e) => e.textContent));
+await page.locator('#card-pubPension .penp').first().scrollIntoViewIfNeeded();
 await page.screenshot({ path: join(shots, '16-pension.png') });
-await page.locator('.btn', { hasText: '公的年金の1行目に反映する' }).tap();
-await page.waitForTimeout(150);
-const penRow = await page.inputValue('#f-pubPension-1-amt');
-check('公的年金の試算がExcelと同じ289.8万円で、変えると再計算し1行目に反映できる',
-  /289\.8万円/.test(penTotal0) && /299\.7万円/.test(penTotal1) && penRow === '299.7', `${penTotal0.trim()} → ${penTotal1.trim()} / 1行目=${penRow}`);
+await page.locator('#card-pubPension .penmode button', { hasText: '自分で入力する' }).tap(); await page.waitForTimeout(150);
+await page.locator('#card-pubPension .btn', { hasText: '自動の見込額を行に入れる' }).tap(); await page.waitForTimeout(150);
+const ppRows = await page.$$eval('[id^="f-pubPension-"][id$="-amt"]', (els) => els.map((e) => e.value));
+const ppSum = Math.round((parseFloat(ppFirst[0]) + parseFloat(ppFirst[1])) * 10) / 10;
+check('公的年金：給与から自動で見込み（記入例で夫194.7万円・妻141.5万円）、1年目の年収を入れると変わり、自分で入力する行にも入れられる',
+  ppAuto[0] === '194.7' && ppAuto[1] === '141.5' && ppFirst[0] !== ppAuto[0] && ppRows.length === 1 && parseFloat(ppRows[0]) === ppSum,
+  `${ppAuto.join('・')} → ${ppFirst.join('・')} / 行=${ppRows.join(',')}`);
+await page.locator('#toast button').tap(); await page.waitForTimeout(150);   // 行は元に戻す（以降のテストのため）
 
 // 住宅ローンの試算：サンプル（4500万円・35年・1%→2%）はExcelと同じ返済額。反映すると住宅費の行になる
 await page.locator('.toggle', { hasText: '住宅ローンを試算する' }).tap();
@@ -349,17 +354,12 @@ await next();
 await wp.fill('#w-sal1', '450'); await wp.press('#w-sal1', 'Tab');
 await wp.fill('#w-sal2', '200'); await wp.press('#w-sal2', 'Tab');
 await next();
-await wp.locator('.wz .toggle').tap();
-await wp.waitForSelector('#f-pen-wz-1-payFrom');
-for (const [id, v] of [['1-payFrom', '350'], ['1-payTo', '500'], ['2-payFrom', '250'], ['2-payTo', '300']]) {
-  await wp.fill(`#f-pen-wz-${id}`, v); await wp.press(`#f-pen-wz-${id}`, 'Tab');
-}
-await wp.locator('.wz .btn', { hasText: 'この金額を使う' }).tap();
-await wp.waitForTimeout(100);
-// 家族１：1986+22〜+60年（39年）、(350+500)/2×39×0.55%=91.2→91、(91+70)×0.9=144.9
-// 家族２：1988+22〜+60年（39年）、(250+300)/2×39×0.55%=59.0→59、(59+70)×0.9=116.1
+await wp.waitForSelector('.wz .ppres');
+const wzPen = await wp.$$eval('.wz .ppres b', (els) => els.map((e) => parseFloat(e.textContent)));
 const wzPension = await wp.inputValue('#w-pension');
-check('かんたん入力の年金も試算から入れられる', wzPension === '261', `公的年金=${wzPension}`);
+await wp.screenshot({ path: join(shots, '9c-wizard-pension.png') });
+check('かんたん入力の年金は、入れた給与から自動で見込み（2人分）、額を入れなくても先に進める',
+  wzPen.length === 2 && wzPen.every((v) => v > 100 && v < 300) && wzPension === '', `${wzPen.join('・')} / 入力=${wzPension}`);
 await next();
 await wp.fill('#w-living', '280'); await wp.press('#w-living', 'Tab');
 await wp.fill('#w-housing', '130'); await wp.press('#w-housing', 'Tab');
