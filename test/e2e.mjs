@@ -511,6 +511,25 @@ await fresh.close();
   await page.fill('#f-fam-3-birth', '20220101'); await page.press('#f-fam-3-birth', 'Tab');
   await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
   check('手取りの反映も「元に戻す」で戻せる', (await page.inputValue('#f-sal-1-1-amt')) === '500');
+  // 健康保険の種類・年齢で社会保険料率が変わり、去年の年収で住民税、実額の社会保険料も使える
+  await go(page, '#tabs .tab[data-k="income"]');
+  if (!(await page.locator('#f-th-1-last').count())) await page.locator('.toggle', { hasText: '年収（額面）から計算' }).first().tap();
+  await page.waitForSelector('#f-th-1-last');
+  const num = async () => parseFloat((await page.textContent('.calcbox.th .calcresult')).replace(/[^0-9.]/g, ''));
+  const sec = async () => (await page.textContent('.calcbox.th .calcsec')).trim();
+  const excel = await num(); const excelSec = await sec();
+  await page.locator('.thsp button', { hasText: '協会けんぽ' }).tap(); await page.waitForTimeout(150);
+  const kyokai = await num(); const kyokaiSec = await sec();
+  const ageHint = await page.locator('.calcbox.th .hint', { hasText: '介護保険料' }).count();
+  await page.fill('#f-th-1-last', '550'); await page.press('#f-th-1-last', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const withLast = await num();
+  await page.fill('#f-th-1-social', '80'); await page.press('#f-th-1-social', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const withSocial = await num(); const socialSec = await sec();
+  check('手取り：協会けんぽ・35歳で14.7％（Excelの15.5％より手取りが増える）、去年の年収が低いと住民税が下がり、実額の社会保険料を優先',
+    /15\.5％/.test(excelSec) && /14\.7％/.test(kyokaiSec) && kyokai > excel && ageHint === 1 && withLast > kyokai && /実額/.test(socialSec) && withSocial !== withLast,
+    `${excel}(${excelSec}) → ${kyokai}(${kyokaiSec}) → 去年550 ${withLast} → 実額80 ${withSocial}(${socialSec})`);
 }
 
 // 家計簿：月ごとに入れ、残高と照らし合わせ、1年の表にまとまり、ライフプランに反映できる

@@ -532,5 +532,5 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 .deprow.off { cursor: default; opacity: .7; }
 .deprow select { margin-left: auto; }
 .thmore { padding: 4px 0 2px; }
-.thmore .u small { display: block; font-size: 11.5px; color: var(--text-faint); }
+.thmore .u small, .calcbox.th .calcrow .u small { display: block; font-size: 11.5px; color: var(--text-faint); white-space: normal; }
 .calcbox .catbar { margin-top: 6px; }

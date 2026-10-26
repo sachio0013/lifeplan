@@ -527,15 +527,30 @@
     return income * sd[1] + sd[2];
   }
 
+  // 社会保険料の本人負担の率（％、目安）。健康保険の種類と年齢（40〜64歳は介護保険料あり）で変える。
+  //   協会けんぽ：健康保険 5.0（全国平均10.0％の半分）、介護 0.8、厚生年金 9.15、雇用保険 0.55
+  //   健康保険組合：健康保険 4.2、介護 0.8（組合の平均的な料率と会社負担の多さから。組合ごとに違う）
+  // 厚生年金は標準報酬月額65万円・賞与1回150万円が上限なので、年収1,080万円（65万×12＋150万×2）を上限とみなす。
+  var HEALTH = { kyokai: { health: 5.0, care: 0.8 }, kumiai: { health: 4.2, care: 0.8 } };
+  function socialInsurance(income, health, age) {
+    var h = HEALTH[health];
+    if (!h) return Math.min(income * 0.155, 180);    // Excelの手取額計算シートと同じ（年収×15.5％、上限180）
+    var care = age >= 40 && age < 65 ? h.care : 0;
+    return income * (h.health + care + 0.55) / 100 + Math.min(income, 1080) * 0.0915;
+  }
+
   // o: { income, spouse（扶養配偶者 'あり'/'なし'）, spouseIncome（配偶者の年収）, g16, g19, elderAway, elderLive（人数）,
-  //      life（生命保険料控除、既定5）, ideco, other, furusato }
+  //      life（生命保険料控除、既定5）, ideco, other, furusato,
+  //      health（'kyokai'/'kumiai'、無ければExcelと同じ15.5％）, age（本人の年齢）, social（社会保険料の実額。あればこれを使う）,
+  //      lastIncome（去年の年収。住民税は去年の所得で決まるので、あれば住民税だけこれで計算する） }
   // 以前の呼び方 takeHome(年収, 扶養配偶者あり, 子供の数) も受け付ける（子供は16歳以上として数える）
   function takeHome(o, hasSpouse, kids) {
     if (typeof o !== 'object' || o === null) o = { income: o, spouse: hasSpouse ? 'あり' : 'なし', g16: kids };
     var income = num(o.income);
     if (!(income > 0)) return { net: 0, social: 0, tax: 0, incomeTax: 0, residentTax: 0, ratio: 0, taxable: 0, deductions: {} };
     var own = income - salaryDeduction(income);
-    var social = Math.min(income * 0.155, 180);
+    var actual = o.social !== undefined && o.social !== '' && o.social !== null && num(o.social) > 0;
+    var social = actual ? num(o.social) : socialInsurance(income, o.health, num(o.age));
     var basic = bracket(DEDUCT_BASIC, own)[1];
     var spouseOn = o.spouse === true || o.spouse === 'あり';
     var sIncome = num(o.spouseIncome);
@@ -548,12 +563,23 @@
     var ti = bracket(TAX_INCOME, taxable);
     var incomeTax = taxable * ti[1] + ti[2];
     var residentTax = Math.max(0, taxable * 0.1) + 1 - num(o.furusato) + 0.2;
+    // 住民税は去年の所得で決まる。去年の年収があれば、扶養などは今年と同じとして住民税だけ去年の年収で計算する
+    var last = num(o.lastIncome);
+    if (last > 0 && last !== income) {
+      var lastOwn = last - salaryDeduction(last);
+      var lastSocial = actual ? social * last / income : socialInsurance(last, o.health, num(o.age) - 1);
+      var lastCol = lastOwn >= 1001 ? 4 : lastOwn >= 951 ? 3 : lastOwn >= 901 ? 2 : 1;
+      var lastTaxable = Math.max(0, lastOwn - (lastSocial + bracket(DEDUCT_BASIC, lastOwn)[1] + (spouseOn ? bracket(DEDUCT_SPOUSE, spouseOwn)[lastCol] : 0) +
+        dep + life + num(o.ideco) + num(o.other)));
+      residentTax = lastTaxable * 0.1 + 1 - num(o.furusato) + 0.2;
+    }
     var tax = incomeTax + residentTax;
     var net = income - social - tax;
     var r2 = function (v) { return Math.round(v * 100) / 100; };
     return {
       net: r2(net), social: r2(social), tax: r2(tax), incomeTax: r2(incomeTax), residentTax: r2(residentTax),
       taxable: r2(taxable), ratio: Math.round(net / income * 1000) / 10,
+      socialRate: Math.round(social / income * 1000) / 10, socialActual: actual, residentFromLast: last > 0 && last !== income,
       deductions: { salary: r2(income - own), basic: basic, spouse: spouse, dependents: dep, life: life }
     };
   }

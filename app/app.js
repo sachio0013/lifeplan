@@ -1612,6 +1612,12 @@
       return { m: m, age: age, group: E.dependentGroup(age) };
     }).filter(function (d) { return d.age >= 0; });
   }
+  // 本人の開始年の年末の年齢（介護保険料の有無に使う）。家族構成にいなければ0
+  function earnerAge(sal) {
+    var m = byId(state.family, sal.memberId);
+    var y = m && E.parseDate(m.birth).y;
+    return y ? state.startYear - y : 0;
+  }
   // 設定（まだ触っていなければ家族構成から既定値を作る）
   function calcOf(sal, idx) {
     if (sal.calc) return sal.calc;
@@ -1624,12 +1630,14 @@
     return {
       income: idx === 0 && state.calc ? state.calc.income : '',
       spouse: sp && spTake <= 100 ? 'あり' : 'なし', spouseIncome: '',
-      deps: deps, g16: 0, g19: 0, elderLive: 0, elderAway: 0, life: 5, ideco: 0, other: 0, furusato: 0
+      deps: deps, g16: 0, g19: 0, elderLive: 0, elderAway: 0, life: 5, ideco: 0, other: 0, furusato: 0,
+      lastIncome: '', health: '', social: ''
     };
   }
   function calcInput(sal, c) {
     var o = { income: c.income, spouse: c.spouse, spouseIncome: c.spouseIncome, g16: toNum(c.g16), g19: toNum(c.g19),
-      elderLive: toNum(c.elderLive), elderAway: toNum(c.elderAway), life: c.life, ideco: c.ideco, other: c.other, furusato: c.furusato };
+      elderLive: toNum(c.elderLive), elderAway: toNum(c.elderAway), life: c.life, ideco: c.ideco, other: c.other, furusato: c.furusato,
+      lastIncome: c.lastIncome, health: c.health, social: c.social, age: earnerAge(sal) };
     depCandidates(sal).forEach(function (d) {
       var v = c.deps[d.m.id];
       if (d.group === 'g16' && v === true) o.g16++;
@@ -1668,6 +1676,21 @@
       '<div class="calcrow"><span class="u" style="width:88px">年収（額面）</span>' +
         numInput('f-th-' + sid + '-income', 'rq', 96, c.income, 'A.thSet(' + sid + ",'income',this.value)", ';margin-left:auto') + '<span class="u">万円</span></div>' +
       '<div class="hint" style="padding:4px 0 0">源泉徴収票の「支払金額」。わからなければ、月給（額面）×12＋ボーナスの合計</div>' +
+      '<div class="calcrow"><span class="u" style="width:120px">去年の年収<small>住民税の計算用・任意</small></span>' +
+        numInput('f-th-' + sid + '-last', 'op', 96, c.lastIncome, 'A.thSet(' + sid + ",'lastIncome',this.value)", ';margin-left:auto' + bg) + '<span class="u">万円</span></div>' +
+      '<div class="hint" style="padding:4px 0 0">住民税は去年の所得で決まり、6月から1年間引かれます。昇給・転職などで年収が変わったときに入れると正確になります。空欄なら今年と同じとして計算します。</div>' +
+      '<div class="calcsec">社会保険料<small>' + (th.socialActual ? '実額' : '年収の' + th.socialRate + '％') + 'で計算</small></div>' +
+      '<div class="mini thsp" role="radiogroup" aria-label="健康保険の種類">' + [['kyokai', '協会けんぽ'], ['kumiai', '健保組合'], ['', 'わからない']].map(function (o) {
+        var on = (c.health || '') === o[0];
+        return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.thSet(' + sid + ",'health','" + o[0] + '\')">' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="hint" style="padding:4px 0 0">' + (c.health
+        ? (earnerAge(sal) ? esc(memberName(sal.memberId)) + 'は' + state.startYear + '年末で' + earnerAge(sal) + '歳なので、介護保険料（40〜64歳）は' + (earnerAge(sal) >= 40 && earnerAge(sal) < 65 ? '入ります' : '入りません') + '。' : '') +
+          (c.health === 'kumiai' ? '健康保険組合は平均的な料率で見積もっています（組合によって違います）。' : '協会けんぽは全国平均の料率で見積もっています。')
+        : '保険証に「協会けんぽ」「全国健康保険協会」とあれば協会けんぽ、「◯◯健康保険組合」とあれば健康保険組合です。わからなければ、Excelと同じ年収の15.5％で計算します。') + '</div>' +
+      '<div class="calcrow"><span class="u" style="width:148px">実際の社会保険料<small>源泉徴収票の「社会保険料等の金額」</small></span>' +
+        numInput('f-th-' + sid + '-social', 'op', 84, c.social, 'A.thSet(' + sid + ",'social',this.value)", ';margin-left:auto' + bg) + '<span class="u">万円</span></div>' +
+      '<div class="hint" style="padding:4px 0 0">わかれば入れてください。見積もりより、この金額を優先して使います。</div>' +
       '<div class="calcsec">配偶者</div>' +
       '<div class="mini thsp" role="radiogroup" aria-label="配偶者を扶養しているか">' + [['なし', '扶養していない'], ['あり', '扶養している']].map(function (o) {
         var on = c.spouse === o[0];
@@ -1694,7 +1717,7 @@
         '<div class="hint" style="padding:2px 0 6px;text-align:right">手取り率 ' + th.ratio + '％・月あたり約' + (Math.round(th.net / 12 * 10) / 10) + '万円（ボーナスを含めて12等分）</div>' +
         bar +
         '<button class="btn block" onclick="A.calcApply(' + sid + ')">手取り ' + (Math.round(th.net * 10) / 10).toLocaleString('ja-JP') + '万円を1行目に入れる</button>' : '') +
-      '<div class="hint" style="padding:8px 0 0">Excel「手取額計算」シート（2025年4月〜の税制）と同じ式の概算です。会社員で年収150〜1000万円くらいの方向け。社会保険料は年収の15.5％、住宅ローン控除は含みません。住民税は実際には翌年に引かれますが、ここでは同じ年として計算しています。</div>' +
+      '<div class="hint" style="padding:8px 0 0">Excel「手取額計算」シート（2025年4月〜の税制）の式にもとづく概算です。会社員で年収150〜1000万円くらいの方向け。社会保険料は、健康保険の種類と年齢で見積もるか、実額を入れられます（選ばなければ年収の15.5％）。住民税は去年の年収を入れるとそれで計算します。住宅ローン控除・復興特別所得税は含みません。</div>' +
     '</div>';
   }
 
@@ -1707,7 +1730,7 @@
   }
   A.thSet = function (sid, field, v) {
     var sal = calcEdit(sid); if (!sal) return;
-    sal.calc[field] = field === 'spouse' ? v : String(v).trim() === '' ? '' : toNum(v);
+    sal.calc[field] = field === 'spouse' || field === 'health' ? v : String(v).trim() === '' ? '' : toNum(v);
     if (field === 'income' && state.salaries[0] === sal) state.calc.income = sal.calc.income;
     commit();
   };
@@ -2408,7 +2431,7 @@
 
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
-    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato'];
+    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato', 'lastIncome', 'social'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });

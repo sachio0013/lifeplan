@@ -77,6 +77,32 @@ test('手取額の計算が手取額計算シートの記入例と一致する�
   }
 }
 
+test('手取額：社会保険料は健康保険の種類と年齢で変えられ、何も選ばなければExcelと同じ15.5％', () => {
+  const base = { income: 800, spouse: 'あり', ideco: 24 };
+  assert.equal(E.takeHome(base).social, 124);                                        // Excelと同じ
+  assert.equal(E.takeHome({ ...base, health: 'kyokai', age: 45 }).socialRate, 15.5);     // 協会けんぽ・40歳以上＝Excelと同じ水準
+  assert.equal(E.takeHome({ ...base, health: 'kyokai', age: 35 }).socialRate, 14.7);     // 40歳未満は介護保険料なし
+  assert.equal(E.takeHome({ ...base, health: 'kumiai', age: 45 }).socialRate, 14.7);
+  assert.equal(E.takeHome({ ...base, health: 'kumiai', age: 35 }).socialRate, 13.9);
+  // 厚生年金の上限：年収1,500万円でも厚生年金は1,080万円分まで
+  const hi = E.takeHome({ income: 1500, health: 'kyokai', age: 35 });
+  assert.ok(Math.abs(hi.social - (1500 * 0.0555 + 1080 * 0.0915)) < 0.01);
+  // 実額を入れればそれを使う
+  assert.equal(E.takeHome({ ...base, social: 110 }).social, 110);
+});
+
+test('手取額：住民税は去年の年収で計算できる（年収800万円・去年740万円の例）', () => {
+  const base = { income: 800, spouse: 'あり', ideco: 24 };
+  const now = E.takeHome(base), lag = E.takeHome({ ...base, lastIncome: 740 });
+  assert.equal(lag.incomeTax, now.incomeTax);                 // 所得税と社会保険料は今年の年収のまま
+  assert.equal(lag.social, now.social);
+  assert.equal(lag.residentTax, E.takeHome({ ...base, income: 740 }).residentTax);   // 住民税は去年の年収で計算したものと同じ
+  assert.ok(lag.residentTax < now.residentTax && lag.residentFromLast);
+  // 両方を指定：健康保険組合・38歳・去年740万円 → Excelの式（610.75）より約13.5万円多い
+  assert.equal(now.net, 610.75);
+  assert.equal(E.takeHome({ ...base, lastIncome: 740, health: 'kumiai', age: 38 }).net, 624.28);
+});
+
 test('扶養控除の区分は12月31日の年齢で決まる（16歳未満は対象外、19〜22歳は特定扶養、70歳以上は老人扶養）', () => {
   assert.deepEqual([0, 15, 16, 18, 19, 22, 23, 69, 70].map(E.dependentGroup), ['under16', 'under16', 'g16', 'g16', 'g19', 'g19', 'g16', 'g16', 'elder']);
 });
