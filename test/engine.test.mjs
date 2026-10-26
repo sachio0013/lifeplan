@@ -382,3 +382,30 @@ test('どんな入力でも計算が落ちず、つじつまが合う（乱数�
     }
   }
 });
+
+test('投資シミュレーション：Excelの投資シミュレーションシート（記入例）と50年後まで一致', () => {
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/excel-investsim.json', import.meta.url), 'utf8'));
+  const i = fx.input;
+  const r = E.investSim({ start: i.start, contrib: i.contrib, rate: i.rate, cost: i.cost, age: i.age, until: i.until, to: i.age + 50 });
+  assert.equal(r.rows.length, fx.rows.length);
+  r.rows.forEach((row, k) => {
+    const e = fx.rows[k];
+    assert.equal(row.age, e.age);
+    assert.equal(row.contrib, e.contrib, `${e.age}歳の積立`);
+    assert.equal(row.cumulative, e.cumulative, `${e.age}歳の累積`);
+    assert.ok(Math.abs(row.value - e.value) < 1e-6, `${e.age}歳 ${row.value} ≠ ${e.value}`);
+    assert.ok(Math.abs(row.ret - e.ret) < 1e-6);
+  });
+  // 何歳まで計算するか（to）を省くと、積立の終わりの年まで
+  const u = E.investSim({ ...i, contrib: i.contrib });
+  assert.equal(u.rows[u.rows.length - 1].age, 65);
+  assert.ok(Math.abs(u.value - 2893.009711) < 1e-5);
+  assert.equal(u.cumulative, 1216);
+});
+
+test('投資シミュレーション：目標額から毎年の積立額を逆算できる', () => {
+  const o = { start: 100, rate: 5, cost: 0.2, age: 35, until: 65 };
+  const need = E.investNeed(o, 2893.009711);
+  assert.ok(Math.abs(need - 36) < 1e-6, String(need));
+  assert.equal(E.investNeed(o, 0), 0);                       // 残高だけで届くなら0
+});

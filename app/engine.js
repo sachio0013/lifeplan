@@ -615,6 +615,32 @@
     };
   }
 
+  // 投資シミュレーション（Excel「投資シミュレーション」シートと同じ式）。金額は万円、率は％。
+  // o: { start（前年末の残高）, contrib（毎年の積立額）, rate（想定利回り）, cost（信託報酬などのコスト）,
+  //      age（今年末の年齢）, until（何歳まで積み立てるか）, to（何歳まで計算するか。無ければ until） }
+  // 今年は（前年末の残高＋積立）×（1＋利回り−コスト）、翌年からは 前年×（1＋利回り−コスト）＋積立（until歳まで）。
+  function investSim(o) {
+    var r = (num(o.rate) - num(o.cost)) / 100;
+    var age = Math.round(num(o.age)), until = Math.round(num(o.until)), c = num(o.contrib);
+    var to = Math.round(o.to === undefined || o.to === '' ? until : num(o.to));
+    to = Math.max(age, Math.min(to, age + 80));
+    var rows = [], value = 0, cum = 0;
+    for (var a = age; a <= to; a++) {
+      var add = a > until ? 0 : c;
+      if (a === age) { cum = num(o.start) + add; value = cum * (1 + r); }
+      else { cum += add; value = value * (1 + r) + add; }
+      rows.push({ age: a, contrib: add, cumulative: cum, value: value, ret: cum ? (value - cum) / cum : 0 });
+    }
+    var last = rows[rows.length - 1];
+    return { rows: rows, value: last.value, cumulative: last.cumulative, gain: last.value - last.cumulative };
+  }
+  // 目標額に届く毎年の積立額（結果は積立額について一次式なので、0と1で計算して逆算する）
+  function investNeed(o, target) {
+    var a = investSim(Object.assign({}, o, { contrib: 0 })).value;
+    var b = investSim(Object.assign({}, o, { contrib: 1 })).value - a;
+    return b > 0 ? Math.max(0, (num(target) - a) / b) : 0;
+  }
+
   // 扶養控除の区分を年齢から決める（その年の12月31日の年齢）。16歳未満は扶養控除なし（児童手当の対象）
   function dependentGroup(age) {
     if (age < 16) return 'under16';
@@ -629,6 +655,6 @@
     parseDate: parseDate, isDate: isDate, validate: validate, isEarlyBorn: isEarlyBorn, baseBirthYear: baseBirthYear,
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
     eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
-    compute: compute, takeHome: takeHome, takeHomeFromSlip: takeHomeFromSlip, dependentGroup: dependentGroup, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults, loanSchedule: loanSchedule
+    compute: compute, takeHome: takeHome, takeHomeFromSlip: takeHomeFromSlip, investSim: investSim, investNeed: investNeed, dependentGroup: dependentGroup, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults, loanSchedule: loanSchedule
   };
 }));

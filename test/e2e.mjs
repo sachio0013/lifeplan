@@ -647,6 +647,26 @@ await fresh.close();
   check('プランへの反映も「元に戻す」で戻せる', restored === '360', restored);
 }
 
+// DC（会社拠出）の見込額：Excelの投資シミュレーションと同じ式で計算し、退職一時金の行に入れる
+{
+  await go(page, '#seg-input');
+  await go(page, '#tabs .tab[data-k="pension"]');
+  await page.locator('.toggle', { hasText: 'DC（会社拠出）' }).tap(); await page.waitForTimeout(150);
+  for (const [id, v] of [['#f-dc-start', '100'], ['#f-dc-contrib', '36'], ['#f-dc-rate', '5'], ['#f-dc-until', '65'], ['#f-dc-receive', '65']]) { await page.fill(id, v); await page.press(id, 'Tab'); }
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const res = await page.textContent('.calcbox.dc .calcresult');
+  await page.fill('#f-dc-target', '2000'); await page.press('#f-dc-target', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const needText = await page.textContent('.calcbox.dc');
+  const before = await page.locator('[id^="f-lump-"][id$="-amt"]').count();
+  await page.locator('.calcbox.dc .btn.block').tap(); await page.waitForTimeout(150);
+  const amts = await page.$$eval('[id^="f-lump-"][id$="-amt"]', (els) => els.map((e) => e.value));
+  check('DC（会社拠出）：Excelの記入例と同じ条件で65歳に2,893万円、目標からの逆算も出て、一時収入の行に入る',
+    /2,893/.test(res) && /毎年 \d/.test(needText) && amts.length === before + 1 && amts.includes('2893'), `${res.trim()} / ${amts.join(',')}`);
+  await page.locator('#toast button').tap(); await page.waitForTimeout(150);
+  check('DCの反映も「元に戻す」で戻せる', (await page.locator('[id^="f-lump-"][id$="-amt"]').count()) === before);
+}
+
 // 給与明細：明細を入れると手取りが出て、前の月の内容を写せ、家計簿とプランに入れられる
 {
   await go(page, '#seg-book');

@@ -95,6 +95,7 @@
     cmp: null,         // 比較で選んでいるプランの id
     backup: { msg: '', level: '', text: false, pending: null },
     penOpen: { state: false, wz: false },  // 公的年金の試算を開いているか
+    dcOpen: false, dcTable: false,         // DC（会社拠出）の見込額の計算を開いているか、年ごとの表を開いているか
     loanOpen: false, loanTable: false, loanConfirm: false,  // 住宅ローンの試算
     inputScroll: 0
   };
@@ -818,7 +819,7 @@
     }
 
     h += '<h2 class="sec" id="sec-pension">' + ic('pension', 20) + '年金・退職金</h2>';
-    h += groupCard('lump', '退職一時金・その他一時収入', { max: 3, lump: true, memo: true, hint: '不動産の売却や親からの援助もここへ' });
+    h += groupCard('lump', '退職一時金・その他一時収入', { max: 3, lump: true, memo: true, hint: '不動産の売却や親からの援助もここへ', extra: dcCalcHTML() });
     h += groupCard('corpPension', '企業年金', { max: 5, hasTo: true, memo: true });
     h += groupCard('privPension', '個人年金・保険など', { max: 5, hasTo: true, memo: true, hint: '備考に契約名を書いておくと、あとで見返したときに分かります' });
     h += groupCard('pubPension', '公的年金', { max: 5, requiredFirst: true, dupCheck: true, memo: true, hint: '家族１が65歳＝' + (by + 65) + '年／70歳＝' + (by + 70) + '年。家族全員の合計を手取りの年額で入れます', extra: penCalcHTML('state') });
@@ -1181,6 +1182,121 @@
 
   // ---------- 住宅ローンの試算（入力シート T114:AH125、住宅ローン返済表シート） ----------
   //
+  // ---------- DC（会社拠出）の見込額（Excel「投資シミュレーション」シートと同じ式） ----------
+  // 会社が出す掛金は手取りに入れず、運用して受け取る一時金として「退職一時金」に入れる。
+  // 入力は state.dcCalc = { memberId, start, contrib, rate, cost, until, receive, target }。計算エンジンの結果には影響しない。
+
+  var DC_MEMO = 'DC（会社拠出）';
+  function dcPeople() { return penPeople('state'); }
+  function dcData(create) {
+    var people = dcPeople(), p0 = people[0];
+    var d = state.dcCalc || {};
+    var p = people.filter(function (x) { return x.key === d.memberId; })[0] || p0;
+    var sal = p && state.salaries.filter(function (x) { return x.memberId === p.key; })[0];
+    var retire = sal && toNum(sal.retireAge) ? toNum(sal.retireAge) : 60;
+    var o = {
+      memberId: p ? p.key : 0, start: d.start !== undefined ? d.start : '', contrib: d.contrib !== undefined ? d.contrib : '',
+      rate: d.rate !== undefined ? d.rate : 3, cost: d.cost !== undefined ? d.cost : 0.2,
+      until: d.until !== undefined && d.until !== '' ? d.until : Math.min(retire, 70),
+      receive: d.receive !== undefined && d.receive !== '' ? d.receive : Math.max(60, Math.min(retire, 75)),
+      target: d.target !== undefined ? d.target : ''
+    };
+    if (create) state.dcCalc = o;
+    return { o: o, p: p };
+  }
+  function dcResult(d) {
+    var by = d.p ? d.p.by : baseBirth();
+    var age = state.startYear - by;
+    var input = { start: d.o.start, contrib: d.o.contrib, rate: d.o.rate, cost: d.o.cost, age: age, until: d.o.until, to: Math.max(toNum(d.o.receive), age) };
+    var r = E.investSim(input);
+    r.age = age; r.year = by + Math.max(toNum(d.o.receive), age); r.input = input;
+    return r;
+  }
+  function dcChartSVG(r) {
+    var rows = r.rows, n = rows.length;
+    if (n < 2) return '';
+    var W = 320, H = 120, P = 6;
+    var max = Math.max.apply(null, rows.map(function (x) { return Math.max(x.value, x.cumulative); })) || 1;
+    var X = function (i) { return P + (W - 2 * P) * i / (n - 1); }, Y = function (v) { return H - P - (H - 2 * P) * v / max; };
+    var line = function (k) { return rows.map(function (x, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(x[k]).toFixed(1); }).join(''); };
+    return '<svg class="dcchart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="積み立てた額と運用した結果の推移">' +
+      '<path d="' + line('value') + 'L' + X(n - 1).toFixed(1) + ' ' + (H - P) + 'L' + P + ' ' + (H - P) + 'Z" fill="var(--c-invest)" fill-opacity=".16"/>' +
+      '<path d="' + line('value') + '" fill="none" stroke="var(--c-invest)" stroke-width="2.5" vector-effect="non-scaling-stroke"/>' +
+      '<path d="' + line('cumulative') + '" fill="none" stroke="var(--text-faint)" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke"/>' +
+    '</svg>' +
+    '<div class="catlegend"><span><i style="background:var(--c-invest)"></i>運用した結果</span><span><i style="background:var(--text-faint)"></i>積み立てた額の合計</span></div>';
+  }
+
+  function dcCalcHTML() {
+    var open = ui.dcOpen;
+    var head = '<button class="toggle" onclick="A.dcToggle()">' + ic('calc', 18, 'lead') +
+      '<span class="lbl">DC（会社拠出）の見込額を計算する</span><span class="chev">' + chevron(open) + '</span></button>';
+    if (!open) return '<div class="divide">' + head + '</div>';
+    var d = dcData(false), o = d.o, people = dcPeople();
+    var r = dcResult(d);
+    var bg = ';margin-left:auto;background:var(--surface)';
+    var row = function (f, label, small, unit, w) {
+      return '<div class="calcrow"><span class="u" style="flex:1;min-width:0">' + label + (small ? '<small>' + small + '</small>' : '') + '</span>' +
+        numInput('f-dc-' + f, 'op', w || 84, o[f], "A.dc('" + f + "',this.value)", bg) + '<span class="u">' + unit + '</span></div>';
+    };
+    var badAge = toNum(o.until) < r.age || toNum(o.receive) < r.age;
+    var need = toNum(o.target) > 0 ? E.investNeed(r.input, toNum(o.target)) : null;
+    var exists = state.lump.some(function (x) { return x.memo === DC_MEMO; });
+    var full = !exists && state.lump.length >= 3;
+    var value = Math.round(r.value * 10) / 10;
+    return '<div class="divide">' + head +
+      '<div class="calcbox dc">' +
+        '<div class="hint" style="padding:0 0 4px">会社が出してくれるDCの掛金は、手取りには入れず、運用して受け取る一時金として見込みます。Excelの「投資シミュレーション」と同じ計算です。</div>' +
+        (people.length > 1 ? '<div class="mini thsp" role="radiogroup" aria-label="だれのDCか">' + people.map(function (p) {
+          var on = p.key === o.memberId;
+          return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.dc(\'memberId\',' + p.key + ')">' + esc(p.label) + '</button>';
+        }).join('') + '</div>' : '') +
+        '<div class="hint" style="padding:6px 0 0">' + esc(d.p ? d.p.label : '家族１') + 'は' + state.startYear + '年末で' + r.age + '歳</div>' +
+        row('start', '今の残高', '前の年の12月末。DCの運用報告などで', '万円') +
+        row('contrib', '会社の掛金（年額）', '月額×12', '万円') +
+        row('rate', '想定利回り', '年率。Excelの記入例は5％', '％', 64) +
+        row('cost', 'コスト', '信託報酬など。年率', '％', 64) +
+        row('until', '何歳まで積み立てる', '掛金が止まる年齢', '歳まで', 64) +
+        row('receive', '何歳で受け取る', 'DCは60歳から受け取れます', '歳', 64) +
+        (badAge ? '<div class="vmsg error">' + ic('warn', 15) + '<span>年齢が今の年齢（' + r.age + '歳）より前です</span></div>' : '') +
+        '<div class="calcresult"><span class="u" style="font-weight:700">' + r.year + '年（' + Math.max(toNum(o.receive), r.age) + '歳）の見込額</span>' +
+          '<span style="font-size:22px;font-weight:900;color:var(--accent-ink);margin-left:auto">' + value.toLocaleString('ja-JP') + '</span><span class="u" style="font-weight:700">万円</span></div>' +
+        '<div class="hint" style="padding:2px 0 6px;text-align:right">積み立てた額 ' + man(r.cumulative) + '万円 ＋ 運用益 ' + man(r.gain) + '万円</div>' +
+        dcChartSVG(r) +
+        '<button class="toggle" onclick="A.dcTableToggle()"><span class="lbl">年ごとの表</span><span class="chev">' + chevron(ui.dcTable) + '</span></button>' +
+        (ui.dcTable ? '<div class="tablewrap dctable" tabindex="0"><table><thead><tr><th>年</th><th>年齢</th><th>積立</th><th>累積</th><th>結果</th><th>リターン</th></tr></thead><tbody>' +
+          r.rows.map(function (x, i) {
+            return '<tr><td>' + (state.startYear + i) + '</td><td>' + x.age + '</td><td>' + man(x.contrib) + '</td><td>' + man(x.cumulative) + '</td><td>' + man(x.value) + '</td><td>' + Math.round(x.ret * 1000) / 10 + '％</td></tr>';
+          }).join('') + '</tbody></table></div>' : '') +
+        '<div class="calcsec">目標から逆算<small>任意</small></div>' +
+        row('target', '受け取るときの目標額', '', '万円') +
+        (need !== null ? '<div class="hint" style="padding:4px 0 0">目標に届くには、毎年 <b>' + (Math.round(need * 10) / 10).toLocaleString('ja-JP') + '万円</b>（月 ' + (Math.round(need / 12 * 100) / 100).toLocaleString('ja-JP') + '万円）の積立が必要です。</div>' : '') +
+        (full ? '<div class="vmsg error">' + ic('warn', 15) + '<span>一時収入の行がいっぱい（3行）です。1行外すと入れられます。</span></div>'
+          : '<button class="btn block" ' + (badAge || !(value > 0) ? 'disabled ' : '') + 'onclick="A.dcApply()">' + r.year + '年の一時収入に ' + Math.round(value).toLocaleString('ja-JP') + '万円を' + (exists ? '入れ直す' : '入れる') + '</button>') +
+        '<div class="hint" style="padding:8px 0 0">受け取る額は、退職金と合わせて「退職所得控除」（勤続20年までは1年40万円、20年を超えた分は1年70万円）の範囲なら税金がかかりません。超えそうなときは、手取りを少なめに見てください。運用の結果は毎年同じ利回りと仮定したもので、実際には上下します。</div>' +
+      '</div>' +
+    '</div>';
+  }
+  A.dcToggle = function () { ui.dcOpen = !ui.dcOpen; commit(); };
+  A.dcTableToggle = function () { ui.dcTable = !ui.dcTable; commit(); };
+  A.dc = function (field, v) {
+    var d = dcData(true);
+    d.o[field] = field === 'memberId' ? toNum(v) : String(v).trim() === '' ? '' : toNum(v);
+    if (field === 'memberId') { delete d.o.until; delete d.o.receive; state.dcCalc = d.o; dcData(true); }
+    commit();
+  };
+  A.dcApply = function () {
+    var d = dcData(true), r = dcResult(d);
+    var amount = Math.round(r.value);
+    if (!(amount > 0)) return;
+    var row = state.lump.filter(function (x) { return x.memo === DC_MEMO; })[0];
+    if (!row && state.lump.length >= 3) return;
+    snapshot('DC（会社拠出）の見込額を一時収入に入れました');
+    if (!row) { row = { id: nid(), year: r.year, amount: amount, memo: DC_MEMO }; state.lump.push(row); }
+    row.year = r.year; row.amount = amount;
+    commit();
+  };
+
   // 試算の入力は state.loanCalc に置く：{ start, amount, years, phases: [{ rate, years }], upkeep }。
   // 計算エンジンの結果には影響せず、「住宅費に反映する」で住宅費の行を作る。
 
@@ -2696,7 +2812,7 @@
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
     'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato', 'lastIncome', 'social',
-    'commute', 'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
+    'commute', 'contrib', 'cost', 'until', 'receive', 'target', 'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });
