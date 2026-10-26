@@ -499,37 +499,72 @@
     return out;
   }
 
-  // 手取額の簡易計算（手取額計算シートと同じ考え方。会社員・年収150〜1000万円程度向け）
+  // ---- 手取額の簡易計算（手取額計算シート「年収から手取り額を簡易計算（会社員向け）2025.4～」と同じ式） ----
+  //
+  // 会社員で年収150〜1000万円くらい（社会保険加入）向けのざっくりした計算。金額は万円。
+  //   社会保険料 ＝ 年収×15.5％（上限180万円）
+  //   所得金額   ＝ 年収 − 給与所得控除
+  //   課税所得   ＝ 所得金額 − （社会保険料＋基礎控除＋配偶者控除＋扶養控除＋生命保険料控除＋iDeCo＋その他）
+  //   所得税     ＝ 課税所得×税率 − 速算控除
+  //   住民税     ＝ 課税所得×10％ ＋ 1（所得税との控除額の違いの分）＋ 0.2 − 前年のふるさと納税額
+  //   手取り     ＝ 年収 − 社会保険料 − 所得税 − 住民税
   var DEDUCT_SALARY = [[851, 0, 195], [661, 0.1, 110], [361, 0.2, 44], [191, 0.3, 8]];
   var DEDUCT_BASIC = [[2501, 0], [2451, 16], [2401, 32], [2351, 48], [656, 58], [490, 63], [337, 68], [133, 88], [0, 95]];
   var TAX_INCOME = [[4001, 0.45, -479.6], [1801, 0.4, -279.6], [901, 0.33, -153.6], [696, 0.23, -63.6], [331, 0.2, -42.75], [196, 0.1, -9.75], [0, 0.05, 0]];
+  // 配偶者控除・配偶者特別控除（シート K14:O24）。行は配偶者の所得、列は本人の所得（900万円以下／901〜950／951〜1000／1001〜）
+  var DEDUCT_SPOUSE = [[134, 0, 0, 0, 0], [131, 3, 2, 1, 0], [126, 6, 4, 2, 0], [121, 11, 8, 4, 0], [116, 16, 11, 6, 0], [111, 21, 14, 7, 0],
+    [106, 26, 18, 9, 0], [101, 31, 21, 11, 0], [96, 36, 24, 12, 0], [59, 38, 26, 13, 0], [0, 38, 26, 13, 0]];
+  // 扶養控除（シート C22）：16歳以上の子供等 38、19〜23歳 63、70歳以上で別居 48、同居 58
+  var DEDUCT_DEP = { g16: 38, g19: 63, elderAway: 48, elderLive: 58 };
 
   function bracket(table, v) {
     for (var i = 0; i < table.length; i++) if (v >= table[i][0]) return table[i];
     return table[table.length - 1];
   }
-
-  function takeHome(income, hasSpouse, kids) {
-    income = num(income);
-    if (!(income > 0)) return { net: 0, social: 0, tax: 0, ratio: 0 };
+  function salaryDeduction(income) {
+    if (income <= 190) return 65;
     var sd = bracket(DEDUCT_SALARY, income);
-    var gross = income - (income * sd[1] + sd[2]);
-    var social = income * 0.155;
-    var basic = bracket(DEDUCT_BASIC, gross)[1];
-    var spouse = hasSpouse ? 38 : 0;
-    var dependents = num(kids) * 38;
-    // 課税所得は万円未満を切り捨てる（シートの 270 / 272 と一致させるため）
-    var taxable = Math.max(0, Math.floor(gross - social - basic - spouse - dependents - 5));
+    return income * sd[1] + sd[2];
+  }
+
+  // o: { income, spouse（扶養配偶者 'あり'/'なし'）, spouseIncome（配偶者の年収）, g16, g19, elderAway, elderLive（人数）,
+  //      life（生命保険料控除、既定5）, ideco, other, furusato }
+  // 以前の呼び方 takeHome(年収, 扶養配偶者あり, 子供の数) も受け付ける（子供は16歳以上として数える）
+  function takeHome(o, hasSpouse, kids) {
+    if (typeof o !== 'object' || o === null) o = { income: o, spouse: hasSpouse ? 'あり' : 'なし', g16: kids };
+    var income = num(o.income);
+    if (!(income > 0)) return { net: 0, social: 0, tax: 0, incomeTax: 0, residentTax: 0, ratio: 0, taxable: 0, deductions: {} };
+    var own = income - salaryDeduction(income);
+    var social = Math.min(income * 0.155, 180);
+    var basic = bracket(DEDUCT_BASIC, own)[1];
+    var spouseOn = o.spouse === true || o.spouse === 'あり';
+    var sIncome = num(o.spouseIncome);
+    var spouseOwn = sIncome > 0 ? Math.max(0, sIncome - salaryDeduction(sIncome)) : 0;
+    var col = own >= 1001 ? 4 : own >= 951 ? 3 : own >= 901 ? 2 : 1;
+    var spouse = spouseOn ? bracket(DEDUCT_SPOUSE, spouseOwn)[col] : 0;
+    var dep = num(o.g16) * DEDUCT_DEP.g16 + num(o.g19) * DEDUCT_DEP.g19 + num(o.elderAway) * DEDUCT_DEP.elderAway + num(o.elderLive) * DEDUCT_DEP.elderLive;
+    var life = o.life == null || o.life === '' ? 5 : num(o.life);
+    var taxable = Math.max(0, own - (social + basic + spouse + dep + life + num(o.ideco) + num(o.other)));
     var ti = bracket(TAX_INCOME, taxable);
-    var incomeTax = Math.max(0, taxable * ti[1] + ti[2]);
-    // 住民税は生命保険料控除が2.8万円、税額に＋1万円（シートの注記どおり）
-    var residentTax = Math.max(0, Math.floor(gross - social - basic - spouse - dependents - 2.8)) * 0.1 + 1;
+    var incomeTax = taxable * ti[1] + ti[2];
+    var residentTax = Math.max(0, taxable * 0.1) + 1 - num(o.furusato) + 0.2;
     var tax = incomeTax + residentTax;
     var net = income - social - tax;
+    var r2 = function (v) { return Math.round(v * 100) / 100; };
     return {
-      net: Math.round(net), social: Math.round(social), tax: Math.round(tax * 100) / 100,
-      ratio: Math.round(net / income * 1000) / 10
+      net: r2(net), social: r2(social), tax: r2(tax), incomeTax: r2(incomeTax), residentTax: r2(residentTax),
+      taxable: r2(taxable), ratio: Math.round(net / income * 1000) / 10,
+      deductions: { salary: r2(income - own), basic: basic, spouse: spouse, dependents: dep, life: life }
     };
+  }
+
+  // 扶養控除の区分を年齢から決める（その年の12月31日の年齢）。16歳未満は扶養控除なし（児童手当の対象）
+  function dependentGroup(age) {
+    if (age < 16) return 'under16';
+    if (age <= 18) return 'g16';
+    if (age <= 22) return 'g19';
+    if (age < 70) return 'g16';
+    return 'elder';
   }
 
   return {
@@ -537,6 +572,6 @@
     parseDate: parseDate, isDate: isDate, validate: validate, isEarlyBorn: isEarlyBorn, baseBirthYear: baseBirthYear,
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
     eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
-    compute: compute, takeHome: takeHome, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults, loanSchedule: loanSchedule
+    compute: compute, takeHome: takeHome, dependentGroup: dependentGroup, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults, loanSchedule: loanSchedule
   };
 }));

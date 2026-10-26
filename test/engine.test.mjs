@@ -50,11 +50,35 @@ test('退職金・年金がExcel（入力シート 101行）と一致する', ()
   for (let y = 2056; y <= 2081; y++) assert.equal(byYear[y].income.pension, 290, `${y}年`);
 });
 
-test('手取額の計算が手取額計算シートと一致する（年収600万円、扶養なし）', () => {
-  const th = E.takeHome(600, false, 0);
+test('手取額の計算が手取額計算シートの記入例と一致する（年収600万円、扶養なし）', () => {
+  const th = E.takeHome({ income: 600, spouse: 'なし', spouseIncome: 300 });
   assert.equal(th.social, 93);
-  assert.equal(th.tax, 45.45);
-  assert.equal(th.net, 462); // シートでは 461.55
+  assert.equal(th.incomeTax, 17.25);
+  assert.equal(th.residentTax, 28.2);
+  assert.equal(th.net, 461.55);
+  assert.equal(E.takeHome(600, false, 0).net, 461.55);   // 以前の呼び方でも同じ
+});
+
+// 手取額計算シートにいろいろな入力を入れ、LibreOfficeで再計算した値（test/fixtures/excel-takehome.json）
+{
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/excel-takehome.json', import.meta.url), 'utf8'));
+  for (const c of fx.cases) {
+    test(`手取額：「${c.input.name}」がExcelと一致する`, () => {
+      const th = E.takeHome(c.input);
+      const near = (a, b, k) => assert.ok(Math.abs(a - b) < 0.006, `${k}: アプリ ${a} / Excel ${b}`);
+      near(th.deductions.spouse, c.excel.spouseDed, '配偶者控除');
+      near(th.deductions.dependents, c.excel.depDed, '扶養控除');
+      near(th.taxable, c.excel.taxable, '課税所得');
+      near(th.incomeTax, c.excel.incomeTax, '所得税');
+      near(th.residentTax, c.excel.residentTax, '住民税');
+      near(th.social, c.excel.social, '社会保険料');
+      near(th.net, c.excel.net, '手取り');
+    });
+  }
+}
+
+test('扶養控除の区分は12月31日の年齢で決まる（16歳未満は対象外、19〜22歳は特定扶養、70歳以上は老人扶養）', () => {
+  assert.deepEqual([0, 15, 16, 18, 19, 22, 23, 69, 70].map(E.dependentGroup), ['under16', 'under16', 'g16', 'g16', 'g19', 'g19', 'g16', 'g16', 'elder']);
 });
 
 test('早生まれは就学が1年早い', () => {

@@ -1,0 +1,163 @@
+{
+ "source": "手取額計算シートに入力を入れてLibreOfficeで再計算した値",
+ "cases": [
+  {
+   "input": {
+    "name": "単身 年収600万（記入例）",
+    "income": 600,
+    "spouse": "なし",
+    "spouseIncome": 300
+   },
+   "excel": {
+    "spouseDed": 0,
+    "depDed": 0,
+    "taxable": 270,
+    "incomeTax": 17.25,
+    "residentTax": 28.2,
+    "social": 93,
+    "net": 461.55
+   }
+  },
+  {
+   "input": {
+    "name": "扶養配偶者（年収0）と16歳以上の子1人",
+    "income": 450,
+    "spouse": "あり",
+    "spouseIncome": 0,
+    "g16": 1
+   },
+   "excel": {
+    "spouseDed": 38,
+    "depDed": 38,
+    "taxable": 77.25,
+    "incomeTax": 3.8625,
+    "residentTax": 8.925,
+    "social": 69.75,
+    "net": 367.4625
+   }
+  },
+  {
+   "input": {
+    "name": "配偶者パート年収100万・19〜23歳の子1人",
+    "income": 700,
+    "spouse": "あり",
+    "spouseIncome": 100,
+    "g19": 1
+   },
+   "excel": {
+    "spouseDed": 38,
+    "depDed": 63,
+    "taxable": 242.5,
+    "incomeTax": 14.5,
+    "residentTax": 25.45,
+    "social": 108.5,
+    "net": 551.55
+   }
+  },
+  {
+   "input": {
+    "name": "配偶者年収150万（配偶者特別控除）",
+    "income": 550,
+    "spouse": "あり",
+    "spouseIncome": 150
+   },
+   "excel": {
+    "spouseDed": 38,
+    "depDed": 0,
+    "taxable": 199.75,
+    "incomeTax": 10.225,
+    "residentTax": 21.175,
+    "social": 85.25,
+    "net": 433.35
+   }
+  },
+  {
+   "input": {
+    "name": "配偶者年収200万・本人920万",
+    "income": 1050,
+    "spouse": "あり",
+    "spouseIncome": 200,
+    "g16": 2
+   },
+   "excel": {
+    "spouseDed": 3,
+    "depDed": 76,
+    "taxable": 550.25,
+    "incomeTax": 67.3,
+    "residentTax": 56.225,
+    "social": 162.75,
+    "net": 763.725
+   }
+  },
+  {
+   "input": {
+    "name": "本人所得が901〜950（配偶者控除26）",
+    "income": 1100,
+    "spouse": "あり",
+    "spouseIncome": 0
+   },
+   "excel": {
+    "spouseDed": 26,
+    "depDed": 0,
+    "taxable": 645.5,
+    "incomeTax": 86.35,
+    "residentTax": 65.75,
+    "social": 170.5,
+    "net": 777.4
+   }
+  },
+  {
+   "input": {
+    "name": "70歳以上の親（同居・別居）",
+    "income": 800,
+    "spouse": "なし",
+    "elderLive": 1,
+    "elderAway": 1
+   },
+   "excel": {
+    "spouseDed": 0,
+    "depDed": 106,
+    "taxable": 312,
+    "incomeTax": 21.45,
+    "residentTax": 32.4,
+    "social": 124,
+    "net": 622.15
+   }
+  },
+  {
+   "input": {
+    "name": "iDeCoとふるさと納税",
+    "income": 650,
+    "spouse": "なし",
+    "ideco": 27.6,
+    "furusato": 6,
+    "life": 8
+   },
+   "excel": {
+    "spouseDed": 0,
+    "depDed": 0,
+    "taxable": 271.65,
+    "incomeTax": 17.415,
+    "residentTax": 22.365,
+    "social": 100.75,
+    "net": 509.47
+   }
+  },
+  {
+   "input": {
+    "name": "年収180万（給与所得控除65）",
+    "income": 180,
+    "spouse": "なし"
+   },
+   "excel": {
+    "spouseDed": 0,
+    "depDed": 0,
+    "taxable": 0,
+    "incomeTax": 0,
+    "residentTax": 1.2,
+    "social": 27.9,
+    "net": 150.9
+   }
+  }
+ ]
+}

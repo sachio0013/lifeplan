@@ -478,6 +478,41 @@ check('次の一歩のボタンで、比べるプランができて比較画面�
   `${g1} ${g1End} / ${g2} / 済み${doneMarks}`);
 await fresh.close();
 
+// 手取りの計算：年収・配偶者の扶養・子供の年齢（家族構成から自動）から、Excelの手取額計算シートと同じ式で出す
+{
+  await go(page, '#tabs .tab[data-k="income"]');
+  await page.locator('.toggle', { hasText: '年収（額面）から計算' }).first().tap();
+  await page.waitForSelector('#f-th-1-income');
+  await page.fill('#f-th-1-income', '600'); await page.press('#f-th-1-income', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const base = await page.textContent('.calcbox.th .calcresult');
+  const under16 = await page.locator('.calcbox.th .deprow.off').count();
+  await page.locator('.thsp button', { hasText: '扶養している' }).tap(); await page.waitForTimeout(100);
+  await page.fill('#f-th-1-spinc', '100'); await page.press('#f-th-1-spinc', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const withSpouse = await page.textContent('.calcbox.th .calcresult');
+  // 第一子を17歳にすると、扶養控除（38万円）の対象として自動でチェックが付く
+  await go(page, '#tabs .tab[data-k="basic"]');
+  await page.fill('#f-fam-3-birth', '20090601'); await page.press('#f-fam-3-birth', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  await go(page, '#tabs .tab[data-k="income"]');
+  await page.waitForTimeout(100);
+  const kid17 = await page.locator('#f-th-1-dep-3').isChecked();
+  const withKid = await page.textContent('.calcbox.th .calcresult');
+  await page.locator('.calcbox.th').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(shots, '18-takehome.png') });
+  await page.locator('.calcbox.th .btn.block').tap(); await page.waitForTimeout(150);
+  const row1 = await page.inputValue('#f-sal-1-1-amt');
+  check('手取り：Excelと同じ式（600万→461.55万）、配偶者の扶養（年収100万）で469.15万、17歳の子を自動で扶養に入れて476.7万、1行目に入る',
+    /461\.55/.test(base) && under16 === 2 && /469\.15/.test(withSpouse) && kid17 && /476\.7/.test(withKid) && row1 === '476.7',
+    `${base.trim()} / 16歳未満${under16} / ${withSpouse.trim()} / 17歳=${kid17} ${withKid.trim()} / 1行目=${row1}`);
+  await page.locator('#toast button').tap(); await page.waitForTimeout(100);
+  await go(page, '#tabs .tab[data-k="basic"]');
+  await page.fill('#f-fam-3-birth', '20220101'); await page.press('#f-fam-3-birth', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  check('手取りの反映も「元に戻す」で戻せる', (await page.inputValue('#f-sal-1-1-amt')) === '500');
+}
+
 // 家計簿：月ごとに入れ、残高と照らし合わせ、1年の表にまとまり、ライフプランに反映できる
 {
   await go(page, '#seg-book');

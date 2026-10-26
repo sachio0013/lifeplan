@@ -79,6 +79,7 @@
     view: location.hash === '#cf' ? 'cf' : location.hash === '#cmp' ? 'cmp' : location.hash === '#book' ? 'book' : store.prefs.welcomed ? 'input' : 'cover',
     cover: { family: 'kid2', home: 'rent', needs: [] },   // 表紙で選んでいるもの
     help: '',          // 開いている「？」の説明
+    thMore: 0,         // 手取り計算の「細かく設定」を開いている給与の id
     book: { year: new Date().getFullYear(), month: new Date().getMonth(), mode: 'month', edit: false, picks: {}, target: 0 },  // 家計簿の表示
     active: 'basic',
     openMember: 0,
@@ -367,9 +368,10 @@
     calcToggle: function (sid) { ui.openCalc = ui.openCalc === sid ? 0 : sid; commit(); },
     calc: function (field, v) { state.calc[field] = field === 'spouse' ? v : toNum(v); commit(); },
     calcApply: function (sid) {
-      var s = byId(state.salaries, sid);
-      var th = E.takeHome(state.calc.income, state.calc.spouse === 'あり', state.calc.kids);
-      if (s && s.rows[0]) s.rows[0].amount = th.net;
+      var s = calcEdit(sid);
+      if (!s || !s.rows[0]) return;
+      snapshot('手取りの計算結果を1行目に入れました');
+      s.rows[0].amount = Math.round(E.takeHome(calcInput(s, s.calc)).net * 10) / 10;
       ui.openCalc = 0;
       commit();
     },
@@ -595,7 +597,6 @@
     var by = baseBirth();
     var member = byId(state.family, sal.memberId);
     var mBirth = member ? E.parseDate(member.birth).y : by;
-    var th = E.takeHome(state.calc.income, state.calc.spouse === 'あり', state.calc.kids);
     var calcOpen = ui.openCalc === sal.id;
     var memberOptions = state.family
       .filter(function (m) { return String(m.relation).indexOf('子供') !== 0; })
@@ -637,20 +638,8 @@
         vmsgs('sal:' + sal.id) +
         '<div class="hint" style="padding-top:2px">' + (sal.retireAge ? (mBirth + sal.retireAge) + '年以降の収入は0として計算します' : '空欄なら、行で入れた金額がずっと続きます') + '</div>' : '') +
       '<div class="divide">' +
-        '<button class="toggle" onclick="A.calcToggle(' + sal.id + ')">' + ic('calc', 18, 'lead') + '<span class="lbl">額面から手取りを計算</span><span class="chev">' + chevron(calcOpen) + '</span></button>' +
-        (calcOpen ?
-          '<div class="calcbox">' +
-            '<div class="calcrow"><span class="u" style="width:72px">年収（額面）</span>' +
-              numInput('f-calc-income', 'op', 84, state.calc.income, "A.calc('income',this.value)", ';margin-left:auto;background:var(--surface)') + '<span class="u">万円</span></div>' +
-            '<div class="calcrow"><span class="u" style="width:72px">扶養配偶者</span>' +
-              selectInput('f-calc-spouse', 'op', 'margin-left:auto;background-color:var(--surface)', ['なし', 'あり'], state.calc.spouse, "A.calc('spouse',this.value)") + '</div>' +
-            '<div class="calcrow"><span class="u" style="width:72px">扶養の子</span>' +
-              numInput('f-calc-kids', 'op', 56, state.calc.kids, "A.calc('kids',this.value)", ';margin-left:auto;background:var(--surface)') + '<span class="u">人</span></div>' +
-            '<div class="calcresult"><span class="u" style="font-weight:700">手取り</span>' +
-              '<span style="font-size:20px;font-weight:900;color:var(--accent-ink);margin-left:auto">' + th.net + '</span><span class="u" style="font-weight:700">万円</span></div>' +
-            '<div class="hint" style="padding:4px 0 0">社会保険料 ' + th.social + '万円・税 ' + th.tax + '万円を差し引き（手取り率 ' + th.ratio + '％）。会社員で年収150〜1000万円程度向けの目安です。</div>' +
-            '<button class="btn block" onclick="A.calcApply(' + sal.id + ')">1行目の手取額に反映する</button>' +
-          '</div>' : '') +
+        '<button class="toggle" onclick="A.calcToggle(' + sal.id + ')">' + ic('calc', 18, 'lead') + '<span class="lbl">手取りがわからないときは、年収（額面）から計算</span><span class="chev">' + chevron(calcOpen) + '</span></button>' +
+        (calcOpen ? calcHTML(sal, idx) : '') +
       '</div>' +
       (idx > 0 ? '<div class="divide" style="padding-top:8px;text-align:center"><button class="btn ghost" onclick="A.delEarner(' + sal.id + ')">この対象者を外す</button></div>' : '') +
     '</div>';
@@ -1604,6 +1593,127 @@
     else if (act === 'cf') { ui.view = 'cf'; commit(); document.getElementById('scroll').scrollTop = 0; }
   };
 
+  // ---------- 額面から手取りを計算（手取額計算シートと同じ式。会社員向け） ----------
+  //
+  // 給与の行ごとに設定を持つ（sal.calc）。扶養している子供・親は、家族構成の生年月日から開始年の年末の年齢で区分を決める。
+
+  // その人の配偶者（家族１なら家族２、家族２なら家族１）
+  function spouseOf(memberId) {
+    var m = byId(state.family, memberId);
+    if (!m) return null;
+    var want = m.relation === '家族１' ? '家族２' : m.relation === '家族２' ? '家族１' : '';
+    return want ? state.family.filter(function (f) { return f.relation === want; })[0] || null : null;
+  }
+  // 扶養の候補（本人と配偶者以外の家族）と、開始年の年末の年齢・区分
+  function depCandidates(sal) {
+    var sp = spouseOf(sal.memberId);
+    return state.family.filter(function (m) { return m.id !== sal.memberId && (!sp || m.id !== sp.id) && E.parseDate(m.birth).y; }).map(function (m) {
+      var age = state.startYear - E.parseDate(m.birth).y;
+      return { m: m, age: age, group: E.dependentGroup(age) };
+    }).filter(function (d) { return d.age >= 0; });
+  }
+  // 設定（まだ触っていなければ家族構成から既定値を作る）
+  function calcOf(sal, idx) {
+    if (sal.calc) return sal.calc;
+    var sp = spouseOf(sal.memberId);
+    var spSal = sp && state.salaries.filter(function (s) { return s.memberId === sp.id; })[0];
+    var spTake = spSal && spSal.rows[0] ? toNum(spSal.rows[0].amount) : 0;
+    var deps = {};
+    // 子供の扶養は、ふつう収入の多い家族１がまとめて受ける
+    depCandidates(sal).forEach(function (d) { deps[d.m.id] = d.group === 'elder' ? 'none' : idx === 0; });
+    return {
+      income: idx === 0 && state.calc ? state.calc.income : '',
+      spouse: sp && spTake <= 100 ? 'あり' : 'なし', spouseIncome: '',
+      deps: deps, g16: 0, g19: 0, elderLive: 0, elderAway: 0, life: 5, ideco: 0, other: 0, furusato: 0
+    };
+  }
+  function calcInput(sal, c) {
+    var o = { income: c.income, spouse: c.spouse, spouseIncome: c.spouseIncome, g16: toNum(c.g16), g19: toNum(c.g19),
+      elderLive: toNum(c.elderLive), elderAway: toNum(c.elderAway), life: c.life, ideco: c.ideco, other: c.other, furusato: c.furusato };
+    depCandidates(sal).forEach(function (d) {
+      var v = c.deps[d.m.id];
+      if (d.group === 'g16' && v === true) o.g16++;
+      else if (d.group === 'g19' && v === true) o.g19++;
+      else if (d.group === 'elder' && v === 'live') o.elderLive++;
+      else if (d.group === 'elder' && v === 'away') o.elderAway++;
+    });
+    return o;
+  }
+
+  var GROUP_TEXT = { under16: '16歳未満は扶養控除なし（児童手当の対象）', g16: '扶養控除 38万円', g19: '特定扶養控除（19〜22歳）63万円' };
+
+  function calcHTML(sal, idx) {
+    var c = calcOf(sal, idx), sid = sal.id;
+    var th = E.takeHome(calcInput(sal, c));
+    var sp = spouseOf(sal.memberId);
+    var bg = ';background:var(--surface)';
+    var deps = depCandidates(sal).map(function (d) {
+      var name = esc(memberName(d.m.id)) + '<small>' + state.startYear + '年末で' + d.age + '歳</small>';
+      if (d.group === 'elder') {
+        return '<div class="deprow"><span class="nm">' + name + '<small>70歳以上</small></span>' +
+          selectInput('f-th-' + sid + '-dep-' + d.m.id, 'op', 'background-color:var(--surface)', [{ value: 'none', label: '扶養しない' }, { value: 'live', label: '同居（58万円）' }, { value: 'away', label: '別居（48万円）' }],
+            c.deps[d.m.id] || 'none', 'A.thDep(' + sid + ',' + d.m.id + ',this.value)') + '</div>';
+      }
+      var on = c.deps[d.m.id] === true && d.group !== 'under16';
+      return '<label class="deprow' + (d.group === 'under16' ? ' off' : '') + '"><input type="checkbox" id="f-th-' + sid + '-dep-' + d.m.id + '"' + (on ? ' checked' : '') + (d.group === 'under16' ? ' disabled' : '') +
+        ' onchange="A.thDep(' + sid + ',' + d.m.id + ',this.checked)"><span class="nm">' + name + '</span><span class="gp">' + GROUP_TEXT[d.group] + '</span></label>';
+    }).join('');
+    var parts = [['手取り', th.net, 'var(--good)'], ['社会保険料', th.social, 'var(--k1)'], ['所得税', th.incomeTax, 'var(--k2)'], ['住民税', th.residentTax, 'var(--k4)']];
+    var income = toNum(c.income);
+    var bar = income > 0 ? '<div class="catbar" role="img" aria-label="年収の内訳：' + parts.map(function (p) { return p[0] + ' ' + p[1] + '万円'; }).join('、') + '">' +
+      parts.map(function (p) { return p[1] > 0 ? '<span style="width:' + (p[1] / income * 100).toFixed(2) + '%;background:' + p[2] + '"></span>' : ''; }).join('') + '</div>' +
+      '<div class="catlegend">' + parts.map(function (p) { return '<span><i style="background:' + p[2] + '"></i>' + p[0] + '<b>' + p[1].toLocaleString('ja-JP') + '万</b></span>'; }).join('') + '</div>' : '';
+    var more = ui.thMore === sid;
+    return '<div class="calcbox th">' +
+      '<div class="calcrow"><span class="u" style="width:88px">年収（額面）</span>' +
+        numInput('f-th-' + sid + '-income', 'rq', 96, c.income, 'A.thSet(' + sid + ",'income',this.value)", ';margin-left:auto') + '<span class="u">万円</span></div>' +
+      '<div class="hint" style="padding:4px 0 0">源泉徴収票の「支払金額」。わからなければ、月給（額面）×12＋ボーナスの合計</div>' +
+      '<div class="calcsec">配偶者</div>' +
+      '<div class="mini thsp" role="radiogroup" aria-label="配偶者を扶養しているか">' + [['なし', '扶養していない'], ['あり', '扶養している']].map(function (o) {
+        var on = c.spouse === o[0];
+        return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.thSet(' + sid + ",'spouse','" + o[0] + '\')">' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      (c.spouse === 'あり' ? '<div class="calcrow"><span class="u" style="width:88px">' + (sp ? esc(memberName(sp.id)) + 'の年収' : '配偶者の年収') + '</span>' +
+        numInput('f-th-' + sid + '-spinc', 'op', 96, c.spouseIncome, 'A.thSet(' + sid + ",'spouseIncome',this.value)", ';margin-left:auto' + bg) + '<span class="u">万円</span></div>' +
+        '<div class="hint" style="padding:4px 0 0">パートなどの額面の年収。収入がなければ空のまま。年収が201万円くらいまでなら控除があります（配偶者控除・配偶者特別控除）。</div>' : '') +
+      '<div class="calcsec">扶養している家族<small>年齢は' + state.startYear + '年の年末</small></div>' +
+      (deps || '<div class="hint" style="padding:0">家族構成に子供や親を入れると、生年月日から年齢を見て自動で区分します。</div>') +
+      '<button class="toggle" onclick="A.thMore(' + sid + ')"><span class="lbl">細かく設定（生命保険料控除・iDeCo・ふるさと納税など）</span><span class="chev">' + chevron(more) + '</span></button>' +
+      (more ? '<div class="thmore">' +
+        [['life', '生命保険料控除', '既定は5万円'], ['ideco', 'iDeCoの掛金（年額）', ''], ['other', 'その他の所得控除', '医療費控除など'], ['furusato', '前年のふるさと納税', '住民税から引かれる分']].map(function (f) {
+          return '<div class="calcrow"><span class="u" style="width:148px">' + f[1] + (f[2] ? '<small>' + f[2] + '</small>' : '') + '</span>' +
+            numInput('f-th-' + sid + '-' + f[0], 'op', 72, c[f[0]], 'A.thSet(' + sid + ",'" + f[0] + "',this.value)", ';margin-left:auto' + bg) + '<span class="u">万円</span></div>';
+        }).join('') +
+        '<div class="calcsec">家族構成にいない扶養家族<small>人数</small></div>' +
+        [['g16', '16歳以上の子供など'], ['g19', '19〜22歳の子供'], ['elderLive', '70歳以上・同居'], ['elderAway', '70歳以上・別居']].map(function (f) {
+          return '<div class="calcrow"><span class="u" style="width:148px">' + f[1] + '</span>' +
+            numInput('f-th-' + sid + '-' + f[0], 'op', 56, c[f[0]] || 0, 'A.thSet(' + sid + ",'" + f[0] + "',this.value)", ';margin-left:auto' + bg) + '<span class="u">人</span></div>';
+        }).join('') + '</div>' : '') +
+      (income > 0 ? '<div class="calcresult"><span class="u" style="font-weight:700">手取り（年額）</span>' +
+          '<span style="font-size:22px;font-weight:900;color:var(--accent-ink);margin-left:auto">' + th.net.toLocaleString('ja-JP') + '</span><span class="u" style="font-weight:700">万円</span></div>' +
+        '<div class="hint" style="padding:2px 0 6px;text-align:right">手取り率 ' + th.ratio + '％・月あたり約' + (Math.round(th.net / 12 * 10) / 10) + '万円（ボーナスを含めて12等分）</div>' +
+        bar +
+        '<button class="btn block" onclick="A.calcApply(' + sid + ')">手取り ' + (Math.round(th.net * 10) / 10).toLocaleString('ja-JP') + '万円を1行目に入れる</button>' : '') +
+      '<div class="hint" style="padding:8px 0 0">Excel「手取額計算」シート（2025年4月〜の税制）と同じ式の概算です。会社員で年収150〜1000万円くらいの方向け。社会保険料は年収の15.5％、住宅ローン控除は含みません。住民税は実際には翌年に引かれますが、ここでは同じ年として計算しています。</div>' +
+    '</div>';
+  }
+
+  function calcEdit(sid) {
+    var idx = -1, sal = null;
+    state.salaries.forEach(function (s, i) { if (s.id === sid) { sal = s; idx = i; } });
+    if (!sal) return null;
+    if (!sal.calc) sal.calc = calcOf(sal, idx);
+    return sal;
+  }
+  A.thSet = function (sid, field, v) {
+    var sal = calcEdit(sid); if (!sal) return;
+    sal.calc[field] = field === 'spouse' ? v : String(v).trim() === '' ? '' : toNum(v);
+    if (field === 'income' && state.salaries[0] === sal) state.calc.income = sal.calc.income;
+    commit();
+  };
+  A.thDep = function (sid, mid, v) { var sal = calcEdit(sid); if (!sal) return; sal.calc.deps[mid] = v; commit(); };
+  A.thMore = function (sid) { ui.thMore = ui.thMore === sid ? 0 : sid; commit(); };
+
   // ---------- 家計簿（年間収支） ----------
   //
   // 1年を1枚にまとめる（Excelの家計簿シートと同じ）。月ごとの入力、1年の表、ライフプランへの反映の3つの画面。
@@ -2298,7 +2408,7 @@
 
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
-    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep'];
+    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });
