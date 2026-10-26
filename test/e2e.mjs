@@ -481,7 +481,7 @@ await fresh.close();
 // 手取りの計算：年収・配偶者の扶養・子供の年齢（家族構成から自動）から、Excelの手取額計算シートと同じ式で出す
 {
   await go(page, '#tabs .tab[data-k="income"]');
-  await page.locator('.toggle', { hasText: '年収（額面）から計算' }).first().tap();
+  await page.locator('.toggle', { hasText: '手取りを計算する' }).first().tap();
   await page.waitForSelector('#f-th-1-income');
   await page.fill('#f-th-1-income', '600'); await page.press('#f-th-1-income', 'Tab');
   await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
@@ -513,7 +513,7 @@ await fresh.close();
   check('手取りの反映も「元に戻す」で戻せる', (await page.inputValue('#f-sal-1-1-amt')) === '500');
   // 健康保険の種類・年齢で社会保険料率が変わり、去年の年収で住民税、実額の社会保険料も使える
   await go(page, '#tabs .tab[data-k="income"]');
-  if (!(await page.locator('#f-th-1-last').count())) await page.locator('.toggle', { hasText: '年収（額面）から計算' }).first().tap();
+  if (!(await page.locator('#f-th-1-last').count())) await page.locator('.toggle', { hasText: '手取りを計算する' }).first().tap();
   await page.waitForSelector('#f-th-1-last');
   const num = async () => parseFloat((await page.textContent('.calcbox.th .calcresult')).replace(/[^0-9.]/g, ''));
   const sec = async () => (await page.textContent('.calcbox.th .calcsec')).trim();
@@ -530,6 +530,28 @@ await fresh.close();
   check('手取り：協会けんぽ・35歳で14.7％（Excelの15.5％より手取りが増える）、去年の年収が低いと住民税が下がり、実額の社会保険料を優先',
     /15\.5％/.test(excelSec) && /14\.7％/.test(kyokaiSec) && kyokai > excel && ageHint === 1 && withLast > kyokai && /実額/.test(socialSec) && withSocial !== withLast,
     `${excel}(${excelSec}) → ${kyokai}(${kyokaiSec}) → 去年550 ${withLast} → 実額80 ${withSocial}(${socialSec})`);
+}
+
+// 源泉徴収票から：欄の金額（円）をそのまま入れると、実際の金額で手取りが出る
+{
+  await page.locator('.thmode button', { hasText: '源泉徴収票から出す' }).tap();
+  await page.waitForSelector('#f-th-1-gPay');
+  for (const [k, v] of [['gPay', '8,000,000'], ['gAfter', '6100000'], ['gDeduct', '２００００００'], ['gTax', '350000'], ['gSocial', '1150000'], ['gSmall', '120000']]) {
+    await page.fill('#f-th-1-' + k, v); await page.press('#f-th-1-' + k, 'Tab');
+  }
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const est = await page.textContent('.calcbox.th .calcresult');
+  const shown = await page.inputValue('#f-th-1-gPay');
+  await page.fill('#f-th-1-gResident', '380000'); await page.press('#f-th-1-gResident', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const act = await page.textContent('.calcbox.th .calcresult');
+  await page.locator('.calcbox.th').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(shots, '18b-slip.png') });
+  await page.locator('.calcbox.th .btn.block').tap(); await page.waitForTimeout(150);
+  const row = await page.inputValue('#f-sal-1-1-amt');
+  check('手取り：源泉徴収票の金額（円・カンマや全角も可）から、住民税を見積もって619.8万、住民税38万円を入れると624万、1行目に入る',
+    /619\.8/.test(est) && shown === '8,000,000' && /624/.test(act) && row === '624', `${est.trim()} / ${shown} / ${act.trim()} / 1行目=${row}`);
+  await page.locator('#toast button').tap(); await page.waitForTimeout(100);
 }
 
 // 家計簿：月ごとに入れ、残高と照らし合わせ、1年の表にまとまり、ライフプランに反映できる

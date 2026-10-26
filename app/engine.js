@@ -584,6 +584,37 @@
     };
   }
 
+  // 源泉徴収票の欄から手取りを出す（金額は円で受け取り、万円で返す）。所得税・社会保険料は実額なので、
+  // 年の途中の昇給、健康保険組合の料率、住宅ローン控除、復興特別所得税なども入っている。
+  // o: { pay（支払金額）, after（給与所得控除後の金額。無ければ計算）, deductions（所得控除の額の合計額）, tax（源泉徴収税額）,
+  //      social（社会保険料等の金額）, small（そのうち小規模企業共済等掛金＝iDeCo・企業型DCの本人掛金）,
+  //      resident（住民税の年額。無ければ課税所得×10％＋1＋0.2で見積もる＝Excelの手取額計算シートと同じ） }
+  // iDeCoなどの掛金は貯蓄なので、手取りに含める（社会保険料からは除く）。
+  function takeHomeFromSlip(o) {
+    var m = function (v) { return num(v) / 10000; };
+    var r2 = function (v) { return Math.round(v * 100) / 100; };
+    var pay = m(o.pay);
+    if (!(pay > 0)) return { net: 0, social: 0, tax: 0, incomeTax: 0, residentTax: 0, ratio: 0, small: 0, residentEstimated: false };
+    var socialAll = m(o.social);
+    var small = Math.min(Math.max(0, m(o.small)), socialAll);
+    var social = socialAll - small;
+    var incomeTax = m(o.tax);
+    var estimated = !(num(o.resident) > 0);
+    var residentTax = m(o.resident);
+    if (estimated) {
+      var after = num(o.after) > 0 ? m(o.after) : Math.max(0, pay - salaryDeduction(pay));
+      // 所得控除の合計が無ければ、社会保険料等と基礎控除だけとみなす
+      var ded = num(o.deductions) > 0 ? m(o.deductions) : socialAll + bracket(DEDUCT_BASIC, after)[1];
+      var taxable = Math.floor(Math.max(0, after - ded) * 10) / 10;     // 千円未満切り捨て
+      residentTax = taxable > 0 ? taxable * 0.1 + 1 + 0.2 : 0;
+    }
+    var net = pay - social - incomeTax - residentTax;
+    return {
+      net: r2(net), social: r2(social), tax: r2(incomeTax + residentTax), incomeTax: r2(incomeTax), residentTax: r2(residentTax),
+      small: r2(small), ratio: Math.round(net / pay * 1000) / 10, residentEstimated: estimated
+    };
+  }
+
   // 扶養控除の区分を年齢から決める（その年の12月31日の年齢）。16歳未満は扶養控除なし（児童手当の対象）
   function dependentGroup(age) {
     if (age < 16) return 'under16';
@@ -598,6 +629,6 @@
     parseDate: parseDate, isDate: isDate, validate: validate, isEarlyBorn: isEarlyBorn, baseBirthYear: baseBirthYear,
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
     eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
-    compute: compute, takeHome: takeHome, dependentGroup: dependentGroup, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults, loanSchedule: loanSchedule
+    compute: compute, takeHome: takeHome, takeHomeFromSlip: takeHomeFromSlip, dependentGroup: dependentGroup, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults, loanSchedule: loanSchedule
   };
 }));

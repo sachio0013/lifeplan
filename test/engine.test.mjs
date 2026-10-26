@@ -91,6 +91,22 @@ test('手取額：社会保険料は健康保険の種類と年齢で変えら�
   assert.equal(E.takeHome({ ...base, social: 110 }).social, 110);
 });
 
+test('手取額：源泉徴収票の金額（円）から出す。iDeCoなどの掛金は手取りに含め、住民税は無ければ見積もる', () => {
+  const slip = { pay: 8000000, after: 6100000, deductions: 2000000, tax: 350000, social: 1150000, small: 120000 };
+  const est = E.takeHomeFromSlip(slip);
+  assert.equal(est.social, 103);                 // 115万円のうちiDeCoなど12万円は貯蓄なので除く
+  assert.equal(est.incomeTax, 35);
+  assert.equal(est.residentTax, 42.2);           // (610−200)×10％＋1＋0.2（Excelの手取額計算シートと同じ見積もり）
+  assert.ok(est.residentEstimated);
+  assert.equal(est.net, 619.8);
+  const act = E.takeHomeFromSlip({ ...slip, resident: 380000 });
+  assert.equal(act.net, 624);
+  assert.ok(!act.residentEstimated);
+  // 給与所得控除後の金額・所得控除の合計が無くても計算できる
+  assert.ok(E.takeHomeFromSlip({ pay: 8000000, tax: 350000, social: 1150000 }).net > 0);
+  assert.equal(E.takeHomeFromSlip({}).net, 0);
+});
+
 test('手取額：住民税は去年の年収で計算できる（年収800万円・去年740万円の例）', () => {
   const base = { income: 800, spouse: 'あり', ideco: 24 };
   const now = E.takeHome(base), lag = E.takeHome({ ...base, lastIncome: 740 });

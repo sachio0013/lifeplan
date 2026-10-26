@@ -534,3 +534,5 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 .thmore { padding: 4px 0 2px; }
 .thmore .u small, .calcbox.th .calcrow .u small { display: block; font-size: 11.5px; color: var(--text-faint); white-space: normal; }
 .calcbox .catbar { margin-top: 6px; }
+.thmode { margin-bottom: 12px; }
+.calcbox.th input.yen { font-variant-numeric: tabular-nums; }

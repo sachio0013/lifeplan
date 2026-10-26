@@ -371,7 +371,7 @@
       var s = calcEdit(sid);
       if (!s || !s.rows[0]) return;
       snapshot('手取りの計算結果を1行目に入れました');
-      s.rows[0].amount = Math.round(E.takeHome(calcInput(s, s.calc)).net * 10) / 10;
+      s.rows[0].amount = Math.round(calcResult(s, s.calc).net * 10) / 10;
       ui.openCalc = 0;
       commit();
     },
@@ -638,7 +638,7 @@
         vmsgs('sal:' + sal.id) +
         '<div class="hint" style="padding-top:2px">' + (sal.retireAge ? (mBirth + sal.retireAge) + '年以降の収入は0として計算します' : '空欄なら、行で入れた金額がずっと続きます') + '</div>' : '') +
       '<div class="divide">' +
-        '<button class="toggle" onclick="A.calcToggle(' + sal.id + ')">' + ic('calc', 18, 'lead') + '<span class="lbl">手取りがわからないときは、年収（額面）から計算</span><span class="chev">' + chevron(calcOpen) + '</span></button>' +
+        '<button class="toggle" onclick="A.calcToggle(' + sal.id + ')">' + ic('calc', 18, 'lead') + '<span class="lbl">手取りを計算する（年収や源泉徴収票から）</span><span class="chev">' + chevron(calcOpen) + '</span></button>' +
         (calcOpen ? calcHTML(sal, idx) : '') +
       '</div>' +
       (idx > 0 ? '<div class="divide" style="padding-top:8px;text-align:center"><button class="btn ghost" onclick="A.delEarner(' + sal.id + ')">この対象者を外す</button></div>' : '') +
@@ -1631,7 +1631,8 @@
       income: idx === 0 && state.calc ? state.calc.income : '',
       spouse: sp && spTake <= 100 ? 'あり' : 'なし', spouseIncome: '',
       deps: deps, g16: 0, g19: 0, elderLive: 0, elderAway: 0, life: 5, ideco: 0, other: 0, furusato: 0,
-      lastIncome: '', health: '', social: ''
+      lastIncome: '', health: '', social: '',
+      mode: '', gPay: '', gAfter: '', gDeduct: '', gTax: '', gSocial: '', gSmall: '', gResident: ''
     };
   }
   function calcInput(sal, c) {
@@ -1648,11 +1649,43 @@
     return o;
   }
 
+  // 源泉徴収票の欄（金額は円）。[キー, 欄の名前, 説明, 必須]
+  var SLIP_FIELDS = [
+    ['gPay', '支払金額', '1年間の給与・ボーナスの合計（額面）', true],
+    ['gAfter', '給与所得控除後の金額', '', false],
+    ['gDeduct', '所得控除の額の合計額', '', false],
+    ['gTax', '源泉徴収税額', '1年間の所得税（年末調整のあと）', true],
+    ['gSocial', '社会保険料等の金額', '', true],
+    ['gSmall', 'うち 小規模企業共済等掛金', '社会保険料等の金額の欄の左上に「内」と書かれた金額。iDeCoや企業型DCで自分が出す掛金です', false]
+  ];
+  function slipInput(c) {
+    return { pay: c.gPay, after: c.gAfter, deductions: c.gDeduct, tax: c.gTax, social: c.gSocial, small: c.gSmall, resident: c.gResident };
+  }
+  function calcResult(sal, c) {
+    return c.mode === 'slip' ? E.takeHomeFromSlip(slipInput(c)) : E.takeHome(calcInput(sal, c));
+  }
+  function yenField(id, v, handler, label) {
+    return '<input type="text" inputmode="numeric" enterkeyhint="next" autocomplete="off" id="' + id + '" class="op num yen" style="width:116px;flex:none;margin-left:auto;background:var(--surface)" aria-label="' + esc(label) + '（円）" value="' + yenIn(v) + '" onchange="' + handler + '"><span class="u">円</span>';
+  }
+  function slipHTML(c, sid) {
+    return '<div class="hint" style="padding:0 0 4px">会社から毎年1月ごろにもらう、去年1年分の源泉徴収票の金額を、そのまま円で入れてください。所得税や社会保険料は実際に引かれた額なので、年の途中の昇給や健康保険組合の料率、住宅ローン控除もすべて入ります。</div>' +
+      SLIP_FIELDS.map(function (f) {
+        return '<div class="calcrow"><span class="u" style="flex:1;min-width:0">' + f[1] + (f[3] ? '' : '<small>' + (f[0] === 'gSmall' ? 'あれば' : '住民税の見積もり用') + '</small>') + '</span>' +
+          yenField('f-th-' + sid + '-' + f[0], c[f[0]], 'A.thSet(' + sid + ",'" + f[0] + "',this.value)", f[1]) + '</div>' +
+          (f[2] ? '<div class="hint" style="padding:2px 0 0">' + f[2] + '</div>' : '');
+      }).join('') +
+      '<div class="calcsec">住民税<small>源泉徴収票には書かれていません</small></div>' +
+      '<div class="calcrow"><span class="u" style="flex:1;min-width:0">住民税（年額）<small>わかれば</small></span>' +
+        yenField('f-th-' + sid + '-gResident', c.gResident, 'A.thSet(' + sid + ",'gResident',this.value)", '住民税（年額）') + '</div>' +
+      '<div class="hint" style="padding:2px 0 0">7月以降の給与明細の住民税×12、または6月ごろ会社から渡される「住民税決定通知書」の年税額。空欄なら、源泉徴収票の金額から見積もります（ふるさと納税をした人は、実際の額を入れると正確です）。</div>';
+  }
+
   var GROUP_TEXT = { under16: '16歳未満は扶養控除なし（児童手当の対象）', g16: '扶養控除 38万円', g19: '特定扶養控除（19〜22歳）63万円' };
 
   function calcHTML(sal, idx) {
     var c = calcOf(sal, idx), sid = sal.id;
-    var th = E.takeHome(calcInput(sal, c));
+    var slip = c.mode === 'slip';
+    var th = calcResult(sal, c);
     var sp = spouseOf(sal.memberId);
     var bg = ';background:var(--surface)';
     var deps = depCandidates(sal).map(function (d) {
@@ -1667,12 +1700,28 @@
         ' onchange="A.thDep(' + sid + ',' + d.m.id + ',this.checked)"><span class="nm">' + name + '</span><span class="gp">' + GROUP_TEXT[d.group] + '</span></label>';
     }).join('');
     var parts = [['手取り', th.net, 'var(--good)'], ['社会保険料', th.social, 'var(--k1)'], ['所得税', th.incomeTax, 'var(--k2)'], ['住民税', th.residentTax, 'var(--k4)']];
-    var income = toNum(c.income);
+    var income = slip ? toNum(c.gPay) / 10000 : toNum(c.income);
     var bar = income > 0 ? '<div class="catbar" role="img" aria-label="年収の内訳：' + parts.map(function (p) { return p[0] + ' ' + p[1] + '万円'; }).join('、') + '">' +
       parts.map(function (p) { return p[1] > 0 ? '<span style="width:' + (p[1] / income * 100).toFixed(2) + '%;background:' + p[2] + '"></span>' : ''; }).join('') + '</div>' +
       '<div class="catlegend">' + parts.map(function (p) { return '<span><i style="background:' + p[2] + '"></i>' + p[0] + '<b>' + p[1].toLocaleString('ja-JP') + '万</b></span>'; }).join('') + '</div>' : '';
     var more = ui.thMore === sid;
-    return '<div class="calcbox th">' +
+    var modes = '<div class="mini thsp thmode" role="radiogroup" aria-label="手取りの出し方">' + [['', '年収から見積もる'], ['slip', '源泉徴収票から出す']].map(function (o) {
+      var on = (c.mode || '') === o[0];
+      return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.thSet(' + sid + ",'mode','" + o[0] + '\')">' + o[1] + '</button>';
+    }).join('') + '</div>';
+    var result = income > 0 ? '<div class="calcresult"><span class="u" style="font-weight:700">手取り（年額）</span>' +
+          '<span style="font-size:22px;font-weight:900;color:var(--accent-ink);margin-left:auto">' + th.net.toLocaleString('ja-JP') + '</span><span class="u" style="font-weight:700">万円</span></div>' +
+        '<div class="hint" style="padding:2px 0 6px;text-align:right">手取り率 ' + th.ratio + '％・月あたり約' + (Math.round(th.net / 12 * 10) / 10) + '万円（ボーナスを含めて12等分）</div>' +
+        bar +
+        (slip && th.small > 0 ? '<div class="hint" style="padding:6px 0 0">iDeCoなどの掛金 ' + th.small.toLocaleString('ja-JP') + '万円は貯蓄なので、手取りに含めています。積み立ては「投資」の欄に入れてください。</div>' : '') +
+        (slip && th.residentEstimated ? '<div class="hint" style="padding:4px 0 0">住民税 ' + th.residentTax.toLocaleString('ja-JP') + '万円は見積もりです。</div>' : '') +
+        '<button class="btn block" onclick="A.calcApply(' + sid + ')">手取り ' + (Math.round(th.net * 10) / 10).toLocaleString('ja-JP') + '万円を1行目に入れる</button>' : '';
+    if (slip) {
+      return '<div class="calcbox th">' + modes + slipHTML(c, sid) + result +
+        '<div class="hint" style="padding:8px 0 0">手取り＝支払金額−社会保険料等（iDeCoなどの掛金を除く）−源泉徴収税額−住民税。去年1年分の実際の金額なので、今年の手取りの目安になります。転職や大きな昇給・減給があった年は「年収から見積もる」も試してください。</div>' +
+      '</div>';
+    }
+    return '<div class="calcbox th">' + modes +
       '<div class="calcrow"><span class="u" style="width:88px">年収（額面）</span>' +
         numInput('f-th-' + sid + '-income', 'rq', 96, c.income, 'A.thSet(' + sid + ",'income',this.value)", ';margin-left:auto') + '<span class="u">万円</span></div>' +
       '<div class="hint" style="padding:4px 0 0">源泉徴収票の「支払金額」。わからなければ、月給（額面）×12＋ボーナスの合計</div>' +
@@ -1690,7 +1739,7 @@
         : '保険証に「協会けんぽ」「全国健康保険協会」とあれば協会けんぽ、「◯◯健康保険組合」とあれば健康保険組合です。わからなければ、Excelと同じ年収の15.5％で計算します。') + '</div>' +
       '<div class="calcrow"><span class="u" style="width:148px">実際の社会保険料<small>源泉徴収票の「社会保険料等の金額」</small></span>' +
         numInput('f-th-' + sid + '-social', 'op', 84, c.social, 'A.thSet(' + sid + ",'social',this.value)", ';margin-left:auto' + bg) + '<span class="u">万円</span></div>' +
-      '<div class="hint" style="padding:4px 0 0">わかれば入れてください。見積もりより、この金額を優先して使います。</div>' +
+      '<div class="hint" style="padding:4px 0 0">わかれば入れてください。見積もりより、この金額を優先して使います。源泉徴収票が手元にあれば、上の「源泉徴収票から出す」がいちばん正確です。</div>' +
       '<div class="calcsec">配偶者</div>' +
       '<div class="mini thsp" role="radiogroup" aria-label="配偶者を扶養しているか">' + [['なし', '扶養していない'], ['あり', '扶養している']].map(function (o) {
         var on = c.spouse === o[0];
@@ -1712,11 +1761,7 @@
           return '<div class="calcrow"><span class="u" style="width:148px">' + f[1] + '</span>' +
             numInput('f-th-' + sid + '-' + f[0], 'op', 56, c[f[0]] || 0, 'A.thSet(' + sid + ",'" + f[0] + "',this.value)", ';margin-left:auto' + bg) + '<span class="u">人</span></div>';
         }).join('') + '</div>' : '') +
-      (income > 0 ? '<div class="calcresult"><span class="u" style="font-weight:700">手取り（年額）</span>' +
-          '<span style="font-size:22px;font-weight:900;color:var(--accent-ink);margin-left:auto">' + th.net.toLocaleString('ja-JP') + '</span><span class="u" style="font-weight:700">万円</span></div>' +
-        '<div class="hint" style="padding:2px 0 6px;text-align:right">手取り率 ' + th.ratio + '％・月あたり約' + (Math.round(th.net / 12 * 10) / 10) + '万円（ボーナスを含めて12等分）</div>' +
-        bar +
-        '<button class="btn block" onclick="A.calcApply(' + sid + ')">手取り ' + (Math.round(th.net * 10) / 10).toLocaleString('ja-JP') + '万円を1行目に入れる</button>' : '') +
+      result +
       '<div class="hint" style="padding:8px 0 0">Excel「手取額計算」シート（2025年4月〜の税制）の式にもとづく概算です。会社員で年収150〜1000万円くらいの方向け。社会保険料は、健康保険の種類と年齢で見積もるか、実額を入れられます（選ばなければ年収の15.5％）。住民税は去年の年収を入れるとそれで計算します。住宅ローン控除・復興特別所得税は含みません。</div>' +
     '</div>';
   }
@@ -1730,7 +1775,7 @@
   }
   A.thSet = function (sid, field, v) {
     var sal = calcEdit(sid); if (!sal) return;
-    sal.calc[field] = field === 'spouse' || field === 'health' ? v : String(v).trim() === '' ? '' : toNum(v);
+    sal.calc[field] = field === 'spouse' || field === 'health' || field === 'mode' ? v : String(v).trim() === '' ? '' : toNum(v);
     if (field === 'income' && state.salaries[0] === sal) state.calc.income = sal.calc.income;
     commit();
   };
@@ -2431,7 +2476,8 @@
 
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
-    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato', 'lastIncome', 'social'];
+    'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato', 'lastIncome', 'social',
+    'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });
