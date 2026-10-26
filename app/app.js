@@ -79,6 +79,7 @@
     view: location.hash === '#cf' ? 'cf' : location.hash === '#cmp' ? 'cmp' : location.hash === '#book' ? 'book' : store.prefs.welcomed ? 'input' : 'cover',
     cover: { family: 'kid2', home: 'rent', needs: [] },   // 表紙で選んでいるもの
     help: '',          // 開いている「？」の説明
+    thDef: false,      // 手取り計算の「手取りに含めるもの・含めないもの」を開いているか
     thMore: 0,         // 手取り計算の「細かく設定」を開いている給与の id
     book: { year: new Date().getFullYear(), month: new Date().getMonth(), mode: 'month', edit: false, picks: {}, target: 0 },  // 家計簿の表示
     active: 'basic',
@@ -1340,7 +1341,7 @@
     period: '計算を始める年と、家族１が何歳になるまで計算するかです。開始年はふつう今年にします。長生きに備えて、90〜100歳くらいまで見ておくと安心です。',
     assets: '開始年の前の年の12月末の残高を入れます。普通預金・定期預金など、すぐ使えるお金は「普通預金等」に。NISAやiDeCo、投資信託などは今の評価額を入れます。投資の名前は書き換えられます。預金の利率は低めに見ておくのがおすすめで、0のままでも結果はほとんど変わりません。',
     family: '一緒に暮らす家族を入れます。家族１は家計の中心になる人です。子供の生年月日から、教育費が自動で入ります。4月1日までに生まれた子（早生まれ）は、学年が1つ上になります。',
-    salary: '給与は「手取り」の1年分（ボーナスも含む）で入れます。手取りは、額面から税金と社会保険料を引いた額で、額面の75〜85％くらいが目安です。上昇率は毎年の昇給の目安で、横ばいなら0％。転職や時短で変わるなら、その年から行を足します。',
+    salary: '給与は「手取り」の1年分（ボーナスも含む）で入れます。このアプリの手取りは「額面−社会保険料−所得税−住民税＋通勤手当」で、額面の75〜85％くらいが目安です。生命保険料・財形・持株会・DCの個人の上乗せなど、自分で選んで給与から天引きしているものは引かずに手取りに含め、保険料や投資の欄に入れます。DCの会社拠出は手取りに入れず、退職金として入れます。上昇率は毎年の昇給の目安で、横ばいなら0％。転職や時短で変わるなら、その年から行を足します。',
     lump: '退職金、相続・贈与、不動産の売却など、一度だけ入るお金です。税金を引いた手取りで入れます。退職金は、会社の退職金規程や見込額の資料で確かめられます。',
     corpPension: '会社から年金として受け取るお金（企業年金）です。受け取る期間と、1年あたりの額を入れます。',
     privPension: '個人年金保険など、自分で準備した年金です。保険証券に、受け取りが始まる年齢と年金額が書いてあります。',
@@ -1355,7 +1356,7 @@
     otherFlow: '毎年かかる、ほかの欄に当てはまらない支出です。旅行・趣味・帰省・ペット・仕送りなどをまとめて入れます。',
     otherLump: '結婚式、出産、子供の結婚の援助、留学、大きな家電など、一度だけ出る支出です。',
     investAdd: 'NISAやiDeCoなどに、毎年いくら積み立てるかです（月3万円なら36）。積み立てた分は普通預金等から移り、想定利回りで増えていきます。想定利回りは将来の見込みなので、控えめな数字で試すと安心です。税率は、NISA・iDeCoなら0％、それ以外の投資信託や株なら20％を選びます。',
-    bookIncome: '給与やボーナスは、口座に振り込まれた手取りの額を入れます。種類（給与・ボーナス・その他）は「項目・口座を編集する」で変えられ、ライフプランへの反映のときに、だれの収入かを見分けるのに使います。',
+    bookIncome: '給与やボーナスは、口座に振り込まれた額を入れます。生命保険料や財形など給与から天引きされているものは、支出の項目の決済手段を「給与天引き」にすると、その額を収入にも自動で足して、手取り（振込額＋天引き）にそろえます。種類（給与・ボーナス・その他）は「項目・口座を編集する」で変えられ、ライフプランへの反映のときに、だれの収入かを見分けるのに使います。',
     bookAccounts: '月末の口座の残高を入れると、「前年末の残高＋その年の収支」と比べて差額を出します。差額が0なら、その月の記録に漏れがないということです。家計簿の正しさの裏付けになり、ライフプランの信頼度も上がります。',
     investOut: '積み立てた資産を取り崩して、生活費などにあてる予定です。iDeCoは、原則として60歳まで引き出せません。'
   };
@@ -1632,7 +1633,7 @@
       spouse: sp && spTake <= 100 ? 'あり' : 'なし', spouseIncome: '',
       deps: deps, g16: 0, g19: 0, elderLive: 0, elderAway: 0, life: 5, ideco: 0, other: 0, furusato: 0,
       lastIncome: '', health: '', social: '',
-      mode: '', gPay: '', gAfter: '', gDeduct: '', gTax: '', gSocial: '', gSmall: '', gResident: ''
+      commute: '', mode: '', gPay: '', gAfter: '', gDeduct: '', gTax: '', gSocial: '', gSmall: '', gResident: ''
     };
   }
   function calcInput(sal, c) {
@@ -1656,13 +1657,44 @@
     ['gDeduct', '所得控除の額の合計額', '', false],
     ['gTax', '源泉徴収税額', '1年間の所得税（年末調整のあと）', true],
     ['gSocial', '社会保険料等の金額', '', true],
-    ['gSmall', 'うち 小規模企業共済等掛金', '社会保険料等の金額の欄の左上に「内」と書かれた金額。iDeCoや企業型DCで自分が出す掛金です', false]
+    ['gSmall', 'うち 小規模企業共済等掛金', '社会保険料等の金額の欄の左上に「内」と書かれた金額。DCの個人の上乗せ（マッチング拠出）やiDeCoの掛金です。DCの会社拠出は源泉徴収票に出ません。手取りには入れず、退職金として入れてください', false]
   ];
   function slipInput(c) {
     return { pay: c.gPay, after: c.gAfter, deductions: c.gDeduct, tax: c.gTax, social: c.gSocial, small: c.gSmall, resident: c.gResident };
   }
+  // 手取り＝額面−社会保険料−所得税−住民税＋通勤手当。通勤手当（月額・円）は非課税で源泉徴収票の支払金額にも入らないので、ここで足す
   function calcResult(sal, c) {
-    return c.mode === 'slip' ? E.takeHomeFromSlip(slipInput(c)) : E.takeHome(calcInput(sal, c));
+    var r = c.mode === 'slip' ? E.takeHomeFromSlip(slipInput(c)) : E.takeHome(calcInput(sal, c));
+    r.base = r.net;
+    r.commute = Math.round(Math.max(0, toNum(c.commute)) * 12 / 100) / 100;
+    if (r.net) r.net = Math.round((r.net + r.commute) * 100) / 100;
+    return r;
+  }
+  function commuteHTML(c, sid) {
+    return '<div class="calcsec">通勤手当<small>非課税なので、年収や源泉徴収票には入っていません</small></div>' +
+      '<div class="calcrow"><span class="u" style="flex:1;min-width:0">通勤手当（月額）<small>給与明細の「通勤手当」「交通費」</small></span>' +
+        yenField('f-th-' + sid + '-commute', c.commute, 'A.thSet(' + sid + ",'commute',this.value)", '通勤手当（月額）') + '</div>' +
+      '<div class="hint" style="padding:2px 0 0">給与と一緒に振り込まれるので、手取りに足します。定期代などの交通費は、支出（基本生活費）に入れてください。6か月定期の代金がまとめて出るなら、6で割った額です。</div>';
+  }
+  // 手取りに含めるもの・含めないもの
+  var TH_DEF = [
+    ['健康保険・介護保険・厚生年金・雇用保険', '引く', ''],
+    ['所得税・住民税', '引く', ''],
+    ['生命保険料（団体保険など）の天引き', '含める', '保険料'],
+    ['財形貯蓄・社内預金', '含める', '貯蓄'],
+    ['持株会、DCの個人の上乗せ（マッチング）、iDeCo', '含める', '投資の積立'],
+    ['社宅家賃・寮費', '含める', '住宅費'],
+    ['労働組合費など', '含める', '基本生活費'],
+    ['通勤手当', '足す', '交通費は生活費'],
+    ['DCの会社拠出（事業主掛金）', '入れない', '退職金']
+  ];
+  function thDefHTML() {
+    var open = ui.thDef;
+    return '<button class="toggle thdeft" aria-expanded="' + !!open + '" onclick="A.thDef()"><span class="lbl">手取りに含めるもの・含めないもの</span><span class="chev">' + chevron(open) + '</span></button>' +
+      (open ? '<div class="thdef"><p>このアプリの手取りは<b>「額面−社会保険料−所得税−住民税＋通勤手当」</b>です。引くのは、強制的に引かれるものだけ。自分で選んで天引きしているものは手取りに含めて、支出や投資の欄に入れます。こうすると、何が支出で何が貯蓄かがプランで見えます。</p>' +
+        '<table><thead><tr><th>給与明細の項目</th><th>手取りに</th><th>プランでは</th></tr></thead><tbody>' +
+        TH_DEF.map(function (d) { return '<tr><td>' + d[0] + '</td><td class="' + (d[1] === '引く' || d[1] === '入れない' ? 'out' : 'in') + '">' + d[1] + '</td><td>' + (d[2] || '—') + '</td></tr>'; }).join('') +
+        '</tbody></table></div>' : '');
   }
   function yenField(id, v, handler, label) {
     return '<input type="text" inputmode="numeric" enterkeyhint="next" autocomplete="off" id="' + id + '" class="op num yen" style="width:116px;flex:none;margin-left:auto;background:var(--surface)" aria-label="' + esc(label) + '（円）" value="' + yenIn(v) + '" onchange="' + handler + '"><span class="u">円</span>';
@@ -1699,7 +1731,7 @@
       return '<label class="deprow' + (d.group === 'under16' ? ' off' : '') + '"><input type="checkbox" id="f-th-' + sid + '-dep-' + d.m.id + '"' + (on ? ' checked' : '') + (d.group === 'under16' ? ' disabled' : '') +
         ' onchange="A.thDep(' + sid + ',' + d.m.id + ',this.checked)"><span class="nm">' + name + '</span><span class="gp">' + GROUP_TEXT[d.group] + '</span></label>';
     }).join('');
-    var parts = [['手取り', th.net, 'var(--good)'], ['社会保険料', th.social, 'var(--k1)'], ['所得税', th.incomeTax, 'var(--k2)'], ['住民税', th.residentTax, 'var(--k4)']];
+    var parts = [['手取り', th.base, 'var(--good)'], ['社会保険料', th.social, 'var(--k1)'], ['所得税', th.incomeTax, 'var(--k2)'], ['住民税', th.residentTax, 'var(--k4)']];
     var income = slip ? toNum(c.gPay) / 10000 : toNum(c.income);
     var bar = income > 0 ? '<div class="catbar" role="img" aria-label="年収の内訳：' + parts.map(function (p) { return p[0] + ' ' + p[1] + '万円'; }).join('、') + '">' +
       parts.map(function (p) { return p[1] > 0 ? '<span style="width:' + (p[1] / income * 100).toFixed(2) + '%;background:' + p[2] + '"></span>' : ''; }).join('') + '</div>' +
@@ -1711,17 +1743,17 @@
     }).join('') + '</div>';
     var result = income > 0 ? '<div class="calcresult"><span class="u" style="font-weight:700">手取り（年額）</span>' +
           '<span style="font-size:22px;font-weight:900;color:var(--accent-ink);margin-left:auto">' + th.net.toLocaleString('ja-JP') + '</span><span class="u" style="font-weight:700">万円</span></div>' +
-        '<div class="hint" style="padding:2px 0 6px;text-align:right">手取り率 ' + th.ratio + '％・月あたり約' + (Math.round(th.net / 12 * 10) / 10) + '万円（ボーナスを含めて12等分）</div>' +
+        '<div class="hint" style="padding:2px 0 6px;text-align:right">' + (th.commute ? '通勤手当 ' + th.commute.toLocaleString('ja-JP') + '万円を含む・' : '') + '手取り率 ' + th.ratio + '％・月あたり約' + (Math.round(th.net / 12 * 10) / 10) + '万円（ボーナスを含めて12等分）</div>' +
         bar +
-        (slip && th.small > 0 ? '<div class="hint" style="padding:6px 0 0">iDeCoなどの掛金 ' + th.small.toLocaleString('ja-JP') + '万円は貯蓄なので、手取りに含めています。積み立ては「投資」の欄に入れてください。</div>' : '') +
+        (slip && th.small > 0 ? '<div class="hint" style="padding:6px 0 0">DCの個人の上乗せ・iDeCoの掛金 ' + th.small.toLocaleString('ja-JP') + '万円は貯蓄なので、手取りに含めています。積み立ては「投資」の欄に入れてください。</div>' : '') +
         (slip && th.residentEstimated ? '<div class="hint" style="padding:4px 0 0">住民税 ' + th.residentTax.toLocaleString('ja-JP') + '万円は見積もりです。</div>' : '') +
         '<button class="btn block" onclick="A.calcApply(' + sid + ')">手取り ' + (Math.round(th.net * 10) / 10).toLocaleString('ja-JP') + '万円を1行目に入れる</button>' : '';
     if (slip) {
-      return '<div class="calcbox th">' + modes + slipHTML(c, sid) + result +
-        '<div class="hint" style="padding:8px 0 0">手取り＝支払金額−社会保険料等（iDeCoなどの掛金を除く）−源泉徴収税額−住民税。去年1年分の実際の金額なので、今年の手取りの目安になります。転職や大きな昇給・減給があった年は「年収から見積もる」も試してください。</div>' +
+      return '<div class="calcbox th">' + thDefHTML() + modes + slipHTML(c, sid) + commuteHTML(c, sid) + result +
+        '<div class="hint" style="padding:8px 0 0">手取り＝支払金額−社会保険料等（DCの個人の上乗せ・iDeCoの掛金を除く）−源泉徴収税額−住民税＋通勤手当。去年1年分の実際の金額なので、今年の手取りの目安になります。転職や大きな昇給・減給があった年は「年収から見積もる」も試してください。</div>' +
       '</div>';
     }
-    return '<div class="calcbox th">' + modes +
+    return '<div class="calcbox th">' + thDefHTML() + modes +
       '<div class="calcrow"><span class="u" style="width:88px">年収（額面）</span>' +
         numInput('f-th-' + sid + '-income', 'rq', 96, c.income, 'A.thSet(' + sid + ",'income',this.value)", ';margin-left:auto') + '<span class="u">万円</span></div>' +
       '<div class="hint" style="padding:4px 0 0">源泉徴収票の「支払金額」。わからなければ、月給（額面）×12＋ボーナスの合計</div>' +
@@ -1761,6 +1793,7 @@
           return '<div class="calcrow"><span class="u" style="width:148px">' + f[1] + '</span>' +
             numInput('f-th-' + sid + '-' + f[0], 'op', 56, c[f[0]] || 0, 'A.thSet(' + sid + ",'" + f[0] + "',this.value)", ';margin-left:auto' + bg) + '<span class="u">人</span></div>';
         }).join('') + '</div>' : '') +
+      commuteHTML(c, sid) +
       result +
       '<div class="hint" style="padding:8px 0 0">Excel「手取額計算」シート（2025年4月〜の税制）の式にもとづく概算です。会社員で年収150〜1000万円くらいの方向け。社会保険料は、健康保険の種類と年齢で見積もるか、実額を入れられます（選ばなければ年収の15.5％）。住民税は去年の年収を入れるとそれで計算します。住宅ローン控除・復興特別所得税は含みません。</div>' +
     '</div>';
@@ -1780,6 +1813,7 @@
     commit();
   };
   A.thDep = function (sid, mid, v) { var sal = calcEdit(sid); if (!sal) return; sal.calc.deps[mid] = v; commit(); };
+  A.thDef = function () { ui.thDef = !ui.thDef; commit(); };
   A.thMore = function (sid) { ui.thMore = ui.thMore === sid ? 0 : sid; commit(); };
 
   // ---------- 家計簿（年間収支） ----------
@@ -1911,6 +1945,7 @@
     var incomes = '<div class="card bkgroup" id="bkg-income"><div class="head"><span class="cdot" style="background:var(--good)"></span><span class="ttl">手取収入</span>' + helpBtn('bookIncome') +
         '<span class="sub">' + yen(m.income) + '円</span></div>' + helpBox('bookIncome') +
       y.incomes.map(function (r) { return bookIncomeRow(r, i, edit); }).join('') +
+      (m.deducted ? '<div class="bkrow divide"><span class="nm">給与天引き<small>決済手段が「給与天引き」の支出を、自動で足しています</small></span><span class="bkauto">' + yen(m.deducted) + '<span class="u">円</span></span></div>' : '') +
       (edit ? '<div class="addwrap divide"><button class="btn ghost" onclick="A.bkAdd(\'income\')">＋ 収入の項目を足す</button></div>' : '') +
       '<div class="rowtop divide" style="padding:10px 0"><span class="u">備考</span>' +
         '<input type="text" id="f-bk-note" class="op" style="flex:1;min-width:0" aria-label="' + MONTHS[i] + 'の備考" placeholder="児童手当、定期代など" value="' + esc(y.notes[i] || '') + '" onchange="A.bkNote(this.value)"></div>' +
@@ -2139,7 +2174,7 @@
     var y = bookYear();
     var body = !y ? bookEmptyHTML() : ui.book.mode === 'year' ? bookYearHTML(y, width) : ui.book.mode === 'plan' ? bookPlanHTML(y) : bookMonthHTML(y);
     return bookHeaderHTML() + '<div class="bkbody">' + body + '</div>' +
-      '<datalist id="bk-pays"><option value="現金"><option value="カード"><option value="口座振替"><option value="電子マネー"></datalist>';
+      '<datalist id="bk-pays"><option value="現金"><option value="カード"><option value="口座振替"><option value="電子マネー"><option value="給与天引き"></datalist>';
   }
 
   // ---- 操作 ----
@@ -2477,7 +2512,7 @@
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
     'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato', 'lastIncome', 'social',
-    'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
+    'commute', 'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });

@@ -545,12 +545,19 @@ await fresh.close();
   await page.fill('#f-th-1-gResident', '380000'); await page.press('#f-th-1-gResident', 'Tab');
   await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
   const act = await page.textContent('.calcbox.th .calcresult');
+  await page.fill('#f-th-1-commute', '20,000'); await page.press('#f-th-1-commute', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const withCommute = await page.textContent('.calcbox.th .calcresult');
+  await page.locator('.thdeft').tap(); await page.waitForTimeout(100);
+  const defRows = await page.locator('.thdef tbody tr').count();
+  const defText = await page.textContent('.thdef');
   await page.locator('.calcbox.th').scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(shots, '18b-slip.png') });
   await page.locator('.calcbox.th .btn.block').tap(); await page.waitForTimeout(150);
   const row = await page.inputValue('#f-sal-1-1-amt');
-  check('手取り：源泉徴収票の金額（円・カンマや全角も可）から、住民税を見積もって619.8万、住民税38万円を入れると624万、1行目に入る',
-    /619\.8/.test(est) && shown === '8,000,000' && /624/.test(act) && row === '624', `${est.trim()} / ${shown} / ${act.trim()} / 1行目=${row}`);
+  check('手取り：源泉徴収票の金額（円・カンマや全角も可）から、住民税を見積もって619.8万、住民税38万円で624万、通勤手当（月2万円）を足して648万、1行目に入る',
+    /619\.8/.test(est) && shown === '8,000,000' && /624/.test(act) && /648/.test(withCommute) && row === '648', `${est.trim()} / ${shown} / ${act.trim()} / ${withCommute.trim()} / 1行目=${row}`);
+  check('手取りの考え方（含めるもの・含めないもの）を表で見られる', defRows === 9 && /DCの会社拠出/.test(defText) && /退職金/.test(defText), `${defRows}行`);
   await page.locator('#toast button').tap(); await page.waitForTimeout(100);
 }
 

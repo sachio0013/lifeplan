@@ -9,6 +9,8 @@
  *   5. 収支＝収入−支出（積立投資も支出に含む）、残高＝前年末の口座残高＋収支の累計
  *   6. 口座残高を入れると「記録と残高の差額」を出す（0なら記録に漏れがない）
  *   7. 投資資産の前年末と今年末（予想）
+ * 決済手段が「給与天引き」の支出（生命保険料・財形・持株会・DCの個人の上乗せなど）は、口座を通らない。
+ * 収入（振込額）に同じ額を足して、手取り＝振込額＋任意の天引き としてそろえる（残高の照合はずれない）。
  * 金額の単位は円。ライフプランへ渡すときに万円にする。
  */
 (function (root, factory) {
@@ -128,7 +130,9 @@
   // ---- 集計 ----
 
   function expenseAt(y, i) { return y.items.reduce(function (s, it) { return s + num(it.m[i]); }, 0); }
-  function incomeAt(y, i) { return y.incomes.reduce(function (s, r) { return s + num(r.m[i]); }, 0); }
+  var DEDUCTED = '給与天引き';
+  function deductedAt(y, i) { return y.items.reduce(function (s, it) { return s + (it.pay === DEDUCTED ? num(it.m[i]) : 0); }, 0); }
+  function incomeAt(y, i) { return y.incomes.reduce(function (s, r) { return s + num(r.m[i]); }, 0) + deductedAt(y, i); }
   function catAt(y, i, no) { return y.items.reduce(function (s, it) { return s + (it.cat === no ? num(it.m[i]) : 0); }, 0); }
   function startTotal(y) { return y.accounts.reduce(function (s, a) { return s + num(a.start); }, 0); }
 
@@ -151,7 +155,7 @@
       var actual = y.accounts.length && y.accounts.every(function (a) { return filled(a.m[i]); })
         ? y.accounts.reduce(function (s, a) { return s + num(a.m[i]); }, 0) : null;
       months.push({
-        index: i, expense: exp, income: inc, balance: bal, running: running, cats: cats,
+        index: i, expense: exp, income: inc, deducted: deductedAt(y, i), balance: bal, running: running, cats: cats,
         recorded: recordedAt(y, i), actual: actual, diff: actual == null ? null : running - actual
       });
     }
@@ -167,6 +171,7 @@
       months: months,
       expense: sum(months.map(function (m) { return m.expense; })),
       income: sum(months.map(function (m) { return m.income; })),
+      deducted: sum(months.map(function (m) { return m.deducted; })),
       balance: sum(months.map(function (m) { return m.balance; })),
       catTotals: catTotals,
       byPay: byPay,
@@ -188,6 +193,7 @@
     var inc = {};
     INCOME_KINDS.forEach(function (k) { inc[k.key] = 0; });
     y.incomes.forEach(function (r) { inc[r.kind] = (inc[r.kind] || 0) + sum(r.m); });
+    inc.sal1 += s.deducted;     // 給与天引きは、ふつう家計の中心になる家族１の給与から
     return {
       months: n, matched: s.matched,
       living: man(s.catTotals[1]), housing: man(s.catTotals[2]), edu: man(s.catTotals[3]),
@@ -262,7 +268,7 @@
   }
 
   return {
-    CATS: CATS, INCOME_KINDS: INCOME_KINDS,
+    CATS: CATS, INCOME_KINDS: INCOME_KINDS, DEDUCTED: DEDUCTED,
     num: num, filled: filled, newYear: newYear, sampleYear: sampleYear,
     summarize: summarize, toPlan: toPlan, reliability: reliability, insights: insights
   };

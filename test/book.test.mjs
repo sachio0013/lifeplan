@@ -100,3 +100,21 @@ test('ふりかえり：いつもとの違い・貯蓄に回せた割合・続�
   assert.ok(out.some((t) => /収入の\d+％を、貯蓄や投資に回せました/.test(t)));
   assert.ok(out.some((t) => /6か月続けて記録しています/.test(t)));
 });
+
+test('給与天引きの支出は、収入（振込額）にも足して、手取り＝振込額＋任意の天引きにそろえる', () => {
+  const bk = { nextId: 1 };
+  const yr = B.newYear(bk);
+  yr.items.forEach((it) => { it.m = it.m.map(() => ''); });
+  yr.incomes.forEach((r) => { r.m = r.m.map(() => ''); });
+  yr.accounts.forEach((a) => { a.start = 1000000; a.m = a.m.map(() => ''); });
+  yr.items[0].m[0] = 100000;                                            // 口座から払う支出
+  yr.items.push({ id: 99, name: '財形貯蓄', cat: 6, pay: B.DEDUCTED, day: '', m: [20000, '', '', '', '', '', '', '', '', '', '', ''] });
+  yr.incomes[0].m[0] = 300000;                                          // 振込額
+  const sm = B.summarize(yr), m = sm.months[0];
+  assert.equal(m.deducted, 20000);
+  assert.equal(m.income, 320000);                                       // 振込額＋天引き
+  assert.equal(m.expense, 120000);
+  assert.equal(m.running - sm.startTotal, 200000);                      // 口座の増え方は 振込額−口座から払った支出 のまま
+  const p = B.toPlan(yr);
+  assert.equal(p.sal1, Math.round(320000 * 12 / 1000) / 10);
+});

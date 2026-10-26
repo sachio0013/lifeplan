@@ -536,3 +536,13 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 .calcbox .catbar { margin-top: 6px; }
 .thmode { margin-bottom: 12px; }
 .calcbox.th input.yen { font-variant-numeric: tabular-nums; }
+.thdeft { margin: -4px 0 8px; }
+.thdef { margin: 0 0 12px; padding: 12px; border-radius: 14px; background: var(--surface); font-size: 13.5px; line-height: 1.65; }
+.thdef p { margin: 0 0 10px; }
+.thdef table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.thdef th { text-align: left; font-weight: 700; color: var(--text-muted); padding: 4px 4px 6px; border-bottom: 1px solid var(--line); }
+.thdef td { padding: 6px 4px; border-bottom: 1px dashed var(--line); vertical-align: top; }
+.thdef td.in { color: var(--good); font-weight: 700; white-space: nowrap; }
+.thdef td.out { color: var(--text-muted); font-weight: 700; white-space: nowrap; }
+.bkauto { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.thdef th, .thdef td:nth-child(3) { white-space: nowrap; }
