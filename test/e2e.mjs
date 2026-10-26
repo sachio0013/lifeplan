@@ -108,6 +108,17 @@ const unfolded = await page.evaluate(() => !document.getElementById('shell').cla
 check('数字の欄はタップで全選択・全角も可・Enterで次へ。入力中は上のバーをたたむがグラフは残し、終わると戻る',
   sel[0] === 'f-insurance-1-amt' && sel[1] === 0 && sel[2] === sel[3] && sel[3] > 0 && folded && graphWhileTyping && insVal === '24' && afterEnter === 'f-insurance-1-memo' && unfolded,
   `選択=${sel} たたむ=${folded} グラフ=${graphWhileTyping} 値=${insVal} 次=${afterEnter} 戻る=${unfolded}`);
+// キーボードを閉じてもフォーカスが残ったまま（Androidの戻るボタンなど）でも、入力欄以外に触れればタブが戻る
+await page.tap('#f-insurance-1-amt');
+await page.waitForTimeout(250);
+const stuck = await page.evaluate(() => document.getElementById('shell').classList.contains('kb') && getComputedStyle(document.getElementById('tabbar')).display === 'none');
+const hintBox = await page.locator('#card-insurance .hint').first().boundingBox().catch(() => null)
+  || await page.locator('#content .hint').first().boundingBox();
+await page.touchscreen.tap(hintBox.x + 10, hintBox.y + hintBox.height / 2);
+await page.waitForTimeout(300);
+const back = await page.evaluate(() => !document.getElementById('shell').classList.contains('kb') && getComputedStyle(document.getElementById('tabbar')).display !== 'none'
+  && !!document.querySelector('#tabbar #seg-cf') && document.querySelector('#seg-input').textContent.trim() === '入力');
+check('入力中に入力欄以外へ触れると、下のタブ（入力・未来の表など）が戻る', stuck && back, `隠れる=${stuck} 戻る=${back}`);
 await page.fill('#f-insurance-1-amt', '20');
 await page.press('#f-insurance-1-amt', 'Tab');
 await page.evaluate(() => document.activeElement.blur());

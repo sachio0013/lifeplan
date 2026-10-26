@@ -3375,6 +3375,30 @@
       clearTimeout(kbTimer);
       kbTimer = setTimeout(function () { if (!typingField(document.activeElement)) setTyping(false); }, 180);
     });
+    // キーボードを閉じても入力欄にフォーカスが残ることがある（Androidの戻るボタンなど）。そのままだと上のバーと下のタブが隠れたままになるので、
+    //   1. 画面の高さ（visualViewport）が元に戻ったら、キーボードが閉じたとみなして入力を終える
+    //   2. 入力欄やボタン以外のところに触れたら（スクロールしようとしたときなど）、入力を終える
+    var vv = window.visualViewport, vvBase = vv ? vv.height : 0, vvShrunk = false;
+    var endTyping = function () {
+      var el = document.activeElement;
+      if (typingField(el)) el.blur();
+      clearTimeout(kbTimer);
+      setTyping(false);
+    };
+    if (vv) {
+      vv.addEventListener('resize', function () {
+        var typing = document.getElementById('shell').classList.contains('kb');
+        if (!typing) { vvBase = vv.height; vvShrunk = false; return; }
+        if (vv.height < vvBase - 120) vvShrunk = true;
+        else if (vvShrunk && vv.height > vvBase - 60) { vvShrunk = false; endTyping(); }
+      });
+    }
+    document.addEventListener('touchstart', function (ev) {
+      if (!document.getElementById('shell').classList.contains('kb')) return;
+      var t = ev.target;
+      if (t.closest && t.closest('input, select, textarea, button, a, label, [onclick], [role], .sheet')) return;
+      endTyping();
+    }, { passive: true });
   }
   var resizeTimer = null;
   window.addEventListener('resize', function () {
