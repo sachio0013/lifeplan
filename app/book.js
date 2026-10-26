@@ -219,6 +219,117 @@
     return { level: lv, label: label, text: text };
   }
 
+  // ---- 給与明細（Excel ver.1.80「給与シート」） ----
+  //
+  // 毎月の給与明細と賞与明細（夏・冬）の数字を入れて、1年分の手取りを積み上げる。家族１・家族２の2人分。
+  // y.pay = { '1': 明細, '2': 明細 }。明細 = { rows: 14行（0〜11が1〜12月、12が夏の賞与、13が冬の賞与）, bonusMonths: [夏, 冬]（支給月 1〜12） }
+  // 1行 = 支給と控除の各項目（円）。
+  // このアプリの手取り＝支給合計−社会保険料−所得税−住民税（＝振込額＋任意の天引き）。通勤費は含む。
+  // Excelの「年間手取り（振込額ベース）」は任意の天引き（財形・DC等）も引くので、そこだけ違う。
+  var PAY_ITEMS = [
+    { key: 'base', label: '基本給' }, { key: 'position', label: '役職手当' }, { key: 'skill', label: '資格・職能手当' },
+    { key: 'overtime', label: '残業手当' }, { key: 'allowance', label: 'その他手当' }, { key: 'otherPay', label: 'その他支給' },
+    { key: 'commute', label: '通勤費' }
+  ];
+  var DEDUCT_ITEMS = [
+    { key: 'health', label: '健康保険', social: true }, { key: 'care', label: '介護保険', social: true },
+    { key: 'pension', label: '厚生年金', social: true }, { key: 'employ', label: '雇用保険', social: true },
+    { key: 'incomeTax', label: '所得税', tax: true }, { key: 'resident', label: '住民税', tax: true },
+    { key: 'voluntary', label: '財形・DC等' }
+  ];
+  var SLIP_LABELS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '夏の賞与', '冬の賞与'];
+
+  function blankSlip() { var o = {}; PAY_ITEMS.concat(DEDUCT_ITEMS).forEach(function (f) { o[f.key] = ''; }); return o; }
+  function newPay() { var rows = []; for (var i = 0; i < 14; i++) rows.push(blankSlip()); return { rows: rows, bonusMonths: [6, 12] }; }
+  function slipFilled(r) { return !!r && PAY_ITEMS.concat(DEDUCT_ITEMS).some(function (f) { return num(r[f.key]) !== 0; }); }
+
+  // 1枚の明細の合計
+  function slipTotals(r) {
+    var t = { pay: 0, deduct: 0, social: 0, tax: 0, voluntary: 0, commute: 0 };
+    PAY_ITEMS.forEach(function (f) { t.pay += num(r[f.key]); });
+    DEDUCT_ITEMS.forEach(function (f) {
+      var v = num(r[f.key]);
+      t.deduct += v;
+      if (f.social) t.social += v; else if (f.tax) t.tax += v; else t.voluntary += v;
+    });
+    t.commute = num(r.commute);
+    t.gross = t.pay - t.commute;                     // 額面（通勤費を除く）
+    t.transfer = t.pay - t.deduct;                   // 差引支給額（振込額）
+    t.takeHome = t.pay - t.social - t.tax;           // 手取り（振込額＋任意の天引き）
+    return t;
+  }
+
+  // 1年分の集計。記録が12か月に満たないときは、記録した月の平均×12＋記録した賞与で1年分を見積もる
+  function paySummary(p) {
+    var keys = ['pay', 'deduct', 'social', 'tax', 'voluntary', 'commute', 'gross', 'transfer', 'takeHome'];
+    var zero = function () { var o = {}; keys.forEach(function (k) { o[k] = 0; }); return o; };
+    var total = zero(), monthly = zero(), bonus = zero(), items = {};
+    PAY_ITEMS.concat(DEDUCT_ITEMS).forEach(function (f) { items[f.key] = 0; });
+    var slips = p.rows.map(function (r) { return slipFilled(r) ? slipTotals(r) : null; });
+    var months = 0, bonuses = 0;
+    p.rows.forEach(function (r, i) {
+      var t = slips[i]; if (!t) return;
+      PAY_ITEMS.concat(DEDUCT_ITEMS).forEach(function (f) { items[f.key] += num(r[f.key]); });
+      keys.forEach(function (k) { total[k] += t[k]; (i < 12 ? monthly : bonus)[k] += t[k]; });
+      if (i < 12) months++; else bonuses++;
+    });
+    var est = {};
+    keys.forEach(function (k) { est[k] = months ? monthly[k] / months * 12 + bonus[k] : bonus[k]; });
+    return {
+      slips: slips, months: months, bonuses: bonuses, items: items, total: total, estimate: est,
+      full: months === 12,
+      ratio: est.gross > 0 ? Math.round((est.takeHome - est.commute) / est.gross * 1000) / 10 : 0,   // 手取り率（額面に対する。通勤費を除く）
+      planMan: Math.round(est.takeHome / 1000) / 10                                                 // ライフプランに入れる万円
+    };
+  }
+
+  // 明細のふりかえり：前の明細（同じ年の前の月、1月なら前年の12月）と比べて、変わったところとその理由
+  function payInsights(p, i, prevPay) {
+    var r = p.rows[i];
+    if (!slipFilled(r)) return [];
+    var out = [], t = slipTotals(r);
+    if (i >= 12) {
+      out.push({ kind: 'info', text: '賞与からも、社会保険料 ' + fmt(t.social) + '円と所得税 ' + fmt(num(r.incomeTax)) + '円が引かれます。住民税は賞与からは引かれません。' });
+      return out;
+    }
+    var prev = null, prevLabel = '';
+    for (var k = i - 1; k >= 0; k--) if (slipFilled(p.rows[k])) { prev = p.rows[k]; prevLabel = SLIP_LABELS[k]; break; }
+    if (!prev && prevPay && slipFilled(prevPay.rows[11])) { prev = prevPay.rows[11]; prevLabel = '去年の12月'; }
+    if (t.gross > 0) out.push({ kind: 'good', text: '額面 ' + fmt(t.gross) + '円のうち、手取りは ' + fmt(t.takeHome - t.commute) + '円（' + Math.round((t.takeHome - t.commute) / t.gross * 100) + '％）でした' });
+    if (!prev) return out;
+    var d = function (key) { return num(r[key]) - num(prev[key]); };
+    var dRes = d('resident');
+    if (dRes !== 0) {
+      out.push({ kind: 'info', text: '住民税が ' + fmt(num(prev.resident)) + '円 → ' + fmt(num(r.resident)) + '円 に変わりました。' +
+        (i === 5 ? '住民税は去年の所得で決まり、毎年6月に切り替わります（6月だけ端数で少し違う額のこともあります）。' : i === 6 ? '6月は端数の調整で額が違うことがあり、7月からが1年間の額です。' : '') });
+    }
+    var dSoc = d('health') + d('care') + d('pension');
+    if (num(prev.care) === 0 && num(r.care) > 0) out.push({ kind: 'info', text: '介護保険料が引かれはじめました（40歳になった月から、64歳まで）。' });
+    else if (dSoc !== 0) {
+      out.push({ kind: 'info', text: '社会保険料（健康保険・介護保険・厚生年金）が月 ' + (dSoc > 0 ? '＋' : '−') + fmt(Math.abs(dSoc)) + '円 変わりました。' +
+        (i === 8 ? '4〜6月の給与で決まる「標準報酬月額」が、毎年9月に見直されます。' : '昇給などで固定給が大きく変わると、3か月後に見直されることがあります（随時改定）。') });
+    }
+    var dOver = d('overtime');
+    if (dOver !== 0 && (num(r.overtime) || num(prev.overtime))) out.push({ kind: dOver > 0 ? 'good' : 'info', text: '残業手当は' + prevLabel + 'より ' + (dOver > 0 ? '＋' : '−') + fmt(Math.abs(dOver)) + '円 でした。' });
+    var dBase = d('base');
+    if (dBase > 0) out.push({ kind: 'good', text: '基本給が ' + fmt(dBase) + '円 上がりました。社会保険料は、4〜6月の給与をもとに9月から見直されます。' });
+    return out;
+  }
+  function fmt(v) { return Math.round(v).toLocaleString('ja-JP'); }
+
+  // Excel「給与シート」の記入例（家族１・家族２）
+  function samplePay(k) {
+    var p = newPay();
+    var mon = k === 1
+      ? { base: 280000, position: 20000, skill: 15000, overtime: 25000, commute: 12000, health: 17300, pension: 31110, employ: 2100, incomeTax: 6700, resident: 14500 }
+      : { base: 180000, skill: 5000, overtime: 8000, commute: 8000, health: 10300, pension: 18300, employ: 1300, incomeTax: 2200, resident: 5000 };
+    var bon = k === 1
+      ? { base: 600000, health: 29500, pension: 54900, employ: 3600, incomeTax: 30000 }
+      : { base: 300000, health: 14800, pension: 27450, employ: 1800, incomeTax: 12000 };
+    p.rows.forEach(function (r, i) { var src = i < 12 ? mon : bon; Object.keys(src).forEach(function (key) { r[key] = src[key]; }); });
+    return p;
+  }
+
   // ---- 今月のふりかえり ----
 
   // その月を、それより前の記録した月（最大3か月）の平均と比べる。項目は名前でまとめる（同じ名前は合算）
@@ -269,6 +380,8 @@
 
   return {
     CATS: CATS, INCOME_KINDS: INCOME_KINDS, DEDUCTED: DEDUCTED,
+    PAY_ITEMS: PAY_ITEMS, DEDUCT_ITEMS: DEDUCT_ITEMS, SLIP_LABELS: SLIP_LABELS,
+    newPay: newPay, blankSlip: blankSlip, slipFilled: slipFilled, slipTotals: slipTotals, paySummary: paySummary, payInsights: payInsights, samplePay: samplePay,
     num: num, filled: filled, newYear: newYear, sampleYear: sampleYear,
     summarize: summarize, toPlan: toPlan, reliability: reliability, insights: insights
   };

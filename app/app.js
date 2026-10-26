@@ -81,7 +81,8 @@
     help: '',          // 開いている「？」の説明
     thDef: false,      // 手取り計算の「手取りに含めるもの・含めないもの」を開いているか
     thMore: 0,         // 手取り計算の「細かく設定」を開いている給与の id
-    book: { year: new Date().getFullYear(), month: new Date().getMonth(), mode: 'month', edit: false, picks: {}, target: 0 },  // 家計簿の表示
+    book: { year: new Date().getFullYear(), month: new Date().getMonth(), mode: 'month', edit: false, picks: {}, target: 0,  // 家計簿の表示
+      slip: new Date().getMonth(), who: '1' },  // 給与明細：表示している明細（0〜11が月、12・13が夏・冬の賞与）と、だれの明細か
     active: 'basic',
     openMember: 0,
     openCalc: 0,
@@ -1357,6 +1358,7 @@
     otherLump: '結婚式、出産、子供の結婚の援助、留学、大きな家電など、一度だけ出る支出です。',
     investAdd: 'NISAやiDeCoなどに、毎年いくら積み立てるかです（月3万円なら36）。積み立てた分は普通預金等から移り、想定利回りで増えていきます。想定利回りは将来の見込みなので、控えめな数字で試すと安心です。税率は、NISA・iDeCoなら0％、それ以外の投資信託や株なら20％を選びます。',
     bookIncome: '給与やボーナスは、口座に振り込まれた額を入れます。生命保険料や財形など給与から天引きされているものは、支出の項目の決済手段を「給与天引き」にすると、その額を収入にも自動で足して、手取り（振込額＋天引き）にそろえます。種類（給与・ボーナス・その他）は「項目・口座を編集する」で変えられ、ライフプランへの反映のときに、だれの収入かを見分けるのに使います。',
+    payDeduct: '健康保険・介護保険・厚生年金・雇用保険が社会保険料、所得税・住民税が税金です。この2つは強制的に引かれるので、手取りから除きます。財形・DC等（生命保険料や持株会など、自分で選んで天引きしているもの）は貯蓄や支出なので、手取りに含めます。家計簿に入れると、決済手段「給与天引き」の支出になります。',
     bookAccounts: '月末の口座の残高を入れると、「前年末の残高＋その年の収支」と比べて差額を出します。差額が0なら、その月の記録に漏れがないということです。家計簿の正しさの裏付けになり、ライフプランの信頼度も上がります。',
     investOut: '積み立てた資産を取り崩して、生活費などにあてる予定です。iDeCoは、原則として60歳まで引き出せません。'
   };
@@ -1838,7 +1840,8 @@
 
   function bookHeaderHTML() {
     var y = bookYear(), s = y ? BK.summarize(y) : null;
-    var modes = [['month', '月ごと'], ['year', '1年の表'], ['plan', 'プランへ']];
+    var modes = [['month', '月ごと'], ['pay', '給与明細'], ['year', '1年の表'], ['plan', 'プランへ']];
+    var pay = y && ui.book.mode === 'pay' ? payOf(y) : null;
     return '<div class="bkhead">' +
       '<div class="bkyear">' +
         '<button class="del" aria-label="前の年" onclick="A.bkYear(-1)">' + ic('prev', 22) + '</button>' +
@@ -1854,6 +1857,15 @@
         return '<button role="tab" id="bkm-' + i + '" aria-selected="' + on + '" class="' + (on ? 'on' : '') + (rec ? ' rec' : '') + '" onclick="A.bkMonth(' + i + ')">' +
           label + (ok ? '<span class="ok" aria-label="残高と一致">' + ic('check', 11) + '</span>' : rec ? '<span class="dot" aria-label="記録あり"></span>' : '') + '</button>';
       }).join('') + '</div>' : '') +
+      (y && ui.book.mode === 'pay' ? '<div class="mini thsp bkwho" role="radiogroup" aria-label="だれの給与明細か">' + ['1', '2'].map(function (k) {
+        var on = ui.book.who === k;
+        return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.pyWho(\'' + k + '\')">' + esc(payName(k)) + '</button>';
+      }).join('') + '</div>' +
+      (pay ? '<div class="bkmonths" role="tablist" aria-label="明細">' + BK.SLIP_LABELS.map(function (label, i) {
+        var on = ui.book.slip === i, rec = BK.slipFilled(pay.rows[i]);
+        return '<button role="tab" id="bkm-' + i + '" aria-selected="' + on + '" class="' + (on ? 'on' : '') + (rec ? ' rec' : '') + (i >= 12 ? ' bonus' : '') + '" onclick="A.pySlip(' + i + ')">' +
+          label + (rec ? '<span class="dot" aria-label="記録あり"></span>' : '') + '</button>';
+      }).join('') + '</div>' : '') : '') +
     '</div>';
   }
 
@@ -2170,9 +2182,181 @@
   }
   function man1(v) { return (Math.round(v * 10) / 10).toLocaleString('ja-JP'); }
 
+  // ---- 給与明細（Excel ver.1.80「給与シート」） ----
+
+  function payOf(y) { return (y.pay && y.pay[ui.book.who]) || null; }
+  function payMember(k) { var rel = k === '1' ? '家族１' : '家族２'; return state.family.filter(function (f) { return f.relation === rel; })[0] || null; }
+  function payName(k) { var m = payMember(k); return (m && m.name) || (k === '1' ? '家族１' : '家族２'); }
+  function prevYearPay() { var py = store.book.years[ui.book.year - 1]; return (py && py.pay && py.pay[ui.book.who]) || null; }
+  // 家計簿のその月に入れる値（月の給与の振込額、その月に支給の賞与の振込額、任意の天引き）
+  function payForMonth(p, mi) {
+    var o = { sal: 0, bonus: 0, voluntary: 0, has: false };
+    p.rows.forEach(function (r, i) {
+      var at = i < 12 ? i : p.bonusMonths[i - 12] - 1;
+      if (at !== mi || !BK.slipFilled(r)) return;
+      var t = BK.slipTotals(r);
+      o.has = true;
+      if (i < 12) o.sal += t.transfer; else o.bonus += t.transfer;
+      o.voluntary += t.voluntary;
+    });
+    return o;
+  }
+  function payBookRows(y, who, create) {
+    var name = payName(who);
+    var find = function (kind) { return y.incomes.filter(function (r) { return r.kind === kind; })[0] || null; };
+    var mk = function (kind, label) {
+      var r = { id: store.book.nextId++, name: label + '（' + name + '）', kind: kind, m: ['', '', '', '', '', '', '', '', '', '', '', ''] };
+      y.incomes.push(r); return r;
+    };
+    var vname = '財形・DC等（' + name + '）';
+    var vol = y.items.filter(function (it) { return it.pay === BK.DEDUCTED && it.name === vname; })[0] || null;
+    var sal = find('sal' + who), bonus = find('bonus' + who);
+    if (create) {
+      sal = sal || mk('sal' + who, '給与');
+      bonus = bonus || mk('bonus' + who, 'ボーナス');
+    }
+    return { sal: sal, bonus: bonus, vol: vol, vname: vname };
+  }
+
+  function payIntroHTML() {
+    return '<div class="bkempty">' + bookArt() +
+      '<h2>' + esc(payName(ui.book.who)) + 'の給与明細をつけよう</h2>' +
+      '<p>毎月の給与明細と賞与明細の数字を入れると、<b>1年分の手取り</b>が積み上がります。ライフプランの給与にも、家計簿の収入にも、そのまま使えます。</p>' +
+      '<ul class="bkpoints">' +
+        '<li>' + ic('yen', 18) + '<span><b>額面と手取りの差が見えます。</b>社会保険料と税金で、1年にいくら納めているかがわかります。</span></li>' +
+        '<li>' + ic('check', 18) + '<span><b>変わったところを教えます。</b>6月の住民税、9月の社会保険料、残業代の増減など、明細が変わる理由がわかります。</span></li>' +
+        '<li>' + ic('lock', 18) + '<span><b>データは端末の外に送りません。</b>給与のような大事な情報も、安心して記録できます。</span></li>' +
+      '</ul>' +
+      '<div class="cvalt">' +
+        '<button class="btn big" onclick="A.pyCreate(false)">給与明細をはじめる</button>' +
+        '<button class="btn ghost" onclick="A.pyCreate(true)">記入例（Excelのサンプル）を入れて見てみる</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function payHTML(y) {
+    var p = payOf(y);
+    if (!p) return payIntroHTML();
+    var i = ui.book.slip, r = p.rows[i], who = ui.book.who, label = BK.SLIP_LABELS[i];
+    var t = BK.slipTotals(r), filled = BK.slipFilled(r);
+    var sum = BK.paySummary(p);
+    var amtRow = function (f, hint) {
+      return '<div class="bkrow divide"><span class="nm">' + f.label + (hint ? '<small>' + hint + '</small>' : '') + '</span>' +
+        bookAmountInput('f-py-' + f.key, r[f.key], "A.pyAmt('" + f.key + "',this.value)", f.label + '（' + label + '）', 'op') + '</div>';
+    };
+    var prevSlip = i > 0 && i < 12 ? p.rows[i - 1] : i === 13 ? p.rows[12] : i === 0 && prevYearPay() ? prevYearPay().rows[11] : null;
+    var prevLabel = i > 0 && i < 12 ? BK.SLIP_LABELS[i - 1] : i === 13 ? '夏の賞与' : '去年の12月';
+    var copy = !filled && prevSlip && BK.slipFilled(prevSlip)
+      ? '<button class="btn ghost bkcopy" onclick="A.pyCopy()">' + ic('copy', 18) + prevLabel + 'の明細と同じ内容を入れる</button>' : '';
+
+    var parts = [['手取り', t.takeHome, 'var(--good)'], ['社会保険料', t.social, 'var(--k1)'], ['所得税・住民税', t.tax, 'var(--k2)']];
+    var result = '<div class="card bksum">' +
+      '<div class="bkrow1"><div><div class="k">' + label + 'の手取り</div><div class="v">' + yen(t.takeHome) + '<small>円</small></div>' +
+        '<div class="io"><span>支給 <b>' + yen(t.pay) + '</b></span><span>控除 <b>' + yen(t.deduct) + '</b></span><span>振込 <b>' + yen(t.transfer) + '</b></span></div></div></div>' +
+      (t.pay > 0 ? '<div class="catbar" role="img" aria-label="支給の内訳：' + parts.map(function (q) { return q[0] + ' ' + yen(q[1]) + '円'; }).join('、') + '">' +
+        parts.map(function (q) { return q[1] > 0 ? '<span style="width:' + (q[1] / t.pay * 100).toFixed(2) + '%;background:' + q[2] + '"></span>' : ''; }).join('') + '</div>' +
+        '<div class="catlegend">' + parts.map(function (q) { return '<span><i style="background:' + q[2] + '"></i>' + q[0] + '<b>' + yen(q[1]) + '</b></span>'; }).join('') + '</div>' : '') +
+      '<div class="hint" style="padding:6px 0 0">手取り＝支給合計−社会保険料−所得税・住民税（＝振込額＋財形・DC等）。通勤費も含みます。</div>' +
+    '</div>';
+
+    var tips = BK.payInsights(p, i, prevYearPay());
+    var review = tips.length ? '<div class="card bkreview"><div class="gh">' + fpFace(36) + '<div class="t">' + label + 'の明細のふりかえり</div></div>' +
+      '<ul>' + tips.map(function (q) { return '<li class="' + q.kind + '">' + esc(q.text) + '</li>'; }).join('') + '</ul></div>' : '';
+
+    var bonusMonth = i >= 12 ? '<div class="card bkgroup"><div class="bkrow"><span class="nm">支給月<small>家計簿に入れるときの月</small></span>' +
+      selectInput('f-py-bm', 'op', '', MONTHS.map(function (m, k) { return { value: k + 1, label: m }; }), p.bonusMonths[i - 12], 'A.pyBonusMonth(this.value)') + '</div></div>' : '';
+
+    var payCard = '<div class="card bkgroup" id="pyg-pay"><div class="head"><span class="cdot" style="background:var(--good)"></span><span class="ttl">支給</span><span class="sub">' + yen(t.pay) + '円</span></div>' +
+      BK.PAY_ITEMS.map(function (f) { return amtRow(f, f.key === 'commute' ? '非課税。手取りに含めます' : ''); }).join('') + '</div>';
+    var dedCard = '<div class="card bkgroup" id="pyg-deduct"><div class="head"><span class="cdot" style="background:var(--k1)"></span><span class="ttl">控除</span>' + helpBtn('payDeduct') + '<span class="sub">' + yen(t.deduct) + '円</span></div>' + helpBox('payDeduct') +
+      BK.DEDUCT_ITEMS.map(function (f) { return amtRow(f, f.key === 'voluntary' ? '生命保険料・持株会など、自分で選んだ天引きも' : f.key === 'care' ? '40〜64歳' : ''); }).join('') + '</div>';
+
+    // 家計簿へ
+    var mi = i < 12 ? i : p.bonusMonths[i - 12] - 1;
+    var bv = payForMonth(p, mi), rows = payBookRows(y, who, false);
+    var inBook = bv.has && rows.sal && BK.num(rows.sal.m[mi]) === bv.sal && (!bv.bonus || (rows.bonus && BK.num(rows.bonus.m[mi]) === bv.bonus)) &&
+      (!bv.voluntary || (rows.vol && BK.num(rows.vol.m[mi]) === bv.voluntary));
+    var toBook = filled ? '<div class="card bkgroup pybook">' +
+      (inBook ? '<div class="diffline ok">' + ic('check', 16) + '家計簿の' + MONTHS[mi] + 'に入っています</div>'
+        : '<p>家計簿の<b>' + MONTHS[mi] + '</b>に、振込額 <b>' + yen(bv.sal + bv.bonus) + '円</b>を収入として' + (bv.voluntary ? '、財形・DC等 <b>' + yen(bv.voluntary) + '円</b>を「給与天引き」の支出として' : '') + '入れます。</p>' +
+          '<button class="btn block" onclick="A.pyToBook()">' + ic('book', 18) + '家計簿の' + MONTHS[mi] + 'に入れる</button>') +
+    '</div>' : '';
+
+    // 1年のまとめ
+    var e = sum.estimate;
+    var sal = (function () { var m = payMember(who); return m ? state.salaries.filter(function (x) { return x.memberId === m.id; })[0] : null; })();
+    var year = sum.months + sum.bonuses ? '<div class="card bkgroup pyyear"><div class="head"><span class="cdot" style="background:var(--accent)"></span><span class="ttl">' + ui.book.year + '年のまとめ</span>' +
+        '<span class="sub">' + sum.months + 'か月・賞与' + sum.bonuses + '回</span></div>' +
+      '<table class="pytable"><tbody>' +
+        [['額面（通勤費を除く）', e.gross], ['社会保険料', e.social], ['所得税・住民税', e.tax], ['通勤費', e.commute], ['手取り', e.takeHome]].map(function (q, k) {
+          return '<tr' + (k === 4 ? ' class="tot"' : '') + '><th>' + q[0] + '</th><td>' + (Math.round(q[1] / 1000) / 10).toLocaleString('ja-JP') + '<small>万円</small></td></tr>';
+        }).join('') +
+      '</tbody></table>' +
+      (sum.full ? '' : '<div class="hint" style="padding:6px 0 0">記録した' + sum.months + 'か月の平均×12' + (sum.bonuses ? '＋記録した賞与' : '') + 'で、1年分を見積もっています。</div>') +
+      (e.gross > 0 ? '<div class="pynote">' + ic('yen', 16) + '<span>社会保険料と税金で、1年に <b>' + Math.round((e.social + e.tax) / 10000) + '万円</b>（額面の' + Math.round((e.social + e.tax) / e.gross * 100) + '％）を納めています。手取り率は ' + sum.ratio + '％です。</span></div>' : '') +
+      (sal ? '<button class="btn block" onclick="A.pyToPlan()">年間の手取り ' + sum.planMan.toLocaleString('ja-JP') + '万円を、プランの給与（' + esc(payName(who)) + '）に入れる</button>'
+        : '<div class="hint" style="padding:8px 0 0">プランの「収入」に' + esc(payName(who)) + 'の給与を足すと、ここから手取りを入れられます。</div>') +
+    '</div>' : '';
+
+    return (p.sample ? '<div class="vbanner notice sample">' + ic('book', 18) + '<span>これは記入例（Excelのサンプル）です。自分の明細をつけるときは消してから始めます。</span><button class="btn" onclick="A.pyClear()">記入例を消す</button></div>' : '') +
+      result + review + copy + bonusMonth + payCard + dedCard + toBook + year;
+  }
+
+  A.pyWho = function (k) { ui.book.who = k; commit(); };
+  A.pySlip = function (i) { ui.book.slip = i; commit(); };
+  A.pyCreate = function (sample) {
+    var y = bookYear(); if (!y) return;
+    if (!y.pay) y.pay = {};
+    y.pay[ui.book.who] = sample ? BK.samplePay(ui.book.who === '1' ? 1 : 2) : BK.newPay();
+    if (sample) y.pay[ui.book.who].sample = true;
+    commit();
+  };
+  A.pyClear = function () {
+    var y = bookYear(); if (!y || !y.pay) return;
+    snapshot('記入例の給与明細を消しました');
+    delete y.pay[ui.book.who];
+    commit();
+  };
+  A.pyAmt = function (key, v) { var y = bookYear(), p = y && payOf(y); if (!p) return; p.rows[ui.book.slip][key] = yenVal(v); commit(); };
+  A.pyBonusMonth = function (v) { var y = bookYear(), p = y && payOf(y); if (!p || ui.book.slip < 12) return; p.bonusMonths[ui.book.slip - 12] = Math.min(12, Math.max(1, Math.round(toNum(v)) || 1)); commit(); };
+  A.pyCopy = function () {
+    var y = bookYear(), p = y && payOf(y), i = ui.book.slip; if (!p) return;
+    var src = i > 0 && i < 12 ? p.rows[i - 1] : i === 13 ? p.rows[12] : i === 0 && prevYearPay() ? prevYearPay().rows[11] : null;
+    if (!src) return;
+    snapshot('前の明細と同じ内容を入れました');
+    Object.keys(p.rows[i]).forEach(function (k) { if (!BK.filled(p.rows[i][k]) && BK.filled(src[k])) p.rows[i][k] = src[k]; });
+    commit();
+  };
+  A.pyToBook = function () {
+    var y = bookYear(), p = y && payOf(y), i = ui.book.slip; if (!p) return;
+    var who = ui.book.who, mi = i < 12 ? i : p.bonusMonths[i - 12] - 1;
+    var bv = payForMonth(p, mi);
+    snapshot('給与明細を家計簿の' + MONTHS[mi] + 'に入れました');
+    var rows = payBookRows(y, who, true);
+    rows.sal.m[mi] = bv.sal || '';
+    rows.bonus.m[mi] = bv.bonus || '';
+    if (bv.voluntary && !rows.vol) {
+      rows.vol = { id: store.book.nextId++, name: rows.vname, cat: 6, pay: BK.DEDUCTED, day: '', m: ['', '', '', '', '', '', '', '', '', '', '', ''] };
+      var at = -1; y.items.forEach(function (it, k) { if (it.cat === 6) at = k; });
+      y.items.splice(at < 0 ? y.items.length : at + 1, 0, rows.vol);
+    }
+    if (rows.vol) rows.vol.m[mi] = bv.voluntary || '';
+    commit();
+  };
+  A.pyToPlan = function () {
+    var y = bookYear(), p = y && payOf(y); if (!p) return;
+    var m = payMember(ui.book.who), sal = m && state.salaries.filter(function (x) { return x.memberId === m.id; })[0];
+    if (!sal || !sal.rows[0]) return;
+    var v = BK.paySummary(p).planMan;
+    snapshot('給与明細の手取り ' + v + '万円を、' + payName(ui.book.who) + 'の給与に入れました');
+    sal.rows[0].amount = v;
+    commit();
+  };
+
   function bookHTML(width) {
     var y = bookYear();
-    var body = !y ? bookEmptyHTML() : ui.book.mode === 'year' ? bookYearHTML(y, width) : ui.book.mode === 'plan' ? bookPlanHTML(y) : bookMonthHTML(y);
+    var body = !y ? bookEmptyHTML() : ui.book.mode === 'year' ? bookYearHTML(y, width) : ui.book.mode === 'plan' ? bookPlanHTML(y) :
+      ui.book.mode === 'pay' ? payHTML(y) : bookMonthHTML(y);
     return bookHeaderHTML() + '<div class="bkbody">' + body + '</div>' +
       '<datalist id="bk-pays"><option value="現金"><option value="カード"><option value="口座振替"><option value="電子マネー"><option value="給与天引き"></datalist>';
   }
@@ -2542,6 +2726,19 @@
         accounts: (y.accounts || []).map(function (a) { return { id: 0, name: str(a.name), start: amt(a.start), m: m12(a.m) }; }),
         invests: (y.invests || []).map(function (v) { return { id: 0, name: str(v.name), start: amt(v.start), end: amt(v.end) }; })
       };
+      if (y.pay && typeof y.pay === 'object') {
+        var pay = {};
+        ['1', '2'].forEach(function (k) {
+          var p = y.pay[k];
+          if (!p || !Array.isArray(p.rows)) return;
+          var q = BK.newPay();
+          q.rows.forEach(function (r, i) { Object.keys(r).forEach(function (f) { r[f] = amt((p.rows[i] || {})[f]); }); });
+          q.bonusMonths = [0, 1].map(function (j) { var v = Math.round(toNum((p.bonusMonths || [])[j])); return v >= 1 && v <= 12 ? v : [6, 12][j]; });
+          if (p.sample) q.sample = true;
+          pay[k] = q;
+        });
+        if (Object.keys(pay).length) years[k].pay = pay;
+      }
     });
     return Object.keys(years).length ? years : null;
   }
@@ -2925,9 +3122,10 @@
       var bv = document.getElementById('bookview');
       patchChildren(bv, bookHTML(bv.clientWidth - 56));
       // 選んでいる月を、月の並びの見える位置に（月を変えたときと、家計簿を開いたとき）
-      var mk = ui.book.year + '-' + ui.book.month;
+      var mi = ui.book.mode === 'pay' ? ui.book.slip : ui.book.month;
+      var mk = ui.book.year + '-' + ui.book.mode + '-' + ui.book.who + '-' + mi;
       if (ui.book.shown !== mk) {
-        var row = bv.querySelector('.bkmonths'), chip = document.getElementById('bkm-' + ui.book.month);
+        var row = bv.querySelector('.bkmonths'), chip = document.getElementById('bkm-' + mi);
         if (row && chip) { row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2; ui.book.shown = mk; }
       }
     } else if (ui.view === 'cmp') {

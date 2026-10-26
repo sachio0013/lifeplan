@@ -118,3 +118,69 @@ test('給与天引きの支出は、収入（振込額）にも足して、手�
   const p = B.toPlan(yr);
   assert.equal(p.sal1, Math.round(320000 * 12 / 1000) / 10);
 });
+
+// ---- 給与明細（Excel ver.1.80「給与シート」） ----
+const sx = JSON.parse(readFileSync(new URL('./fixtures/excel-salary.json', import.meta.url), 'utf8'));
+
+test('給与明細：記入例がExcelの給与シートと同じで、1枚ごとの合計・振込額も一致', () => {
+  [1, 2].forEach((k) => {
+    const p = B.samplePay(k), fx = sx['p' + k];
+    p.rows.forEach((r, i) => {
+      assert.deepEqual(B.PAY_ITEMS.map((f) => B.num(r[f.key])), fx.rows[i].pay, `家族${k} ${B.SLIP_LABELS[i]} 支給`);
+      assert.deepEqual(B.DEDUCT_ITEMS.map((f) => B.num(r[f.key])), fx.rows[i].deduct, `家族${k} ${B.SLIP_LABELS[i]} 控除`);
+      const t = B.slipTotals(r);
+      assert.equal(t.pay, fx.rows[i].payTotal);
+      assert.equal(t.deduct, fx.rows[i].deductTotal);
+      assert.equal(t.transfer, fx.rows[i].transfer);
+    });
+  });
+});
+
+test('給与明細：1年の集計がExcelと一致（任意の天引きが無ければ、手取り＝振込額）', () => {
+  [1, 2].forEach((k) => {
+    const s = B.paySummary(B.samplePay(k)), e = sx['p' + k].summary;
+    assert.equal(s.months, 12); assert.equal(s.bonuses, 2); assert.ok(s.full);
+    assert.equal(s.total.pay, e.payTotal);
+    assert.equal(s.total.commute, e.commute);
+    assert.equal(s.total.gross, e.gross);
+    assert.equal(s.total.social, e.social);
+    assert.equal(s.total.tax, e.tax);
+    assert.equal(s.total.transfer, e.takeHomeTransfer);
+    assert.equal(s.total.takeHome, e.takeHomeTransfer);
+    assert.equal(s.ratio, Math.round(e.ratio * 1000) / 10);
+    assert.equal(Math.round(s.total.takeHome / 10000), e.planMan);              // Excelの★（万円・整数）
+    assert.equal(s.planMan, Math.round(e.takeHomeTransfer / 1000) / 10);        // アプリは0.1万円まで
+  });
+});
+
+test('給与明細：財形・DC等（任意の天引き）は手取りに含め、記録が途中なら平均×12＋賞与で1年分を見積もる', () => {
+  const p = B.samplePay(1);
+  p.rows.forEach((r, i) => { if (i < 12) r.voluntary = 10000; });
+  const s = B.paySummary(p);
+  assert.equal(s.total.transfer, 4327480 - 120000);
+  assert.equal(s.total.takeHome, 4327480);
+  const half = B.newPay();
+  for (let i = 0; i < 6; i++) Object.assign(half.rows[i], B.samplePay(1).rows[i]);
+  Object.assign(half.rows[12], B.samplePay(1).rows[12]);
+  const h = B.paySummary(half);
+  assert.equal(h.months, 6); assert.ok(!h.full);
+  assert.equal(h.estimate.takeHome, 280290 * 12 + 482000);
+});
+
+test('給与明細のふりかえり：6月の住民税、9月の社会保険料、介護保険料のはじまり、残業代の増減を説明する', () => {
+  const p = B.samplePay(1);
+  p.rows[5].resident = 16000;
+  p.rows[8].health = 18000;
+  p.rows[9].overtime = 40000;
+  const jun = B.payInsights(p, 5).map((t) => t.text).join('\n');
+  assert.match(jun, /住民税が 14,500円 → 16,000円/);
+  assert.match(jun, /6月に切り替わります/);
+  assert.match(B.payInsights(p, 8).map((t) => t.text).join('\n'), /標準報酬月額/);
+  assert.match(B.payInsights(p, 9).map((t) => t.text).join('\n'), /残業手当は9月より ＋15,000円/);
+  const q = B.samplePay(1); q.rows[3].care = 2500;
+  assert.match(B.payInsights(q, 3).map((t) => t.text).join('\n'), /介護保険料が引かれはじめました/);
+  // 1月は前年の12月と比べる
+  const prev = B.samplePay(1), cur = B.samplePay(1); cur.rows[0].overtime = 30000;
+  assert.match(B.payInsights(cur, 0, prev).map((t) => t.text).join('\n'), /去年の12月より ＋5,000円/);
+  assert.match(B.payInsights(p, 12).map((t) => t.text).join('\n'), /住民税は賞与からは引かれません/);
+});

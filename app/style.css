@@ -546,3 +546,18 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 .thdef td.out { color: var(--text-muted); font-weight: 700; white-space: nowrap; }
 .bkauto { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .thdef th, .thdef td:nth-child(3) { white-space: nowrap; }
+/* 給与明細 */
+.bkwho { margin-top: 10px; }
+.bkmonths button.bonus { min-width: 84px; }
+.pybook p { margin: 4px 0 10px; font-size: 14px; line-height: 1.7; }
+.pybook .diffline { margin: 0; }
+.pytable { width: 100%; border-collapse: collapse; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+.pytable th { text-align: left; font-weight: 500; color: var(--text-muted); padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+.pytable td { text-align: right; font-weight: 700; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 16px; }
+.pytable td small { margin-left: 3px; font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.pytable tr.tot th { color: var(--text); font-weight: 900; }
+.pytable tr.tot td { color: var(--accent-ink); font-size: 20px; font-weight: 900; border-bottom: none; }
+.pynote { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 12px; padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); font-size: 13.5px; line-height: 1.65; }
+.pynote .ic { flex: none; margin-top: 3px; color: var(--accent-ink); }
+.pyyear .btn.block, .pybook .btn.block { margin-top: 4px; }
+.pytable tr.tot th { border-bottom: none; }

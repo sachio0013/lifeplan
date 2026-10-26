@@ -330,6 +330,7 @@ await wp.fill('#w-birth1', '1986-07-10'); await wp.locator('#w-birth1').blur();
 await wp.screenshot({ path: join(shots, '8-wizard-1.png') });
 const next = () => wp.locator('.wznav .btn', { hasText: /次へ|この内容で計算する/ }).tap().then(() => wp.waitForTimeout(100));
 await next();
+await wp.waitForSelector('.wz .check');
 const famPreset = await wp.evaluate(() => [document.querySelector('.check').classList.contains('on'), document.querySelectorAll('.kid').length]);
 await wp.fill('#w-birth2', '1988-02-03'); await wp.locator('#w-birth2').blur();
 await wp.fill('#w-kid-0', '2020-05-05'); await wp.locator('#w-kid-0').blur();
@@ -644,6 +645,45 @@ await fresh.close();
   await page.locator('#toast button').tap(); await page.waitForTimeout(150);   // 反映は元に戻して、以降のテストに影響させない
   const restored = await page.inputValue('#f-living-1-amt');
   check('プランへの反映も「元に戻す」で戻せる', restored === '360', restored);
+}
+
+// 給与明細：明細を入れると手取りが出て、前の月の内容を写せ、家計簿とプランに入れられる
+{
+  await go(page, '#seg-book');
+  await page.locator('.bkmodes button', { hasText: '給与明細' }).tap(); await page.waitForTimeout(150);
+  await page.locator('.bkempty .btn.big').tap(); await page.waitForTimeout(150);
+  await page.locator('#bkm-0').tap(); await page.waitForTimeout(100);
+  for (const [k, v] of [['base', '300000'], ['commute', '10,000'], ['health', '15000'], ['pension', '27450'], ['employ', '1800'], ['incomeTax', '7000'], ['resident', '15000'], ['voluntary', '10000']]) {
+    await page.fill('#f-py-' + k, v); await page.press('#f-py-' + k, 'Tab');
+  }
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const jan = await page.textContent('.bksum .v');
+  const io = await page.textContent('.bksum .io');
+  await page.locator('#bkm-1').tap(); await page.waitForTimeout(100);
+  await page.locator('.bkcopy').tap(); await page.waitForTimeout(150);
+  const copiedBase = await page.inputValue('#f-py-base');
+  await page.fill('#f-py-resident', '16000'); await page.press('#f-py-resident', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(150);
+  const tips = await page.textContent('.bkreview');
+  await page.screenshot({ path: join(shots, '23-pay.png') });
+  check('給与明細：手取り＝支給−社会保険料−税（通勤費・財形を含む）243,750円、振込233,750円。前の月を写せて、住民税の変化を説明する',
+    /243,750/.test(jan) && /233,750/.test(io) && copiedBase === '300,000' && /住民税が 15,000円 → 16,000円/.test(tips), `${jan} / ${io.trim()} / ${copiedBase} / ${tips.trim().slice(0, 60)}`);
+  await page.locator('.pybook .btn.block').tap(); await page.waitForTimeout(150);
+  const inBook = await page.textContent('.pybook');
+  await page.locator('.bkmodes button', { hasText: '月ごと' }).tap(); await page.waitForTimeout(150);
+  await page.locator('#bkm-1').tap(); await page.waitForTimeout(150);
+  const incVals = await page.$$eval('#bkg-income input', (els) => els.map((e) => e.value));
+  const auto = await page.textContent('#bkg-income');
+  const volVals = await page.$$eval('#bkg-6 input', (els) => els.map((e) => e.value));
+  check('給与明細から家計簿へ：振込額を収入に、財形・DC等を「給与天引き」の支出に入れ、収入にも天引き分を足す',
+    /入っています/.test(inBook) && incVals.includes('232,750') && volVals.includes('10,000') && /給与天引き/.test(auto) && /10,000/.test(auto), `${incVals.join(',')} / ${volVals.join(',')}`);
+  await page.locator('.bkmodes button', { hasText: '給与明細' }).tap(); await page.waitForTimeout(150);
+  await page.locator('.pyyear .btn.block').tap(); await page.waitForTimeout(150);
+  await go(page, '#seg-input');
+  await go(page, '#tabs .tab[data-k="income"]');
+  const planSal = await page.inputValue('#f-sal-1-1-amt');
+  check('給与明細からプランへ：記録した2か月の平均×12で、手取り291.9万円を給与に入れる', planSal === '291.9', planSal);
+  await page.locator('#toast button').tap(); await page.waitForTimeout(150);
 }
 
 // 品質テストで見つけた点の再発防止
