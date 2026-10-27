@@ -23,12 +23,14 @@
     <div id="coverview" hidden></div>
     <div id="bookview" hidden></div>
     <div id="wizview" hidden></div>
+    <div id="riskview" hidden></div>
     <div id="cmpview" hidden><div id="cmp"></div></div>
   </main>
   <nav id="tabbar" aria-label="画面の切り替え">
     <button id="seg-book" onclick="A.view('book')"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4.5h11.5a1.5 1.5 0 0 1 1.5 1.5v14.5H8a2 2 0 0 1-2-2z"/><path d="M6 18.5a2 2 0 0 1 2-2h11M9.5 8.5h6M9.5 11.5h4"/></svg><span>家計簿</span><i class="due-dot" aria-label="今月がまだです"></i></button>
     <button id="seg-input" onclick="A.view('input')"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6h10M4.5 11h7M4.5 16h4.5"/><path d="M13.5 19.5l.7-3.2 5.6-5.6a1.6 1.6 0 0 1 2.3 2.3l-5.6 5.6z"/></svg><span>入力</span></button>
     <button id="seg-cf" onclick="A.view('cf')"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5h16"/><rect x="5.5" y="11" width="3" height="6" rx="1"/><rect x="10.5" y="7.5" width="3" height="9.5" rx="1"/><rect x="15.5" y="4.5" width="3" height="12.5" rx="1"/></svg><span>未来の表</span></button>
+    <button id="seg-risk" onclick="A.view('risk')"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 5 6.2v5.3c0 4.4 3 8 7 9 4-1 7-4.6 7-9V6.2z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg><span>保障</span></button>
     <button id="seg-cmp" onclick="A.view('cmp')"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18l4.5-5 3.5 3L19.5 7"/><path d="M4 9.5l4.5 3 4-3.5 7 4"/></svg><span>比較</span></button>
   </nav>
   <div id="sheetwrap" hidden></div>

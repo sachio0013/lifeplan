@@ -490,6 +490,300 @@
     return { people: people, rows: rows, adjust: adjust };
   }
 
+  // ---- もしもの場合（必要保障額のリスクシナリオ） ----
+  //
+  // 「◯年に家族１（または家族２）が亡くなったら」のプランを作り、CF表で足りなくなるお金（不足資金）を出す。
+  // risk = { memberId（亡くなる人。既定は家族１）, year（亡くなる年。既定は開始年）, livingRate（遺族の生活費の割合％、既定70）,
+  //          funeral（葬儀・整理資金、既定200）, lumpIn（死亡退職金・弔慰金）, insurance（加入中の死亡保険金）,
+  //          drop（亡くなった後は入らない一時金・企業年金・個人年金の行の id。無ければ riskDropDefaults） }
+  // 変えるもの：
+  //   亡くなる人の給与は亡くなる年から0（その年の給与も入らないとみなす）
+  //   基本生活費は亡くなる年から、今の価値の金額×割合
+  //   住宅費の「団信あり」の行は、亡くなる年から返済分（loan、無ければ行の金額）を引く
+  //   公的年金は亡くなる年から「遺された配偶者の老齢年金＋遺族年金」（亡くなる前の年までは今のプランのまま）
+  //   葬儀・整理資金を支出に、死亡退職金・死亡保険金を一時収入に
+  // 遺族年金は、Excel「必要保障額」シート（2028年度改正版）と同じ考え方（survivorYear）。非課税なので手取り＝額面、将来の目減りは公的年金と同じ割合。
+  var CHILD_ADD = 28.17;   // 子の加算（2028年4月から、1人あたり年28.17万円）
+
+  // 遺族年金の1年分（万円）。
+  //   遺族基礎年金：18歳以下（その年の年末で）の子がいる間、基礎年金の満額＋子の加算（子1人ごと）。65歳からは本人の老齢基礎年金
+  //   遺族厚生年金：亡くなった人の報酬比例（加入が25年に満たなければ25年とみなす）。子がいなくなってから5年で終わる（2028年改正の有期給付）
+  //   65歳から：本人の老齢厚生年金と、亡くなった人の報酬比例の3/4の多いほう
+  // o: { basic（基礎年金の満額）, emp（亡くなった人の報酬比例）, own（遺された人の報酬比例。65歳からの比較用）, age, kids（18歳以下の子の数）, noKidYears（子がいない年の通算） }
+  // 返り値は { basic, emp, child, own65 }（own65 は65歳からの老齢厚生年金＋上乗せ分の合計で、本人の年金を含む）
+  function survivorYear(o) {
+    var noKid = o.kids === 0;
+    return {
+      basic: noKid && o.age < 65 ? 0 : o.basic,
+      emp: o.age >= 65 || o.noKidYears > 5 ? 0 : o.emp,
+      child: o.kids * CHILD_ADD,
+      own65: o.age >= 65 ? Math.max(o.emp * 0.75, o.own) : 0
+    };
+  }
+
+  function riskDropDefaults(state, risk) {
+    var dead = riskPerson(state, risk);
+    var re = /退職|DC|企業年金|確定拠出|確定給付/;
+    var ids = [];
+    ['lump', 'corpPension'].forEach(function (key) {
+      (state[key] || []).forEach(function (r) { if (re.test(r.memo || '') || key === 'corpPension') ids.push(r.id); });
+    });
+    return dead ? ids : [];
+  }
+  function riskPerson(state, risk) {
+    var fam = state.family || [];
+    var want = num((risk || {}).memberId);
+    return fam.filter(function (m) { return m.id === want && (m.relation === '家族１' || m.relation === '家族２'); })[0] ||
+      fam.filter(function (m) { return m.relation === '家族１'; })[0] || null;
+  }
+
+  function riskState(state, risk) {
+    risk = risk || {};
+    var st = JSON.parse(JSON.stringify(state));
+    var sy = num(st.startYear), endYear = baseBirthYear(st) + num(st.endAge);
+    var dead = riskPerson(st, risk);
+    var dy = Math.max(sy, Math.round(num(risk.year)) || sy);
+    var info = { year: dy, dead: dead, spouse: null, survivor: [], basicYears: 0, emp: 0, empYears: 0 };
+    if (!dead) return { state: st, info: info };
+    var spouse = (st.family || []).filter(function (m) { return m !== dead && (m.relation === '家族１' || m.relation === '家族２'); })[0] || null;
+    info.spouse = spouse;
+    var dby = parseDate(dead.birth).y || baseBirthYear(st);
+    var r1 = function (v) { return Math.round(v * 10) / 10; };
+    var origPlan = pensionPlan(st);
+    var originalPension = st.penAuto ? origPlan.rows : (st.pubPension || []);
+    var pdOrig = origPlan.people.filter(function (p) { return p.memberId === dead.id; })[0];
+
+    // 給与：亡くなる年から0
+    (st.salaries || []).forEach(function (s) {
+      if (s.memberId !== dead.id) return;
+      var ra = dy - dby;
+      if (!num(s.retireAge) || num(s.retireAge) > ra) s.retireAge = Math.max(1, ra);
+    });
+
+    // 遺族年金
+    var plan = pensionPlan(st);
+    var pd = plan.people.filter(function (p) { return p.memberId === dead.id; })[0];
+    var ps = spouse ? plan.people.filter(function (p) { return p.memberId === spouse.id; })[0] : null;
+    // 亡くなった人の報酬比例：これまでの分は元のプランから（給与を止めると今の年収から推測できなくなるため）、これからの分は亡くなる前の年まで
+    var earnDead = 0, empYears = 0;
+    if (pd && pdOrig) {
+      if (pd.mode === 'teiki') { earnDead = pd.earn; empYears = Math.max(0, pd.age - pd.firstAge) + pd.futureYears; }
+      else { earnDead = pdOrig.past + pd.future; empYears = pdOrig.pastYears + pd.futureYears; }
+    }
+    var E = empYears > 0 ? earnDead * (empYears < 25 ? 25 / empYears : 1) : 0;
+    info.emp = r1(E); info.empYears = empYears;
+    var kids = children(st).map(function (c) { return parseDate(c.birth).y; }).filter(Boolean);
+    var sby = spouse ? parseDate(spouse.birth).y : 0;
+    var adjust = plan.adjust / 100;
+    var noKidYears = 0;
+    var yearly = [];
+    for (var y = dy; y <= endYear; y++) {
+      var n = kids.filter(function (b) { return y - b >= 0 && y - b <= 18; }).length;
+      if (!n) noKidYears++;
+      var surv = 0, row = { basic: 0, emp: 0, child: 0, extra: 0 };
+      if (spouse) {
+        var sAge = y - sby;
+        var sv = survivorYear({ basic: BASIC_FULL, emp: E, own: ps ? ps.earn : 0, age: sAge, kids: n, noKidYears: noKidYears });
+        row.basic = sAge < 65 ? sv.basic : 0;       // 65歳からの老齢基礎年金は、本人の公的年金に入っている
+        row.emp = sv.emp; row.child = sv.child;
+        row.extra = sAge >= 65 ? Math.max(0, sv.own65 - (ps ? ps.earn : 0)) : 0;   // 本人の老齢厚生年金より多い分だけ上乗せ
+        surv = row.basic + row.emp + row.child + row.extra;
+      } else if (n > 0) {
+        // 配偶者がいなければ子が受ける（子の加算は2人目から）
+        row.basic = BASIC_FULL; row.emp = E; row.child = (n - 1) * CHILD_ADD;
+        surv = row.basic + row.emp + row.child;
+      }
+      surv *= adjust;
+      var ownPension = ps && y >= ps.startYear ? ps.amount : 0;
+      info.survivor.push({ year: y, basic: r1(row.basic * adjust), emp: r1(row.emp * adjust), child: r1(row.child * adjust), extra: r1(row.extra * adjust), own: ownPension, total: r1(surv + ownPension) });
+      yearly.push(r1(surv + ownPension));
+    }
+    // 公的年金の行（変更型）：亡くなる前の年までは今のまま、亡くなる年から毎年の額（変わる年だけ行にする）
+    var rows = originalPension.filter(function (r) { return num(r.year) && num(r.year) < dy; }).map(function (r) { return { year: num(r.year), amount: num(r.amount) }; });
+    yearly.forEach(function (v, i) { if (i === 0 || v !== yearly[i - 1]) rows.push({ year: dy + i, amount: v }); });
+    st.penAuto = false;
+    st.pubPension = rows.map(function (r, i) { return { id: 80000 + i, year: r.year, amount: r.amount, memo: '' }; });
+
+    // 基本生活費：亡くなる年から、今の価値の金額×割合
+    var rate = (risk.livingRate === undefined || risk.livingRate === '' ? 70 : num(risk.livingRate)) / 100;
+    var L = st.living || [];
+    if (L.length) {
+      if (dy === sy) L.forEach(function (r) { r.amount = num(r.amount) * rate; });
+      else {
+        // 亡くなる年の前に使われている行（1行目は開始年から）
+        var cur = L[0], curY = sy;
+        L.forEach(function (r, i) { if (i > 0 && num(r.year) < dy && num(r.year) >= curY) { cur = r; curY = num(r.year); } });
+        var at = L.filter(function (r, i) { return i > 0 && num(r.year) === dy; });
+        L.forEach(function (r, i) { if (i > 0 && num(r.year) >= dy) r.amount = num(r.amount) * rate; });
+        if (!at.length) L.push({ id: 80100, year: dy, amount: num(cur.amount) * rate, memo: '' });
+      }
+    }
+
+    // 住宅費：団信ありの行は、亡くなる年から返済分を引く
+    var H = st.housing || [];
+    var hy = function (r, i) { return i === 0 ? sy : num(r.year); };
+    var loanPart = function (r) { return r.dansin ? (r.loan === undefined || r.loan === '' ? num(r.amount) : Math.min(num(r.amount), num(r.loan))) : 0; };
+    if (H.some(function (r) { return r.dansin; })) {
+      var best = -Infinity;
+      H.forEach(function (r, i) { var ey = hy(r, i); if (ey <= dy && ey > best) best = ey; });
+      var activeRows = H.filter(function (r, i) { return hy(r, i) === best; });
+      var needRow = best < dy && activeRows.some(function (r) { return r.dansin; });
+      var activeSum = activeRows.reduce(function (s, r) { return s + num(r.amount) - loanPart(r); }, 0);
+      H.forEach(function (r, i) { if (hy(r, i) >= dy && r.dansin) { r.amount = num(r.amount) - loanPart(r); r.dansin = false; } });
+      if (needRow) H.push({ id: 80200, year: dy, amount: Math.max(0, activeSum), memo: '団信で返済終了' });
+    }
+
+    // 一時金・企業年金：亡くなった後は入らないもの
+    var drop = risk.drop || riskDropDefaults(state, risk);
+    st.lump = (st.lump || []).filter(function (r) { return !(drop.indexOf(r.id) >= 0 && num(r.year) >= dy); });
+    ['corpPension', 'privPension'].forEach(function (key) {
+      st[key] = (st[key] || []).filter(function (r) { return !(drop.indexOf(r.id) >= 0 && num(r.year) >= dy); }).map(function (r) {
+        if (drop.indexOf(r.id) >= 0 && num(r.toYear) >= dy) r.toYear = dy - 1;
+        return r;
+      });
+    });
+    // 亡くなる年の出入り
+    if (num(risk.lumpIn) > 0) st.lump.push({ id: 80300, year: dy, amount: num(risk.lumpIn), memo: '死亡退職金・弔慰金' });
+    if (num(risk.insurance) > 0) st.lump.push({ id: 80301, year: dy, amount: num(risk.insurance), memo: '死亡保険金' });
+    var funeral = risk.funeral === undefined || risk.funeral === '' ? 200 : num(risk.funeral);
+    if (funeral > 0) { st.otherLump = st.otherLump || []; st.otherLump.push({ id: 80302, year: dy, amount: funeral, memo: '葬儀・整理資金' }); }
+    return { state: st, info: info };
+  }
+
+  // 不足資金：亡くなる年に一度にいくら入れれば、最後まで金融資産（預金＋投資）がマイナスにならないか（万円、1万円単位で切り上げ）。
+  // 投資は取り崩せるとみなす（預金が足りない年は積立も止まる）
+  function riskShortfall(state, risk) {
+    var rs = riskState(state, risk);
+    var dy = rs.info.year;
+    var minDep = function (st) {
+      var r = compute(st), m = Infinity;
+      r.years.forEach(function (row) { if (row.year >= dy && row.assets.total < m) m = row.assets.total; });
+      return { min: m, cf: r };
+    };
+    var first = minDep(rs.state);
+    var need = 0;
+    if (first.min < 0) {
+      var withX = function (x) {
+        var st = JSON.parse(JSON.stringify(rs.state));
+        st.lump.push({ id: 80400, year: dy, amount: x, memo: '' });
+        return minDep(st).min;
+      };
+      // 見当（いちばん深い落ち込み）を上限にして、二分探索で最小の額を探す。
+      // 早めに入れると、マイナスの預金に付く利息の分だけ少なくて済むので、見当より少ないことがある
+      var lo = 0, hi = Math.max(1, Math.ceil(-first.min));
+      for (var k = 0; k < 20 && withX(hi) < -0.01; k++) hi *= 2;
+      while (hi - lo > 0.5) { var mid = (lo + hi) / 2; if (withX(mid) < -0.01) lo = mid; else hi = mid; }
+      need = Math.ceil(hi - 1e-6);
+    }
+    return { need: need, minDeposit: first.min, cf: first.cf, state: rs.state, info: rs.info };
+  }
+
+  // ---- 必要保障額の簡易計算（Excel「必要保障額」シート、2028年度改正版） ----
+  //
+  // 必要保障額 ＝ 支出の合計 − 収入の合計（マイナスなら0）。金額は万円、年齢は今の年齢。
+  // o: { deposit, invest, otherAssets（今の金融資産）, avgIncome, years（亡くなる人のこれまでの平均年収と勤続年数）,
+  //      age（遺される配偶者の年齢）, kids（子の年齢）, condolence, retirement, otherCompany（弔慰金・死亡退職金・その他）,
+  //      spouseNet, spouseYears（配偶者の手取り×年数）, spouseAvg, spouseLifeYears（配偶者の生涯の平均年収と勤続年数）, otherIncome,
+  //      living, rate1, indepAge, rate2（生活費、末子独立までの割合、独立年齢、その後の割合）,
+  //      loanYears, loanAnnual, dansin（団信で相殺される％）, upkeep, rent, edu, insurance, insuranceUntil, carCost, carUntil, carTimes, carPrice, others,
+  //      until（何歳までの生活を見るか、既定90）, basic（基礎年金、既定80）, childAdd（子の加算、既定28） }
+  function needSimple(o) {
+    var d = function (k, v) { return o[k] === undefined || o[k] === '' || o[k] === null ? v : num(o[k]); };
+    var until = d('until', 90), age = num(o.age);
+    var kids = (o.kids || []).filter(function (k) { return k !== '' && k !== null && k !== undefined && isFinite(parseFloat(k)); }).map(num);
+    var basicFull = d('basic', 80), childAdd = d('childAdd', 28);
+    // 遺族年金等（シート M10:CE25）
+    var emp = Math.min(1000, num(o.avgIncome)) * PEN_RATE * Math.max(25, num(o.years));
+    var own = num(o.spouseAvg) * PEN_RATE * num(o.spouseLifeYears) * 0.75;
+    var table = [], noKidYears = 0;
+    for (var a = age; a <= until && table.length < 120; a++) {
+      var n = kids.filter(function (k) { return k + (a - age) <= 18; }).length;
+      if (!n) noKidYears++;
+      var sv = survivorYear({ basic: basicFull, emp: emp, own: own, age: a, kids: n, noKidYears: noKidYears });
+      // シートは子の加算を独自の額（childAdd）で計算し、遺族厚生年金は有期のあいだ65歳以降も続く
+      var e = noKidYears > 5 ? 0 : emp;
+      table.push({ age: a, kids: n, basic: sv.basic, emp: e, own65: sv.own65, child: n * childAdd, total: sv.basic + e + sv.own65 + n * childAdd });
+    }
+    var survivor = table.reduce(function (s, r) { return s + r.total; }, 0);
+    var assets = num(o.deposit) + num(o.invest) + num(o.otherAssets);
+    var company = num(o.condolence) + num(o.retirement) + num(o.otherCompany);
+    var spouseIncome = num(o.spouseNet) * num(o.spouseYears);
+    var income = assets + survivor + company + spouseIncome + num(o.otherIncome);
+    // 支出
+    var youngest = kids.length ? Math.min.apply(null, kids) : null;
+    var y1 = youngest === null ? 0 : Math.max(0, d('indepAge', 22) - youngest);
+    var living = y1 * num(o.living) * d('rate1', 80) / 100 + (until - age - y1) * num(o.living) * d('rate2', 60) / 100;
+    var housing = num(o.rent) === 0
+      ? num(o.loanYears) * num(o.loanAnnual) * (1 - d('dansin', 100) / 100) + (until - age) * num(o.upkeep)
+      : num(o.rent) * (until - age);
+    var insurance = Math.max(0, (d('insuranceUntil', 60) - age) * num(o.insurance));
+    var car = Math.max(0, (d('carUntil', 75) - age) * num(o.carCost)) + num(o.carTimes) * num(o.carPrice);
+    var others = (o.others || []).reduce(function (s, v) { return s + num(v); }, 0);
+    var expense = living + housing + num(o.edu) + insurance + car + others;
+    return {
+      income: { assets: assets, survivor: survivor, company: company, spouse: spouseIncome, other: num(o.otherIncome), total: income },
+      expense: { living: living, housing: housing, edu: num(o.edu), insurance: insurance, car: car, other: others, total: expense },
+      need: expense - income < 0 ? 0 : Math.round(expense - income),
+      survivorTable: table, emp: emp, own: own
+    };
+  }
+
+  // 簡易計算の初期値を、プランから作る（亡くなる人と配偶者は riskPerson と同じ）
+  function needFromPlan(state, risk) {
+    var sy = num(state.startYear);
+    var dead = riskPerson(state, risk || {});
+    var fam = state.family || [];
+    var spouse = dead ? fam.filter(function (m) { return m !== dead && (m.relation === '家族１' || m.relation === '家族２'); })[0] : null;
+    var plan = pensionPlan(state);
+    var pd = dead ? plan.people.filter(function (p) { return p.memberId === dead.id; })[0] : null;
+    var ps = spouse ? plan.people.filter(function (p) { return p.memberId === spouse.id; })[0] : null;
+    var r1 = function (v) { return Math.round(v * 10) / 10; };
+    var assets = state.assets || [];
+    var cash = assets.filter(function (a) { return a.fixed; }).reduce(function (s, a) { return s + num(a.amount); }, 0);
+    var inv = assets.filter(function (a) { return !a.fixed; }).reduce(function (s, a) { return s + num(a.amount); }, 0);
+    var age = spouse && parseDate(spouse.birth).y ? sy - parseDate(spouse.birth).y : '';
+    var kids = children(state).map(function (c) { var b = parseDate(c.birth).y; return b ? sy - b : null; })
+      .filter(function (k) { return k !== null && k >= 0 && k <= 22; });
+    var spSal = spouse ? (state.salaries || []).filter(function (s) { return s.memberId === spouse.id; })[0] : null;
+    var spNet = spSal && spSal.rows[0] ? num(spSal.rows[0].amount) : 0;
+    var spYears = spNet > 0 && age !== '' ? Math.max(0, (num(spSal.retireAge) || 65) - age) : 0;
+    var r = compute(state);
+    var edu = r.years.reduce(function (s, y) { return s + y.expense.education; }, 0);
+    // 住居費：団信ありの行（住宅ローン）があれば、その返済と維持費。無ければ開始年の住宅費を家賃（または維持費）として
+    var H = state.housing || [];
+    var h0 = H.filter(function (x) { return x.dansin; })[0] || H[0] || { amount: 0 };
+    var loanYears = 0, loanAnnual = 0, upkeep = 0, rent = 0;
+    if (h0.dansin) {
+      loanAnnual = h0.loan === undefined || h0.loan === '' ? num(h0.amount) : num(h0.loan);
+      upkeep = Math.max(0, num(h0.amount) - loanAnnual);
+      var next = H.slice(1).map(function (x) { return num(x.year); }).filter(function (y) { return y > sy; }).sort(function (a, b) { return a - b; });
+      var lc = state.loanCalc;
+      var end = lc && num(lc.start) && num(lc.years) ? num(lc.start) + num(lc.years) : next.length ? next[next.length - 1] : sy + 30;
+      loanYears = Math.max(0, end - sy);
+    } else rent = num(h0.amount);
+    var carBuy = state.carBuy || {};
+    var cars = carOccurrences(state).filter(function (c) { return c.year >= sy; });
+    var avg = function (p) {
+      if (!p) return { avg: 0, years: 0 };
+      var yrs = p.pastYears + p.futureYears;
+      return { avg: yrs ? r1((p.past + p.future) / PEN_RATE / yrs) : 0, years: yrs };
+    };
+    var pastOnly = pd ? { avg: pd.pastYears ? r1(pd.past / PEN_RATE / pd.pastYears) : pd.current, years: pd.pastYears } : { avg: 0, years: 0 };
+    var life = avg(ps);
+    return {
+      deposit: cash, invest: inv, otherAssets: 0,
+      avgIncome: pastOnly.avg, years: pastOnly.years,
+      age: age, kids: kids,
+      condolence: 0, retirement: 0, otherCompany: 0,
+      spouseNet: spNet, spouseYears: spYears, spouseAvg: life.avg, spouseLifeYears: life.years, otherIncome: 0,
+      living: (state.living && state.living[0]) ? num(state.living[0].amount) : 0, rate1: 80, indepAge: 22, rate2: 60,
+      loanYears: loanYears, loanAnnual: loanAnnual, dansin: 100, upkeep: upkeep, rent: rent,
+      edu: r1(edu), insurance: (state.insurance && state.insurance[0]) ? num(state.insurance[0].amount) : 0, insuranceUntil: 60,
+      carCost: (state.carCost && state.carCost[0]) ? num(state.carCost[0].amount) : 0, carUntil: num(carBuy.untilAge) || 75,
+      carTimes: cars.length, carPrice: num(carBuy.amount), others: [], until: 90
+    };
+  }
+
   // ---- 住宅ローンの試算（入力シート T114:AH125、住宅ローン返済表シート） ----
 
   // 元利均等返済。金利は3段階まで変えられ、2段階目以降は「前の段階が終わった時点の残高」を
@@ -816,6 +1110,6 @@
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
     eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
     compute: compute, takeHome: takeHome, takeHomeFromSlip: takeHomeFromSlip, investSim: investSim, investNeed: investNeed, dependentGroup: dependentGroup, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults,
-    pensionPlan: pensionPlan, pensionCap: pensionCap, pensionNet: pensionNet, grossFromNet: grossFromNet, wageCurve: wageCurve, salarySeries: salarySeries, loanSchedule: loanSchedule
+    pensionPlan: pensionPlan, riskState: riskState, riskShortfall: riskShortfall, riskDropDefaults: riskDropDefaults, needSimple: needSimple, needFromPlan: needFromPlan, pensionCap: pensionCap, pensionNet: pensionNet, grossFromNet: grossFromNet, wageCurve: wageCurve, salarySeries: salarySeries, loanSchedule: loanSchedule
   };
 }));

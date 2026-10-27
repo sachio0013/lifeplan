@@ -717,6 +717,48 @@ await fresh.close();
   await page.locator('#toast button').tap(); await page.waitForTimeout(150);
 }
 
+// 保障：もしもの場合の必要保障額（CF表で計算・かんたん計算）。団信の印、保険金で足りるか、プランとして保存
+{
+  await go(page, '#seg-input');
+  await go(page, '#tabs .tab[data-k="expense"]');
+  const dansinBoxes = await page.locator('#card-housing .dansin input[type=checkbox]').count();
+  const dansinOn = await page.locator('#card-housing .dansin input[type=checkbox]:checked').count();
+  await go(page, '#seg-risk');
+  await page.waitForSelector('.rkres');
+  const need0 = parseInt((await page.textContent('.rkres .row b')).replace(/[^0-9]/g, ''), 10);
+  const steps = await page.locator('.rksteps span').count();
+  await page.fill('#f-rk-insurance', String(need0)); await page.press('#f-rk-insurance', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
+  const enough = await page.textContent('.rkres');
+  await page.fill('#f-rk-insurance', String(Math.max(0, need0 - 500))); await page.press('#f-rk-insurance', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
+  const rest = await page.textContent('.rkres');
+  await page.screenshot({ path: join(shots, '24-risk.png') });
+  check('保障（CF表で計算）：団信の印があり、必要保障額と遺族年金の移り変わりが出て、保険金を入れると足りるか・あといくらかがわかる',
+    dansinBoxes >= 2 && dansinOn >= 2 && need0 > 0 && steps >= 3 && /足りています/.test(enough) && /あと 500/.test(rest),
+    `団信=${dansinOn}/${dansinBoxes} 必要=${need0} 段階=${steps} / ${enough.replace(/\s+/g, ' ').slice(0, 60)} / ${rest.replace(/\s+/g, ' ').slice(0, 80)}`);
+  await page.locator('.rkmode button', { hasText: 'かんたん計算' }).tap(); await page.waitForTimeout(200);
+  const simple0 = parseInt((await page.textContent('.rkres .row b')).replace(/[^0-9]/g, ''), 10);
+  await page.fill('#f-rks-retirement', '1000'); await page.press('#f-rks-retirement', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
+  const simple1 = parseInt((await page.textContent('.rkres .row b')).replace(/[^0-9]/g, ''), 10);
+  const edited = await page.locator('.rkcard .calcrow.edited').count();
+  await page.screenshot({ path: join(shots, '25-risk-simple.png') });
+  check('保障（かんたん計算）：プランから入れた値で必要保障額が出て、死亡退職金1,000万円を入れると1,000万円減り、書き換えた欄に印が付く',
+    simple0 > 0 && simple0 - simple1 === Math.min(1000, simple0) && edited === 1, `${simple0} → ${simple1} 印=${edited}`);
+  await page.locator('.rkcard .btn.ghost', { hasText: 'プランから入れた値に戻す' }).tap(); await page.waitForTimeout(150);
+  await page.locator('.rkmode button', { hasText: 'CF表で計算' }).tap(); await page.waitForTimeout(200);
+  const plansBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('lifeplan.v2')).plans.length);
+  await page.locator('.rkcard .btn.block', { hasText: 'プランとして保存' }).tap();
+  await page.waitForSelector('#chart');
+  const saved = await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return [s.plans.length, s.plans.find((p) => p.id === s.activeId).name]; });
+  check('保障：もしもの場合をプランとして保存すると、未来の表で見られる', saved[0] === plansBefore + 1 && /もしも/.test(saved[1]), saved.join(' '));
+  // 元のプランに戻す（以降のテストのため）
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); A.planSwitch(s.plans.find((p) => p.name === '記入例').id); });
+  await page.waitForTimeout(150);
+  await go(page, '#seg-input');
+}
+
 // 品質テストで見つけた点の再発防止
 {
   // 入力欄にはすべて読み上げ用の名前がある

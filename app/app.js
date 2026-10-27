@@ -76,7 +76,7 @@
   var store = load();
   var state = plan().state;
   var ui = {
-    view: location.hash === '#cf' ? 'cf' : location.hash === '#cmp' ? 'cmp' : location.hash === '#book' ? 'book' : store.prefs.welcomed ? 'input' : 'cover',
+    view: location.hash === '#cf' ? 'cf' : location.hash === '#cmp' ? 'cmp' : location.hash === '#book' ? 'book' : location.hash === '#risk' ? 'risk' : store.prefs.welcomed ? 'input' : 'cover',
     cover: { family: 'kid2', home: 'rent', needs: [] },   // 表紙で選んでいるもの
     help: '',          // 開いている「？」の説明
     thDef: false,      // 手取り計算の「手取りに含めるもの・含めないもの」を開いているか
@@ -265,6 +265,7 @@
   var A = {
     num: function (key, id, field, v) { var r = byId(state[key], id); if (r) r[field] = toNum(v); commit(); },
     text: function (key, id, field, v) { var r = byId(state[key], id); if (r) r[field] = v; commit(); },
+    dansin: function (key, id, on) { var r = byId(state[key], id); if (!r) return; if (on) r.dansin = true; else delete r.dansin; commit(); },
     del: function (key, id) { snapshot('行を削除しました'); state[key] = state[key].filter(function (r) { return r.id !== id; }); commit(); },
     add: function (key, max, hasTo) {
       var list = state[key];
@@ -497,7 +498,8 @@
     income: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10.5h18M15.5 15h2"/>',
     pension: '<path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>',
     expense: '<path d="M4.5 10h15l-1.6 9.2a1 1 0 0 1-1 .8H7.1a1 1 0 0 1-1-.8L4.5 10zM8 10l4-6 4 6"/>',
-    invest: '<path d="M12 21v-9M12 12c0-4 3-7 8-7 0 4.5-3 7-8 7zM12 14.5c0-3-2.5-5.5-7-5.5 0 3.5 2.5 5.5 7 5.5z"/>'
+    invest: '<path d="M12 21v-9M12 12c0-4 3-7 8-7 0 4.5-3 7-8 7zM12 14.5c0-3-2.5-5.5-7-5.5 0 3.5 2.5 5.5 7 5.5z"/>',
+    shield: '<path d="M12 3.5 5 6.2v5.3c0 4.4 3 8 7 9 4-1 7-4.6 7-9V6.2z"/><path d="M9 12l2.2 2.2L15.5 10"/>'
   };
   function ic(name, size, cls) {
     return '<svg class="ic' + (cls ? ' ' + cls : '') + '" width="' + (size || 20) + '" height="' + (size || 20) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
@@ -575,6 +577,11 @@
           '<button class="btn" style="margin-left:auto;padding:7px 12px" onclick="A.merge(' + q + ')">合算する</button></div>' : '') +
         vmsgs(at) +
         (opts.memo ? textInput(fid(key, r.id, 'memo'), 'op memo', '', r.memo || '', 'A.text(' + q + ",'memo',this.value)", '備考') : '') +
+        // 住宅ローンの行：団体信用生命保険（団信）があれば、もしもの時は返済がなくなる（保障タブで使う）
+        (opts.dansin && toNum(r.amount) > 0 ? '<div class="dansin"><label><input type="checkbox" id="' + fid(key, r.id, 'dansin') + '"' + (r.dansin ? ' checked' : '') +
+          ' onchange="A.dansin(' + q + ',this.checked)"><span>団信あり</span></label>' +
+          (r.dansin ? '<span class="u" style="margin-left:auto">うち返済</span>' + numInput(fid(key, r.id, 'loan'), 'op', 72, r.loan === undefined || r.loan === '' ? r.amount : r.loan, 'A.num(' + q + ",'loan',this.value)") + '<span class="u">万円</span>' : '') +
+        '</div>' : '') +
       '</div>';
     }).join('');
   }
@@ -827,7 +834,7 @@
 
     h += '<h2 class="sec" id="sec-expense">' + ic('expense', 20) + '支出</h2>';
     h += groupCard('living', '基本生活費', { monthly: true, max: 5, requiredFirst: true, anchorFirst: true, inflation: true, dupCheck: true, memo: true, hint: '住宅費・教育費・保険料・自動車・その他を除いた、ふだんの支出。2行目以降は今の物価で入れれば、物価上昇を足して計算します。' });
-    h += groupCard('housing', '住宅費', { monthly: true, max: 5, requiredFirst: true, anchorFirst: true, dupCheck: true, memo: true, hint: '家賃・ローン・修繕/管理費・固定資産税の合計', extra: loanCalcHTML() });
+    h += groupCard('housing', '住宅費', { monthly: true, max: 5, requiredFirst: true, anchorFirst: true, dupCheck: true, memo: true, dansin: true, hint: '家賃・ローン・修繕/管理費・固定資産税の合計。住宅ローンに団信があれば印を付けると、保障タブで「もしもの時は返済がなくなる」として計算します', extra: loanCalcHTML() });
     h += groupCard('housingLump', '住宅費一時金（頭金など）', { max: 3, lump: true, memo: true });
     E.children(state).forEach(function (c) { h += eduCard(c); });
     h += groupCard('insurance', '保険料', { monthly: true, max: 7, requiredFirst: true, dupCheck: true, memo: true });
@@ -1351,7 +1358,7 @@
   function loanRows(lc, sch) {
     var start = toNum(lc.start), up = toNum(lc.upkeep);
     var rows = sch.phases.map(function (ph, k) {
-      return { year: start + ph.from, amount: r1(ph.annual + up), memo: '住宅ローン（' + (k ? '金利' + ph.rate + '%に変わってから' : '当初金利' + ph.rate + '%') + '）＋修繕・管理費等' };
+      return { year: start + ph.from, amount: r1(ph.annual + up), loan: r1(ph.annual), dansin: true, memo: '住宅ローン（' + (k ? '金利' + ph.rate + '%に変わってから' : '当初金利' + ph.rate + '%') + '）＋修繕・管理費等' };
     });
     if (sch.phases.length) rows.push({ year: start + sch.years, amount: r1(up), memo: '完済後の修繕・管理費等' });
     return rows;
@@ -1482,10 +1489,15 @@
     var head = state.housing[0] || { id: nid(), year: sy, amount: 0, memo: '' };
     // 開始年までに始まっている分は1行目（開始年から）にまとめる
     var atStart = gen.filter(function (r) { return r.year <= sy; }).pop();
-    if (atStart) { head.amount = atStart.amount; head.memo = atStart.memo; }
+    if (atStart) {
+      head.amount = atStart.amount; head.memo = atStart.memo;
+      if (atStart.dansin) { head.dansin = true; head.loan = atStart.loan; } else { delete head.dansin; delete head.loan; }
+    }
     var keep = state.housing.slice(1).filter(function (r) { return toNum(r.year) < start; });
     state.housing = [head].concat(keep, gen.filter(function (r) { return r.year > sy; }).map(function (r) {
-      return { id: nid(), year: r.year, amount: r.amount, memo: r.memo };
+      var row = { id: nid(), year: r.year, amount: r.amount, memo: r.memo };
+      if (r.dansin) { row.dansin = true; row.loan = r.loan; }
+      return row;
     }));
   }
 
@@ -2600,6 +2612,217 @@
     document.getElementById('scroll').scrollTop = 0;
   };
 
+  // ---------- 保障（必要保障額） ----------
+  //
+  // 家族１（または家族２）に万一のことがあったときに、遺された家族のお金が足りるか。2つの方法で出す。
+  //   CF表でシミュレーション（E.riskShortfall）：今のプランをもとに「◯年に亡くなったら」のCF表を作り、不足資金を出す
+  //   かんたん計算（E.needSimple）：Excel「必要保障額」シートと同じ式。初期値はプランから（E.needFromPlan）、書き換えは state.risk.simple に置く
+  // 設定は state.risk = { mode, memberId, year, livingRate, funeral, lumpIn, insurance, drop, simple }。
+
+  function riskOf(create) {
+    if (!state.risk && create) state.risk = {};
+    return state.risk || {};
+  }
+  function riskAdults() {
+    return state.family.filter(function (m) { return (m.relation === '家族１' || m.relation === '家族２') && E.parseDate(m.birth).y; });
+  }
+  function riskDead() {
+    var rk = riskOf(), ad = riskAdults();
+    return ad.filter(function (m) { return m.id === toNum(rk.memberId); })[0] || ad.filter(function (m) { return m.relation === '家族１'; })[0] || ad[0] || null;
+  }
+  function riskInput(rk) {
+    var dead = riskDead();
+    return { memberId: dead ? dead.id : 0, year: toNum(rk.year) || state.startYear, livingRate: rk.livingRate, funeral: rk.funeral,
+      lumpIn: rk.lumpIn, insurance: rk.insurance, drop: rk.drop };
+  }
+  function riskField(f, label, small, unit, value, w) {
+    return '<div class="calcrow"><span class="u" style="flex:1;min-width:0">' + label + (small ? '<small>' + small + '</small>' : '') + '</span>' +
+      numInput('f-rk-' + f, 'op', w || 84, value, "A.rk('" + f + "',this.value)", ';margin-left:auto') + '<span class="u">' + unit + '</span></div>';
+  }
+  function manYen(v) { return Math.round(v).toLocaleString('ja-JP'); }
+
+  // いつもと、もしもの金融資産の推移
+  function riskChartSVG(base, risk, dy, width) {
+    var W = Math.max(280, width || 320), H = 150, P = 8, L = 34;
+    var ys = base.years, n = ys.length;
+    if (n < 2) return '';
+    var vals = ys.map(function (y) { return y.assets.total; }).concat(risk.years.map(function (y) { return y.assets.total; }));
+    var max = Math.max.apply(null, vals.concat([0])), min = Math.min.apply(null, vals.concat([0]));
+    if (max === min) max = min + 1;
+    var X = function (i) { return L + (W - L - P) * i / (n - 1); }, Y = function (v) { return P + (H - 2 * P) * (max - v) / (max - min); };
+    var line = function (rows) { return rows.map(function (y, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(y.assets.total).toFixed(1); }).join(''); };
+    var di = dy - ys[0].year;
+    return '<svg class="rkchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="金融資産の推移。いつもと、もしもの場合">' +
+      '<line x1="' + L + '" x2="' + (W - P) + '" y1="' + Y(0).toFixed(1) + '" y2="' + Y(0).toFixed(1) + '" stroke="var(--line)" stroke-width="1.5"/>' +
+      '<text x="' + (L - 4) + '" y="' + (Y(0) + 4).toFixed(1) + '" text-anchor="end" class="ax">0</text>' +
+      '<text x="' + (L - 4) + '" y="' + (Y(max) + 8).toFixed(1) + '" text-anchor="end" class="ax">' + man(max) + '</text>' +
+      (min < 0 ? '<text x="' + (L - 4) + '" y="' + (Y(min)).toFixed(1) + '" text-anchor="end" class="ax">' + man(min) + '</text>' : '') +
+      (di >= 0 && di < n ? '<line x1="' + X(di).toFixed(1) + '" x2="' + X(di).toFixed(1) + '" y1="' + P + '" y2="' + (H - P) + '" stroke="var(--text-faint)" stroke-dasharray="4 4"/>' : '') +
+      '<path d="' + line(ys) + '" fill="none" stroke="var(--s1)" stroke-width="2.5"/>' +
+      '<path d="' + line(risk.years) + '" fill="none" stroke="var(--neg)" stroke-width="2.5"/>' +
+    '</svg>' +
+    '<div class="catlegend"><span><i style="background:var(--s1)"></i>いつも</span><span><i style="background:var(--neg)"></i>もしも（' + dy + '年）</span></div>';
+  }
+
+  function riskHTML(width) {
+    var rk = riskOf(), mode = rk.mode === 'simple' ? 'simple' : 'cf';
+    var ad = riskAdults(), dead = riskDead();
+    var head = '<div class="hero rkhero"><div class="k">' + ic('shield', 20) + 'もしもの保障</div>' +
+      '<p>家計の中心の人に万一のことがあったら、遺された家族のお金は足りる？　足りない分が「必要保障額」で、生命保険で備える目安です。</p></div>';
+    if (!dead) return head + '<div class="card"><p class="wzlead" style="margin:0">家族構成に家族１の生年月日を入れると、計算できます。</p></div>';
+    var sw = '<div class="mini thsp rkmode" role="radiogroup" aria-label="計算のしかた">' + [['cf', 'CF表で計算'], ['simple', 'かんたん計算']].map(function (o) {
+      var on = mode === o[0];
+      return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.rk(\'mode\',\'' + o[0] + '\')">' + o[1] + '</button>';
+    }).join('') + '</div>';
+    var who = ad.length > 1 ? '<div class="calcsec">万一のことがあったとき</div><div class="mini thsp" role="radiogroup" aria-label="亡くなる人">' + ad.map(function (m) {
+      var on = m.id === dead.id;
+      return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.rk(\'memberId\',' + m.id + ')">' + esc(memberName(m.id)) + '</button>';
+    }).join('') + '</div>' : '';
+    return head + '<div class="card rkcard">' + sw + who + (mode === 'simple' ? riskSimpleHTML(dead) : riskCfHTML(dead, width)) + '</div>' + DISCLAIMER;
+  }
+
+  function riskCfHTML(dead, width) {
+    var rk = riskOf(), input = riskInput(rk);
+    var by = E.parseDate(dead.birth).y, dy = input.year;
+    var withIns = E.riskShortfall(state, input);
+    var noIns = toNum(rk.insurance) > 0 ? E.riskShortfall(state, Object.assign({}, input, { insurance: 0 })) : withIns;
+    var base = E.compute(state);
+    var info = withIns.info, sv = info.survivor;
+    var name = esc(memberName(dead.id)), sp = info.spouse;
+    // 遺族年金が変わる年
+    var steps = [];
+    sv.forEach(function (x, i) { if (i === 0 || x.total !== sv[i - 1].total) steps.push(x); });
+    var sby = sp ? E.parseDate(sp.birth).y : 0;
+    var first = sv[0] || { basic: 0, child: 0, emp: 0, total: 0 };
+    // 亡くなった後は入らない一時金・年金
+    var drop = rk.drop || E.riskDropDefaults(state, input);
+    var cands = [];
+    [['lump', '一時収入'], ['corpPension', '企業年金'], ['privPension', '個人年金']].forEach(function (k) {
+      (state[k[0]] || []).forEach(function (r) {
+        var last = k[0] === 'lump' ? toNum(r.year) : toNum(r.toYear);
+        if (last >= dy && toNum(r.amount) > 0) cands.push({ id: r.id, label: (r.memo || k[1]) + '（' + (k[0] === 'lump' ? r.year + '年 ' : r.year + '〜' + r.toYear + '年 年') + manYen(r.amount) + '万円）' });
+      });
+    });
+    var dansin = state.housing.filter(function (r) { return r.dansin; }).length;
+    var need = withIns.need, need0 = noIns.need;
+    return '<div class="rkres ' + (need > 0 ? 'ng' : 'ok') + '">' +
+        '<div class="k">' + name + 'が' + dy + '年（' + (dy - by) + '歳）に亡くなったら</div>' +
+        '<div class="row"><span>必要保障額</span><b>' + manYen(need0) + '</b><span class="u">万円</span></div>' +
+        (toNum(rk.insurance) > 0 ? '<div class="row sub"><span>加入中の保険 ' + manYen(rk.insurance) + '万円を入れると</span>' +
+          (need > 0 ? '<b>あと ' + manYen(need) + '</b><span class="u">万円</span>' : '<b class="okt">足りています</b>') + '</div>' : '') +
+        '<div class="hint" style="padding:6px 0 0">亡くなった年に一度にこの額が入れば、' + (base.years.length ? base.years[base.years.length - 1].year : '') + '年まで金融資産（預金＋投資）がマイナスになりません。</div>' +
+      '</div>' +
+      riskChartSVG(base, withIns.cf, dy, width) +
+      '<div class="calcsec">遺族年金など</div>' +
+      '<div class="ppbreak" style="font-size:13.5px">' + dy + '年：遺族基礎年金 ' + first.basic + ' ＋ 子の加算 ' + first.child + ' ＋ 遺族厚生年金 ' + first.emp + ' ＝ <b>' + penFmt(first.basic + first.child + first.emp) + '万円</b>（' + name + 'の厚生年金 ' + penFmt(info.emp) + '万円' + (info.empYears < 25 ? '・加入25年とみなす' : '') + 'から）</div>' +
+      '<div class="rksteps">' + steps.slice(0, 8).map(function (x) {
+        return '<span>' + x.year + '年' + (sp ? '（' + esc(memberName(sp.id)) + ' ' + (x.year - sby) + '歳）' : '') + '<b>' + penFmt(x.total) + '</b>万円</span>';
+      }).join('') + '</div>' +
+      '<div class="hint" style="padding:4px 0 0">子が18歳を過ぎると遺族基礎年金が終わり、遺族厚生年金もその5年後に終わります（2028年の改正）。65歳からは本人の年金です。非課税なので手取りのまま、将来の目減り（公的年金と同じ割合）を掛けています。</div>' +
+      '<div class="calcsec">条件</div>' +
+      riskField('year', '亡くなる年', '今年なら「今すぐの場合」。' + (dy - by) + '歳', '年', dy, 76) +
+      riskField('livingRate', '遺族の生活費', '今の生活費に対する割合', '％', rk.livingRate === undefined || rk.livingRate === '' ? 70 : rk.livingRate, 64) +
+      riskField('funeral', '葬儀・整理資金', '', '万円', rk.funeral === undefined || rk.funeral === '' ? 200 : rk.funeral) +
+      riskField('lumpIn', '死亡退職金・弔慰金', '会社の規程で。DCの残高もここへ', '万円', rk.lumpIn === undefined ? '' : rk.lumpIn) +
+      riskField('insurance', '加入中の死亡保険金', '団信は除く', '万円', rk.insurance === undefined ? '' : rk.insurance) +
+      '<div class="hint" style="padding:6px 0 0">住宅ローンの団信：' + (dansin ? dansin + '行に印があり、亡くなった年から返済がなくなります。' : '印のある行がありません。入力の「住宅費」で、団信のある住宅ローンの行に印を付けてください。') + '</div>' +
+      (cands.length ? '<div class="calcsec">亡くなった後は入らないもの</div>' + cands.map(function (c) {
+        var on = drop.indexOf(c.id) >= 0;
+        return '<label class="deprow"><input type="checkbox" id="f-rk-drop-' + c.id + '"' + (on ? ' checked' : '') + ' onchange="A.rkDrop(' + c.id + ',this.checked)"><span class="nm">' + esc(c.label) + '</span></label>';
+      }).join('') : '') +
+      '<div class="hint" style="padding:8px 0 0">' + name + 'の給与は亡くなった年から0、生活費は割合をかけた額、公的年金は遺された人の年金と遺族年金に置き換えます。そのほかの支出（教育費・住宅費・車・保険料など）はプランのままです。</div>' +
+      '<button class="btn block" style="margin-top:12px" onclick="A.rkSave()">' + ic('chart', 18) + 'このもしもの場合をプランとして保存（未来の表で見る）</button>';
+  }
+
+  var SIMPLE_FIELDS = [
+    ['収入面'],
+    ['deposit', '普通預金等', '', '万円'], ['invest', '投資資産', 'NISA、iDeCo、株など', '万円'], ['otherAssets', 'その他の資産', '', '万円'],
+    ['avgIncome', '亡くなる人のこれまでの平均年収', '額面', '万円'], ['years', '勤続年数', '25年未満は25年とみなす', '年'],
+    ['age', '遺される配偶者の年齢', '', '歳'],
+    ['condolence', '弔慰金', '会社から', '万円'], ['retirement', '死亡退職金', '', '万円'], ['otherCompany', 'その他（会社から）', '', '万円'],
+    ['spouseNet', '配偶者の手取り（年間）', '', '万円'], ['spouseYears', 'その年数', '', '年'],
+    ['spouseAvg', '配偶者の生涯の平均年収', '額面。65歳からの年金の計算用', '万円'], ['spouseLifeYears', '生涯の勤続年数', '', '年'],
+    ['otherIncome', 'その他の収入', '相続など', '万円'],
+    ['支出面'],
+    ['living', '今の基本生活費', '', '万円'], ['rate1', '亡くなった後の生活費の割合', '末子が独立するまで', '％'], ['indepAge', '末子独立の年齢', '', '歳'], ['rate2', '末子独立後の生活費の割合', '', '％'],
+    ['loanYears', '住宅ローンの残り', '', '年'], ['loanAnnual', '住宅ローンの年返済額', '', '万円'], ['dansin', '団信で相殺される割合', '', '％'],
+    ['upkeep', '維持費（年）', '修繕積立・管理費・固定資産税', '万円'], ['rent', '家賃（年）', '賃貸の場合', '万円'],
+    ['edu', '子供の教育費', 'プランの教育費の合計', '万円'],
+    ['insurance', '保険料（年）', '遺された家族の分', '万円'], ['insuranceUntil', '保険料は配偶者が何歳まで', '', '歳'],
+    ['carCost', '自動車の維持費（年）', '', '万円'], ['carUntil', '配偶者が何歳まで', '', '歳'], ['carTimes', '車の購入回数', '', '回'], ['carPrice', '1台あたり', '', '万円'],
+    ['others', 'その他の支出', '旅行など', '万円'], ['until', '何歳までの生活を見るか', '配偶者の年齢', '歳']
+  ];
+  function riskSimpleHTML(dead) {
+    var rk = riskOf(), ov = rk.simple || {};
+    var base = E.needFromPlan(state, riskInput(rk));
+    var o = {};
+    Object.keys(base).forEach(function (k) { o[k] = ov[k] !== undefined && ov[k] !== '' ? ov[k] : base[k]; });
+    if (ov.others !== undefined && ov.others !== '') o.others = [ov.others];
+    var r = E.needSimple(o);
+    var changed = Object.keys(ov).some(function (k) { return ov[k] !== undefined && ov[k] !== ''; });
+    var rows = SIMPLE_FIELDS.map(function (f) {
+      if (f.length === 1) return '<div class="calcsec">' + f[0] + '</div>';
+      var v = f[0] === 'others' ? (ov.others !== undefined ? ov.others : 0) : o[f[0]];
+      var mark = ov[f[0]] !== undefined && ov[f[0]] !== '';
+      return '<div class="calcrow' + (mark ? ' edited' : '') + '"><span class="u" style="flex:1;min-width:0">' + f[1] + (f[2] ? '<small>' + f[2] + '</small>' : '') + '</span>' +
+        numInput('f-rks-' + f[0], 'op', 76, v, "A.rkSimple('" + f[0] + "',this.value)", ';margin-left:auto') + '<span class="u">' + f[3] + '</span></div>';
+    }).join('');
+    var kids = o.kids.length ? o.kids.map(function (k) { return k + '歳'; }).join('・') : 'なし';
+    var bar = function (label, parts, total) {
+      return '<div class="rkbar"><div class="t">' + label + '<b>' + manYen(total) + '</b>万円</div>' +
+        parts.filter(function (p) { return p[1] > 0; }).map(function (p) { return '<div class="r"><span>' + p[0] + '</span><span>' + manYen(p[1]) + '</span></div>'; }).join('') + '</div>';
+    };
+    return '<div class="rkres ' + (r.need > 0 ? 'ng' : 'ok') + '">' +
+        '<div class="k">' + esc(memberName(dead.id)) + 'に今、万一のことがあったら（Excelの必要保障額シートと同じ計算）</div>' +
+        '<div class="row"><span>必要保障額</span><b>' + manYen(r.need) + '</b><span class="u">万円</span></div>' +
+      '</div>' +
+      '<div class="rkcols">' +
+        bar('支出の合計', [['生活費', r.expense.living], ['住居費', r.expense.housing], ['教育費', r.expense.edu], ['保険料', r.expense.insurance], ['自動車', r.expense.car], ['その他', r.expense.other]], r.expense.total) +
+        bar('収入の合計', [['今の金融資産', r.income.assets], ['遺族年金など', r.income.survivor], ['会社から', r.income.company], ['配偶者の収入', r.income.spouse], ['その他', r.income.other]], r.income.total) +
+      '</div>' +
+      '<div class="hint" style="padding:6px 0 0">18歳以下（独立前）の子：' + kids + '（家族構成から）。遺族年金は2028年の改正（子が18歳を過ぎて5年で遺族厚生年金が終わる）を見込んでいます。</div>' +
+      rows +
+      (changed ? '<button class="btn ghost block" style="margin-top:12px" onclick="A.rkSimpleReset()">プランから入れた値に戻す</button>' : '') +
+      '<div class="hint" style="padding:8px 0 0">金額のほとんどはプランから入れています。書き換えた欄には印が付きます。時間の流れ（物価・運用・教育費の時期）を入れて確かめるなら「CF表で計算」へ。</div>';
+  }
+
+  A.rk = function (field, v) {
+    var rk = riskOf(true);
+    if (field === 'mode') rk.mode = v;
+    else if (field === 'memberId') { rk.memberId = toNum(v); delete rk.drop; }
+    else rk[field] = String(v).trim() === '' ? '' : toNum(v);
+    if (field === 'year') delete rk.drop;
+    commit();
+  };
+  A.rkDrop = function (id, on) {
+    var rk = riskOf(true);
+    var drop = (rk.drop || E.riskDropDefaults(state, riskInput(rk))).slice();
+    drop = drop.filter(function (x) { return x !== id; });
+    if (on) drop.push(id);
+    rk.drop = drop;
+    commit();
+  };
+  A.rkSimple = function (field, v) {
+    var rk = riskOf(true);
+    rk.simple = rk.simple || {};
+    rk.simple[field] = String(v).trim() === '' ? '' : toNum(v);
+    commit();
+  };
+  A.rkSimpleReset = function () { snapshot('かんたん計算をプランの値に戻しました'); delete riskOf(true).simple; commit(); };
+  A.rkSave = function () {
+    var rk = riskOf(), dead = riskDead(); if (!dead) return;
+    var input = riskInput(rk);
+    var rs = E.riskState(state, input);
+    var src = plan();
+    var p = { id: store.nextPlanId++, name: uniqueName('もしも（' + memberName(dead.id) + '・' + input.year + '年）'), state: rs.state };
+    delete p.state.risk;
+    store.plans.splice(store.plans.indexOf(src) + 1, 0, p);
+    switchTo(p.id);
+    ui.view = 'cf';
+    commit();
+    document.getElementById('scroll').scrollTop = 0;
+  };
+
   // ---------- かんたん入力（必須の項目だけを順に聞く） ----------
 
   var WZ_STEPS = ['期間と家族１', '家族', '金融資産', '収入', '年金', '支出'];
@@ -2853,7 +3076,7 @@
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
     'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato', 'lastIncome', 'social',
-    'commute', 'firstAge', 'firstIncome', 'pastYears', 'pastIncome', 'teikiEarn', 'teikiBasic', 'basicYears', 'startAge', 'contrib', 'cost', 'until', 'receive', 'target', 'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
+    'commute', 'loan', 'lumpIn', 'insurance', 'funeral', 'livingRate', 'deposit', 'invest', 'otherAssets', 'avgIncome', 'years', 'age', 'condolence', 'retirement', 'otherCompany', 'spouseNet', 'spouseYears', 'spouseAvg', 'spouseLifeYears', 'otherIncome', 'living', 'rate1', 'indepAge', 'rate2', 'loanYears', 'loanAnnual', 'dansin', 'rent', 'edu', 'insuranceUntil', 'carCost', 'carUntil', 'carTimes', 'carPrice', 'others', 'until', 'firstAge', 'firstIncome', 'pastYears', 'pastIncome', 'teikiEarn', 'teikiBasic', 'basicYears', 'startAge', 'contrib', 'cost', 'until', 'receive', 'target', 'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });
@@ -3239,7 +3462,7 @@
     var top = sc.scrollTop;
     var active = document.activeElement && document.activeElement.id;
 
-    ['book', 'input', 'cf', 'cmp'].forEach(function (v) {
+    ['book', 'input', 'cf', 'risk', 'cmp'].forEach(function (v) {
       var b = document.getElementById('seg-' + v);
       b.classList.toggle('on', ui.view === v);
       b.setAttribute('aria-current', ui.view === v ? 'page' : 'false');
@@ -3271,6 +3494,7 @@
     document.getElementById('cmpview').hidden = ui.view !== 'cmp';
     document.getElementById('coverview').hidden = ui.view !== 'cover';
     document.getElementById('bookview').hidden = ui.view !== 'book';
+    document.getElementById('riskview').hidden = ui.view !== 'risk';
     document.getElementById('topbar').hidden = ui.view === 'cover';
 
     if (ui.view === 'cover') {
@@ -3285,6 +3509,9 @@
         var row = bv.querySelector('.bkmonths'), chip = document.getElementById('bkm-' + mi);
         if (row && chip) { row.scrollLeft = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2; ui.book.shown = mk; }
       }
+    } else if (ui.view === 'risk') {
+      var rv = document.getElementById('riskview');
+      patchChildren(rv, riskHTML(rv.clientWidth - 56));
     } else if (ui.view === 'cmp') {
       var cmp = document.getElementById('cmp');
       cmp.innerHTML = cmpHTML(cmp.clientWidth - 24);
@@ -3310,7 +3537,7 @@
     }
 
     // 表示中の画面とプランの一覧だけ（隠れている画面の古い入力欄まで調べると遅くなる）
-    autoLabel(document.getElementById({ input: 'inputview', cf: 'cfview', cmp: 'cmpview', wizard: 'wizview', cover: 'coverview', book: 'bookview' }[ui.view] || 'inputview'));
+    autoLabel(document.getElementById({ input: 'inputview', cf: 'cfview', cmp: 'cmpview', wizard: 'wizview', cover: 'coverview', book: 'bookview', risk: 'riskview' }[ui.view] || 'inputview'));
     if (ui.sheet) autoLabel(document.getElementById('sheetwrap'));
     sc.scrollTop = top;
     if (active) {

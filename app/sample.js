@@ -51,8 +51,8 @@
       inflation: 0.5,
       housing: [
         { id: 1, year: 2026, amount: 100, memo: '賃貸' },
-        { id: 2, year: 2027, amount: 202, memo: '住宅ローン（当初金利）＋管理費等' },
-        { id: 3, year: 2037, amount: 221, memo: '住宅ローン（金利見直し後）＋管理費等' },
+        { id: 2, year: 2027, amount: 202, loan: 152, dansin: true, memo: '住宅ローン（当初金利）＋管理費等' },
+        { id: 3, year: 2037, amount: 221, loan: 171, dansin: true, memo: '住宅ローン（金利見直し後）＋管理費等' },
         { id: 4, year: 2062, amount: 50, memo: '完済後の管理費・固定資産税' }
       ],
       housingLump: [{ id: 1, year: 2027, amount: 500, memo: '頭金' }],

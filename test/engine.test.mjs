@@ -521,3 +521,63 @@ test('手取額：健康保険は年収2,241万円で頭打ち（雇用保険は
   const a = E.takeHome({ income: 2500, health: 'kyokai', age: 45 }).social;
   assert.ok(Math.abs(a - (2241 * 0.058 + 2500 * 0.0055 + 1080 * 0.0915)) < 0.01, String(a));
 });
+
+// ---- 必要保障額 ----
+test('必要保障額（簡易版）：Excelの必要保障額シート（2028年度改正版）の記入例と一致（3,111万円）', () => {
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/excel-need.json', import.meta.url), 'utf8'));
+  const r = E.needSimple(fx.input);
+  const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-6, `${msg}: ${a} ≠ ${b}`);
+  close(r.emp, fx.out.O10, '夫の報酬比例（25年みなし）');
+  close(r.own, fx.out.Y10, '妻の報酬比例×0.75');
+  assert.equal(r.survivorTable.length, fx.survivor.length);
+  r.survivorTable.forEach((row, i) => close(row.total, fx.survivor[i], `妻${row.age}歳の遺族年金等`));
+  close(r.income.assets, fx.out.G9, '金融資産');
+  close(r.income.survivor, fx.out.G19, '遺族年金等');
+  close(r.income.company, fx.out.G24, '会社からの保障');
+  close(r.income.spouse, fx.out.G26, '配偶者収入');
+  close(r.income.total, fx.out.G34, '収入合計');
+  close(r.expense.living, fx.out.G42, '生活費');
+  close(r.expense.housing, fx.out.G48, '住居費');
+  close(r.expense.insurance, fx.out.G58, '保険料');
+  close(r.expense.car, fx.out.G62, '自動車');
+  close(r.expense.total, fx.out.G69, '支出計');
+  assert.equal(r.need, fx.out.G71);
+});
+
+test('もしもの場合（CF表）：亡くなる年から給与が0、生活費7割、団信で返済が消え、遺族年金が入り、不足資金を出す', () => {
+  const S = require('../app/sample.js');
+  const st = S.sample();
+  st.housing.forEach((r) => { r.dansin = true; });
+  const rs = E.riskState(st, { year: 2030 });
+  const base = E.compute(st), risk = E.compute(rs.state);
+  const y = (r, yr) => r.years.find((x) => x.year === yr);
+  assert.ok(y(risk, 2029).income.salaries[0] > 0);
+  assert.equal(y(risk, 2030).income.salaries[0], 0);                                  // 夫の給与は2030年から0
+  assert.ok(Math.abs(y(risk, 2030).expense.living - y(base, 2030).expense.living * 0.7) < 0.01);   // 生活費は7割
+  assert.ok(y(risk, 2030).expense.housing < y(base, 2030).expense.housing);           // 団信
+  const sv = rs.info.survivor[0];
+  assert.ok(sv.basic > 0 && sv.child > 0 && sv.emp > 0, JSON.stringify(sv));          // 子がいる間は遺族基礎＋子の加算＋遺族厚生
+  assert.ok(y(risk, 2030).income.pension > 0);
+  const sf = E.riskShortfall(st, { year: 2030 });
+  assert.ok(sf.need >= 0);
+  // 不足資金をその年に入れれば、最後まで預金がマイナスにならない
+  const covered = E.riskShortfall(st, { year: 2030, insurance: sf.need });
+  assert.equal(covered.need, 0);
+  if (sf.need > 1) assert.ok(E.riskShortfall(st, { year: 2030, insurance: sf.need - 2 }).need > 0);
+});
+
+test('もしもの場合：子が18歳を過ぎて5年で遺族厚生年金が終わり、65歳から本人の年金（遺族の3/4のほうが多ければ差を上乗せ）', () => {
+  const S = require('../app/sample.js');
+  const st = S.sample();
+  const rs = E.riskState(st, { year: 2026 });
+  const sv = rs.info.survivor;
+  const last18 = Math.max(...st.family.filter((m) => m.relation.startsWith('子供')).map((m) => parseInt(m.birth) + 18));
+  const at = (yr) => sv.find((x) => x.year === yr);
+  assert.ok(at(last18).child > 0);
+  assert.equal(at(last18 + 1).child, 0);
+  assert.ok(at(last18 + 5).emp > 0);
+  assert.equal(at(last18 + 6).emp, 0);                    // 有期給付は5年
+  assert.equal(at(last18 + 6).basic, 0);                  // 子がいなくなると遺族基礎年金も無い
+  const wife65 = 1991 + 65;
+  assert.ok(at(wife65).own > 0);
+});
