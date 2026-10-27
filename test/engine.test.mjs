@@ -631,3 +631,42 @@ test('もしもの場合：遺される家族がいなければ葬儀・整理�
   assert.equal(y(2030).income.salaries[1], 400);
   assert.equal(y(2056).income.salaries[1], 0);              // 1991年生まれ：65歳の2056年から0
 });
+
+test('取り崩しの提案：期間ごとに額を決めて、老後の普通預金等を目標くらいに保つ', () => {
+  const S = require('../app/sample.js');
+  const st = S.sample();
+  const p = E.drawdownPlan(st, { target: 1500, startAge: 65 });
+  assert.equal(p.start, 1991 + 65);
+  assert.deepEqual(p.segments.map((g) => [g.from, g.to]), [[2056, 2065], [2066, 2075], [2076, 2081]]);   // 10年ごと
+  const dep = (y) => p.after.years.find((x) => x.year === y).assets.deposit;
+  p.segments.slice(0, -1).forEach((g) => assert.ok(Math.abs(dep(g.to) - 1500) < 15, `${g.to}: ${dep(g.to)}`));   // 期間の最後の年に目標
+  // 最後の期間はNISAを使い切る額まで取り崩しても少し届かない（1,353万円）が、目標の8割以上なので「おおむね保てる」
+  assert.ok(dep(2081) >= 1200 && dep(2081) < 1500, String(dep(2081)));
+  assert.ok(!p.short && p.keptUntil === 2081);
+  // 取り崩し前の現金化の行は残し、取り崩しを始める年より後は提案に置き換わる
+  const nisa = st.assets.find((a) => a.name === 'NISA');
+  assert.ok(p.rows[nisa.id].every((r) => r.year >= 2056 || r.toYear < 2056));
+  // 目標が高すぎれば「保てない」、低ければ取り崩さない
+  assert.ok(E.drawdownPlan(st, { target: 5000, startAge: 65 }).short);
+  const rich = S.sample(); rich.assets[0].amount = 20000;                 // 預金が十分にあれば取り崩さない
+  assert.ok(E.drawdownPlan(rich, { target: 1500, startAge: 65 }).segments.every((g) => g.total === 0));
+});
+
+test('取り崩しの提案：税金のかかる口座 → iDeCo → NISA の順に取り崩し、1つの口座は残高が足りる額まで', () => {
+  const S = require('../app/sample.js');
+  const st = S.sample();
+  st.assets.push({ id: 4, name: '投資信託', fixed: false, amount: 300, rate: 3, tax: '20%' });
+  st.invest[4] = { add: [], out: [] };
+  const ideco = st.assets.find((a) => a.name === 'iDeCo');
+  ideco.amount = 200;
+  const p = E.drawdownPlan(st, { target: 1500, startAge: 65 });
+  const first = p.segments[0].parts.map((x) => x.name);
+  assert.equal(first[0], '投資信託');
+  assert.ok(first.indexOf('NISA') < 0 || first.indexOf('iDeCo') < first.indexOf('NISA'));
+  // どの口座も、提案どおりなら現金化が0にならない（残高不足で止まらない）
+  const r = p.after;
+  p.segments.forEach((g) => g.parts.forEach((x) => {
+    const i = r.investNames.indexOf(x.name);
+    for (let y = g.from; y <= g.to; y++) assert.ok(Math.abs(r.years.find((q) => q.year === y).income.withdrawals[i] - x.amount) < 1e-9, `${x.name} ${y}`);
+  }));
+});

@@ -750,6 +750,86 @@
     '</div>';
   }
 
+  // ---------- 取り崩しの提案（老後に普通預金等をおおむね一定に保つ） ----------
+  // 入力は state.drawdown = { target, startAge }。計算は E.drawdownPlan（開いているときだけ）
+
+  function ddInputs() {
+    var d = state.drawdown || {};
+    var m1 = state.family.filter(function (m) { return m.relation === '家族１'; })[0];
+    var sal = m1 && state.salaries.filter(function (x) { return x.memberId === m1.id; })[0];
+    var retire = sal && toNum(sal.retireAge) ? toNum(sal.retireAge) : 65;
+    return { target: d.target === undefined || d.target === '' ? 1500 : toNum(d.target), startAge: d.startAge === undefined || d.startAge === '' ? retire : toNum(d.startAge) };
+  }
+  function ddChartSVG(p, width) {
+    var W = Math.max(280, width || 320), H = 140, P = 8, L = 40;
+    var ys = p.after.years.filter(function (y) { return y.year >= p.start - 5; });
+    var bf = {}; p.before.years.forEach(function (y) { bf[y.year] = y.assets.deposit; });
+    var n = ys.length; if (n < 2) return '';
+    var vals = ys.map(function (y) { return y.assets.deposit; }).concat(ys.map(function (y) { return bf[y.year]; }), [p.target, 0]);
+    var max = Math.max.apply(null, vals), min = Math.min.apply(null, vals);
+    if (max === min) max = min + 1;
+    var X = function (i) { return L + (W - L - P) * i / (n - 1); }, Y = function (v) { return P + (H - 2 * P) * (max - v) / (max - min); };
+    var line = function (f) { return ys.map(function (y, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(f(y)).toFixed(1); }).join(''); };
+    var si = ys.map(function (y) { return y.year; }).indexOf(p.start);
+    return '<svg class="rkchart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="普通預金等の推移。今のままと、提案どおりに取り崩した場合">' +
+      '<line x1="' + L + '" x2="' + (W - P) + '" y1="' + Y(0).toFixed(1) + '" y2="' + Y(0).toFixed(1) + '" stroke="var(--line)" stroke-width="1.5"/>' +
+      '<line x1="' + L + '" x2="' + (W - P) + '" y1="' + Y(p.target).toFixed(1) + '" y2="' + Y(p.target).toFixed(1) + '" stroke="var(--text-faint)" stroke-dasharray="4 4"/>' +
+      '<text x="' + (L - 4) + '" y="' + (Y(p.target) + 4).toFixed(1) + '" text-anchor="end" class="ax">' + man(p.target) + '</text>' +
+      '<text x="' + (L - 4) + '" y="' + (Y(0) + 4).toFixed(1) + '" text-anchor="end" class="ax">0</text>' +
+      (si >= 0 ? '<line x1="' + X(si).toFixed(1) + '" x2="' + X(si).toFixed(1) + '" y1="' + P + '" y2="' + (H - P) + '" stroke="var(--text-faint)" stroke-dasharray="2 4"/>' : '') +
+      '<path d="' + line(function (y) { return bf[y.year]; }) + '" fill="none" stroke="var(--s1)" stroke-width="2.5"/>' +
+      '<path d="' + line(function (y) { return y.assets.deposit; }) + '" fill="none" stroke="var(--c-deposit)" stroke-width="3"/>' +
+    '</svg>' +
+    '<div class="catlegend"><span><i style="background:var(--s1)"></i>今のまま</span><span><i style="background:var(--c-deposit)"></i>提案どおり</span><span><i style="background:var(--text-faint)"></i>目標</span></div>';
+  }
+  function drawdownCardHTML() {
+    var open = ui.ddOpen;
+    var head = '<button class="toggle" aria-expanded="' + !!open + '" onclick="A.ddToggle()">' + ic('calc', 18, 'lead') +
+      '<span class="lbl">取り崩しの提案（老後の普通預金等を一定に保つ）</span><span class="chev">' + chevron(open) + '</span></button>';
+    var invs = state.assets.filter(function (a) { return !a.fixed; });
+    if (!open) return '<div class="card ddcard">' + head + '<div class="hint" style="padding:4px 0 0">保ちたい預金の額を決めると、毎年いくら現金化すればよいかを提案します。</div></div>';
+    var inp = ddInputs(), by = baseBirth();
+    var field = function (f, label, small, unit, v) {
+      return '<div class="calcrow"><span class="u" style="flex:1;min-width:0">' + label + (small ? '<small>' + small + '</small>' : '') + '</span>' +
+        numInput('f-dd-' + f, 'op', 84, v, "A.dd('" + f + "',this.value)", ';margin-left:auto;background:var(--surface)') + '<span class="u">' + unit + '</span></div>';
+    };
+    var body = field('target', '保ちたい普通預金等', 'この額くらいを保つように取り崩します', '万円', inp.target) +
+      field('startAge', '取り崩しを始める年齢', '家族１の年齢', '歳から', inp.startAge);
+    if (!invs.length || !result.years.length) return '<div class="card ddcard">' + head + '<div class="calcbox">' + body + '<div class="hint">投資資産がないので、提案できません。</div></div></div>';
+    var p = E.drawdownPlan(state, inp);
+    var ageOf = function (y) { return y - by; };
+    var segs = p.segments.filter(function (g) { return g.total > 0; });
+    var list = p.segments.map(function (g) {
+      return '<div class="ddseg"><span class="when">' + ageOf(g.from) + '〜' + ageOf(g.to) + '歳<small>' + g.from + '〜' + g.to + '年</small></span>' +
+        '<span class="amt"><b>' + (g.total ? penFmt(g.total) : '0') + '</b>万円／年' +
+        (g.parts.length > 1 || (g.parts[0] && invs.length > 1) ? '<small>' + g.parts.map(function (x) { return esc(x.name) + ' ' + penFmt(x.amount); }).join('・') + '</small>' : '') + '</span></div>';
+    }).join('');
+    var status = !segs.length
+      ? '<div class="vmsg ok">' + ic('check', 15) + '<span>取り崩さなくても、普通預金等は目標の' + man(p.target) + '万円を上回ります。</span></div>'
+      : p.short
+        ? '<div class="vmsg warn">' + ic('warn', 15) + '<span>' + (p.keptUntil ? ageOf(p.keptUntil) + '歳（' + p.keptUntil + '年）ごろまでは目標を保てますが、その後は' : 'すぐに') + '投資資産が足りず、目標を保てません。目標を下げるか、支出や働き方を見直してください。</span></div>'
+        : '<div class="vmsg ok">' + ic('check', 15) + '<span>' + ageOf(p.end) + '歳（' + p.end + '年）まで、普通預金等をおおむね' + man(p.target) + '万円に保てます。</span></div>';
+    return '<div class="card ddcard">' + head +
+      '<div class="calcbox">' + body +
+        '<div class="calcsec">提案（10年ごとに見直す額）</div>' + list + status +
+        ddChartSVG(p, 320) +
+        (segs.length ? '<button class="btn block" onclick="A.ddApply()">この取り崩しを入れる</button>' : '') +
+        '<div class="hint" style="padding:8px 0 0">取り崩す順は、税金のかかる口座 → iDeCo → NISAなど税金のかからない口座（NISAを長く残すため）。各期間の最後の年に普通預金等が目標になる額で、1つの投資から取り崩すのは残高が足りる額までです。入れると、' + ageOf(p.start) + '歳より後の現金化の行は、この提案に置き換わります。</div>' +
+      '</div>' +
+    '</div>';
+  }
+  A.ddToggle = function () { ui.ddOpen = !ui.ddOpen; commit(); };
+  A.dd = function (f, v) { if (!state.drawdown) state.drawdown = {}; state.drawdown[f] = String(v).trim() === '' ? '' : toNum(v); commit(); };
+  A.ddApply = function () {
+    var p = E.drawdownPlan(state, ddInputs());
+    snapshot('取り崩しの提案を、現金化の行に入れました');
+    Object.keys(p.rows).forEach(function (id) {
+      var iv = state.invest[id] || (state.invest[id] = { add: [], out: [] });
+      iv.out = p.rows[id].map(function (r) { var c = { id: nid(), year: r.year, toYear: r.toYear, amount: r.amount, memo: r.memo || '' }; return c; });
+    });
+    commit();
+  };
+
   function basicHTML() {
     var assets = state.assets.map(function (a) {
       return '<div class="rowtop divide" style="padding:10px 0">' +
@@ -844,6 +924,7 @@
     h += groupCard('otherLump', 'その他の一時支出', { max: 5, lump: true, memo: true, hint: '子供の結婚の援助、留学費など' });
 
     h += '<h2 class="sec" id="sec-invest">' + ic('invest', 20) + '投資</h2>';
+    h += drawdownCardHTML();
     state.assets.filter(function (a) { return !a.fixed; }).forEach(function (a) {
       h += investCard(a, 'add', a.name + 'へ積立', true);
       h += investCard(a, 'out', a.name + 'の現金化', false);

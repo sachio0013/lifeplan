@@ -721,6 +721,26 @@ await fresh.close();
   await page.locator('#toast button').tap(); await page.waitForTimeout(150);
 }
 
+// 取り崩しの提案：保ちたい普通預金等を決めると、期間ごとの取り崩し額が出て、現金化の行に入れられる
+{
+  await go(page, '#seg-input');
+  await go(page, '#tabs .tab[data-k="invest"]');
+  await page.locator('.ddcard .toggle').tap(); await page.waitForTimeout(200);
+  await page.waitForSelector('.ddseg');
+  const segs = await page.$$eval('.ddseg', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
+  const ok = await page.textContent('.ddcard .vmsg');
+  await page.locator('.ddcard').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(shots, '26-drawdown.png') });
+  await page.locator('.ddcard .btn.block').tap(); await page.waitForTimeout(200);
+  const rows = await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); const st = s.plans.find((p) => p.id === s.activeId).state; return Object.values(st.invest).flatMap((v) => v.out.filter((r) => r.memo === '取り崩しの提案').map((r) => r.year + '-' + r.toYear + ':' + r.amount)); });
+  check('取り崩しの提案：65歳から10年ごとの額が出て、普通預金等を保てると知らせ、現金化の行に入れられる',
+    segs.length === 3 && /^65〜74歳/.test(segs[0]) && /保てます/.test(ok) && rows.length === 3, `${segs.join(' / ')} / ${ok.trim()} / ${rows.join(',')}`);
+  await page.locator('#toast button').tap(); await page.waitForTimeout(150);   // 元に戻す
+  const undone = await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); const st = s.plans.find((p) => p.id === s.activeId).state; return Object.values(st.invest).flatMap((v) => v.out.filter((r) => r.memo === '取り崩しの提案')).length; });
+  check('取り崩しの提案を入れても「元に戻す」で戻せる', undone === 0, String(undone));
+  await page.locator('.ddcard .toggle').tap(); await page.waitForTimeout(150);
+}
+
 // Excelに書き出す：CF表とグラフ入りの .xlsx が保存される
 {
   await go(page, '#seg-cf');
