@@ -1075,9 +1075,80 @@
       '<div class="card tablecard"><h2 class="h3">キャッシュフロー表</h2><div class="sub">単位：万円。横にスクロールできます。</div>' +
         '<div class="tablewrap" tabindex="0" role="region" aria-label="キャッシュフロー表（横にスクロールできます）">' + tableHTML() + '</div>' +
       '</div>' +
+      '<div class="card xlcard"><div class="xlrow">' + ic('chart', 22) + '<div><b>Excelに書き出す</b><span>CF表とグラフ（金融資産の推移・収入と支出）を、色付きのExcelファイルで保存します。印刷や、家族・専門家との共有に。</span></div></div>' +
+        '<button class="btn block" onclick="A.exportXlsx()">Excelファイルで保存（.xlsx）</button>' +
+        (ui.xlsxMsg ? '<div class="vmsg ' + ui.xlsxMsg[1] + '">' + ic(ui.xlsxMsg[1] === 'ok' ? 'check' : 'warn', 15) + '<span>' + esc(ui.xlsxMsg[0]) + '</span></div>' : '') +
+      '</div>' +
       '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>' +
       DISCLAIMER;
   }
+
+  // ---------- Excelに書き出す（app/xlsx.js） ----------
+
+  function xlsxData() {
+    var ys = result.years, r1 = function (v) { return Math.round(v * 10) / 10; };
+    var col = function (f) { return ys.map(function (y) { return r1(f(y)); }); };
+    var last = ys[ys.length - 1];
+    var minY = ys.reduce(function (a, y) { return y.assets.total < a.assets.total ? y : a; }, ys[0]);
+    var sf = result.shortfall;
+    var by = baseBirth();
+    return {
+      plan: plan().name, date: new Date(), years: ys.map(function (y) { return y.year; }),
+      ages: state.family.map(function (m, i) { return { label: m.name || m.relation, values: ys.map(function (y) { return y.ages[i]; }) }; }),
+      groups: [
+        { label: '収入', rows: state.salaries.map(function (s, i) { return { label: memberName(s.memberId) + 'の給与', values: col(function (y) { return y.income.salaries[i]; }) }; })
+            .concat([{ label: '退職金・年金等', values: col(function (y) { return y.income.pension; }) }])
+            .concat(result.investNames.map(function (n, i) { return { label: n + 'の現金化', values: col(function (y) { return y.income.withdrawals[i]; }) }; })),
+          total: { label: '収入計', key: 'income', values: col(function (y) { return y.income.total; }) } },
+        { label: '支出', rows: [['基本生活費', 'living'], ['住宅費', 'housing'], ['教育費', 'education'], ['保険料', 'insurance'], ['自動車', 'car'], ['その他', 'other']]
+            .map(function (k) { return { label: k[0], values: col(function (y) { return y.expense[k[1]]; }) }; })
+            .concat(result.investNames.map(function (n, i) { return { label: n + 'へ積立', values: col(function (y) { return y.expense.contributions[i]; }) }; })),
+          total: { label: '支出計', key: 'expense', values: col(function (y) { return y.expense.total; }) } }
+      ],
+      balance: { label: '年間収支', values: col(function (y) { return y.balance; }) },
+      assets: { label: '金融資産残高（年末）', rows: [{ label: '普通預金等', key: 'deposit', values: col(function (y) { return y.assets.deposit; }) }]
+          .concat(result.investNames.map(function (n, i) { return { label: n, values: col(function (y) { return y.assets.investments[i]; }) }; }))
+          .concat([{ label: '投資資産計', key: 'investTotal', values: col(function (y) { return y.assets.investTotal; }) }]),
+        total: { label: '金融資産の合計', values: col(function (y) { return y.assets.total; }) } },
+      keys: [
+        ['終了時点（' + last.year + '年・家族１ ' + last.age + '歳）の金融資産', r1(last.assets.total), '万円', last.assets.total < 0],
+        ['金融資産がいちばん少ない年（' + minY.year + '年・' + minY.age + '歳）', r1(minY.assets.total), '万円', minY.assets.total < 0],
+        ['普通預金等がマイナスになる年', sf ? sf.year + '年（家族１が' + sf.age + '歳）' : 'ありません', ''],
+        ['計算する期間', ys[0].year + '年〜' + last.year + '年（' + ys.length + '年間）', '']
+      ],
+      family: state.family.map(function (m) {
+        var b = E.parseDate(m.birth);
+        return [m.relation, m.name || '', b.y ? b.y + '/' + ('0' + b.m).slice(-2) + '/' + ('0' + b.d).slice(-2) : '', b.y ? state.startYear - b.y : ''];
+      })
+    };
+  }
+  A.exportXlsx = function () {
+    if (!result.years.length) return;
+    var data;
+    try { data = window.LifePlanXlsx.lifeplanWorkbook(xlsxData()); } catch (e) { ui.xlsxMsg = ['Excelファイルを作れませんでした', 'error']; commit(); return; }
+    var d = new Date();
+    var name = 'ライフプラン_' + plan().name.replace(/[\\/:*?"<>|]/g, '') + '_' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.xlsx';
+    var done = function (msg, level) { ui.xlsxMsg = [msg, level]; commit(); };
+    if (downloads) {
+      downloads.save({ filename: name, data: new Blob([data]) }).then(function () { done(name + ' を保存しました', 'ok'); }, function (e) {
+        var code = e && e.code;
+        if (code === 'declined') done('保存を取りやめました', 'warn');
+        else if (code === 'rate_limited') done('少し待ってから、もう一度押してください', 'warn');
+        else done('この画面ではファイルに保存できませんでした', 'error');
+      });
+      return;
+    }
+    try {
+      var url = URL.createObjectURL(new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      var a = document.createElement('a');
+      // ブラウザによっては日本語のファイル名が「download」になるので、ここでは英字の名前にする
+      var ascii = 'lifeplan_' + name.replace(/^.*_(\d{8})\.xlsx$/, '$1') + '.xlsx';
+      a.href = url; a.download = ascii;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      done(ascii + ' のダウンロードを始めました', 'ok');
+    } catch (e) { done('この画面ではファイルに保存できませんでした', 'error'); }
+  };
 
   // ---------- 公的年金の見込み（額面基準・プランの給与から） ----------
   //

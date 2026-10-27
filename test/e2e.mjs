@@ -721,6 +721,20 @@ await fresh.close();
   await page.locator('#toast button').tap(); await page.waitForTimeout(150);
 }
 
+// Excelに書き出す：CF表とグラフ入りの .xlsx が保存される
+{
+  await go(page, '#seg-cf');
+  await page.waitForSelector('.xlcard');
+  const [xl] = await Promise.all([page.waitForEvent('download'), page.locator('.xlcard .btn').tap()]);
+  const xlPath = join(shots, 'export.xlsx');
+  await xl.saveAs(xlPath);
+  const buf = readFileSync(xlPath);
+  const msg = await page.textContent('.xlcard .vmsg');
+  const text = buf.toString('latin1');
+  check('Excelに書き出す：グラフ入りの.xlsx（サマリー・CF表）が保存される', /^lifeplan_\d{8}\.xlsx$/.test(xl.suggestedFilename()) && buf.slice(0, 2).toString() === 'PK' &&
+    text.includes('xl/charts/chart2.xml') && text.includes('xl/worksheets/sheet2.xml') && /ダウンロード/.test(msg), `${xl.suggestedFilename()} ${buf.length}B ${msg}`);
+}
+
 // 保障：もしもの場合の必要保障額（CF表で計算・かんたん計算）。団信の印、保険金で足りるか、プランとして保存
 {
   await go(page, '#seg-input');

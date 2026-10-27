@@ -625,3 +625,10 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 #planbtn.making { cursor: default; color: var(--text); }
 #planbtn.making > .ic { display: none; }
 #planbtn.making #planname { font-size: 16px; }
+
+/* Excelに書き出す */
+.xlcard .xlrow { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+.xlcard .xlrow .ic { flex: none; color: var(--accent); margin-top: 2px; }
+.xlcard .xlrow b { display: block; font-size: 16px; }
+.xlcard .xlrow span { display: block; margin-top: 2px; font-size: 13.5px; line-height: 1.6; color: var(--text-muted); }
+.xlcard .vmsg { margin-top: 10px; }
