@@ -214,6 +214,12 @@
     var pubRows = state.penAuto ? pensionPlan(state).rows : state.pubPension;
     var prevDeposit = num(cashAsset.amount);
     var prevInv = invAssets.map(function (a) { return num(a.amount); });
+    // 現金化の自動調整（state.autoDraw = { on, target, startAge }）：家族１が startAge 歳の年から、普通預金等が target を下回る年は、
+    // 足りない分を投資から現金化する。順は 税金のかかる口座 → iDeCo → NISAなど税金のかからない口座（NISAを長く残す）。前年末の残高まで
+    var ad = state.autoDraw && state.autoDraw.on ? state.autoDraw : null;
+    var adStart = ad ? by + Math.round(num(ad.startAge) || 65) : Infinity;
+    var adRank = function (a) { return pct(a.tax) > 0 ? 0 : /idec/i.test(a.name || '') ? 1 : 2; };
+    var adOrder = invAssets.map(function (a, i) { return i; }).sort(function (i, j) { return adRank(invAssets[i]) - adRank(invAssets[j]) || i - j; });
 
     var years = [];
     for (var y = sy; y <= endYear && years.length < 120; y++) {
@@ -253,7 +259,7 @@
       var flows = invAssets.map(function (a, i) {
         var iv = (state.invest && state.invest[a.id]) || { add: [], out: [] };
         var plannedIn = rangeAt(iv.add, y);
-        var plannedOut = rangeAt(iv.out, y);
+        var plannedOut = ad && y >= adStart ? 0 : rangeAt(iv.out, y);   // 自動調整の年は、手で入れた現金化の行は使わない
         var contribution = plannedIn > cashLeft ? 0 : plannedIn;
         cashLeft -= contribution;
         var withdrawal = plannedOut > prevInv[i] ? 0 : plannedOut;
@@ -268,6 +274,18 @@
       var expenseTotal = living + housing + education + insurance + car + other + contributions;
       var balance = incomeTotal - expenseTotal;
 
+      // 現金化の自動調整：年末の普通預金等が目標になるだけ、投資から足す
+      var auto = 0;
+      if (ad && y >= adStart) {
+        var need = num(ad.target) / (1 + depositRate * 0.8) - (prevDeposit + balance);
+        adOrder.forEach(function (i) {
+          if (need <= 1e-9) return;
+          var take = Math.max(0, Math.min(need, prevInv[i] - flows[i].withdrawal));
+          if (take > 0) { flows[i].withdrawal += take; flows[i].auto = take; need -= take; auto += take; }
+        });
+        if (auto) { withdrawals += auto; incomeTotal += auto; balance += auto; }
+      }
+
       // 年末残高
       var deposit = (prevDeposit + balance) * (1 + depositRate * 0.8);
       var invBalances = invAssets.map(function (a, i) {
@@ -280,7 +298,7 @@
         year: y,
         age: y - by,
         ages: ages,
-        income: { salaries: salaries, pension: pension, withdrawals: flows.map(function (f) { return f.withdrawal; }), total: incomeTotal },
+        income: { salaries: salaries, pension: pension, withdrawals: flows.map(function (f) { return f.withdrawal; }), auto: auto, total: incomeTotal },
         expense: {
           living: living, housing: housing, education: education, insurance: insurance, car: car, other: other,
           contributions: flows.map(function (f) { return f.contribution; }), total: expenseTotal
@@ -828,105 +846,6 @@
     };
   }
 
-  // ---- 投資の取り崩しの提案 ----
-  //
-  // 老後に普通預金等を「目標の額くらい」に保つように、投資資産の現金化（取り崩し）の額を提案する。
-  // o: { target（保ちたい普通預金等、万円）, startAge（家族１が何歳から取り崩すか）, step（額を見直す間隔、既定10年） }
-  //   取り崩しを始める年から、step 年ごとの期間に分け、期間ごとに「年◯万円」を一定にする。
-  //   期間の額は、その期間の最後の年の普通預金等が目標になるように、二分探索で決める。
-  //   どの投資から取り崩すかは、税金のかかる口座 → iDeCo → NISAなど税金のかからない口座の順（NISAを長く残す）。
-  //   1つの投資から取り崩せるのは、期間の最後まで残高が足りる額まで（足りない年は0になる計算のため）。
-  // 返り値 { start, end, segments: [{ from, to, total, parts: [{ id, name, amount }] }], rows: { 投資のid: 現金化の行 }, before, after（compute の結果）, keptUntil, short }
-  function drawdownPlan(state, o) {
-    o = o || {};
-    var st = JSON.parse(JSON.stringify(state));
-    // 年金は給与で決まり、取り崩しでは変わらないので、自動の見込みは先に行にしておく（何度も計算するため）
-    if (st.penAuto) { st.pubPension = pensionPlan(st).rows.map(function (r, i) { return { id: 70000 + i, year: r.year, amount: r.amount }; }); st.penAuto = false; }
-    var sy = num(st.startYear), by = baseBirthYear(st), endYear = by + num(st.endAge);
-    var start = Math.max(sy, by + Math.round(num(o.startAge) || 65));
-    var target = num(o.target), step = Math.max(1, Math.round(num(o.step) || 10));
-    var invAssets = (st.assets || []).filter(function (a) { return !a.fixed; });
-    var rank = function (a) { return pct(a.tax) > 0 ? 0 : /idec/i.test(a.name || '') ? 1 : 2; };
-    var order = invAssets.slice().sort(function (a, b) { return rank(a) - rank(b); });
-    // 取り崩しを始める年より後の現金化の行は、提案で置き換える（前の行は残し、またがる行は前の年までにする）
-    st.invest = st.invest || {};
-    var kept = {};
-    invAssets.forEach(function (a) {
-      var iv = st.invest[a.id] || (st.invest[a.id] = { add: [], out: [] });
-      kept[a.id] = (iv.out || []).filter(function (r) { return num(r.year) < start; }).map(function (r) {
-        var c = JSON.parse(JSON.stringify(r)); if (num(c.toYear) >= start) c.toYear = start - 1; return c;
-      });
-      iv.out = kept[a.id].slice();
-    });
-    var before = compute(state);
-    var depAt = function (res, y) { var row = res.years.filter(function (r) { return r.year === y; })[0]; return row ? row.assets.deposit : 0; };
-    var segments = [];
-    var nextId = 71000;
-    // 1つの投資から、期間 [s, e] に毎年 a を取り崩せるか（残高が足りるか）
-    var fits = function (res, a, s, e, amount) {
-      var i = invAssets.indexOf(a);
-      var prev = res.years.filter(function (r) { return r.year === s - 1; })[0];
-      var bal = prev ? prev.assets.investments[i] : num(a.amount);
-      var rr = growthRate(a.rate), t = pct(a.tax);
-      var add = (st.invest[a.id].add || []);
-      for (var y = s; y <= e; y++) {
-        if (amount > bal + 1e-9) return false;
-        bal = (bal - amount) * (1 + rr * (1 - t)) + rangeAt(add, y);
-      }
-      return true;
-    };
-    var capOf = function (res, a, s, e) {
-      if (!fits(res, a, s, e, 0.5)) return 0;
-      var lo = 0.5, hi = 1;
-      while (fits(res, a, s, e, hi) && hi < 1e6) { lo = hi; hi *= 2; }
-      for (var k = 0; k < 30; k++) { var m = (lo + hi) / 2; if (fits(res, a, s, e, m)) lo = m; else hi = m; }
-      return Math.floor(lo * 10) / 10;
-    };
-    for (var s = start; s <= endYear; s += step) {
-      var e = Math.min(s + step - 1, endYear);
-      var cur = compute(st);
-      var caps = order.map(function (a) { return capOf(cur, a, s, e); });
-      var total = caps.reduce(function (t, c) { return t + c; }, 0);
-      var alloc = function (W) {
-        var rem = W;
-        return order.map(function (a, k) { var v = Math.min(rem, caps[k]); rem -= v; return v; });
-      };
-      var withW = function (W) {
-        var parts = alloc(W);
-        order.forEach(function (a, k) { st.invest[a.id].out = st.invest[a.id].out.filter(function (r) { return r.id !== nextId + k; }); if (parts[k] > 0) st.invest[a.id].out.push({ id: nextId + k, year: s, toYear: e, amount: parts[k], memo: '取り崩しの提案' }); });
-        return depAt(compute(st), e);
-      };
-      var W = 0;
-      if (withW(0) < target && total > 0) {
-        if (withW(total) <= target) W = total;
-        else {
-          var lo = 0, hi = total;
-          for (var it = 0; it < 30 && hi - lo > 0.05; it++) { var mid = (lo + hi) / 2; if (withW(mid) < target) lo = mid; else hi = mid; }
-          W = Math.min(total, Math.ceil(hi));
-        }
-      }
-      var parts = alloc(W).map(function (v) { return Math.round(v * 10) / 10; });
-      withW(0);   // 試しの行を消す
-      order.forEach(function (a, k) {
-        st.invest[a.id].out = st.invest[a.id].out.filter(function (r) { return r.id !== nextId + k; });
-        if (parts[k] > 0) st.invest[a.id].out.push({ id: nextId + k, year: s, toYear: e, amount: parts[k], memo: '取り崩しの提案' });
-      });
-      segments.push({ from: s, to: e, total: Math.round(parts.reduce(function (t, v) { return t + v; }, 0) * 10) / 10,
-        parts: order.map(function (a, k) { return { id: a.id, name: a.name, amount: parts[k] }; }).filter(function (p) { return p.amount > 0; }) });
-      nextId += 10;
-    }
-    var after = compute(st);
-    // 目標を保てる年：取り崩しを始めてから、普通預金等が目標の8割を下回る前の年まで
-    var keptUntil = null, short = false;
-    for (var y = start + 1; y <= endYear; y++) {
-      if (depAt(after, y) < target * 0.8) { short = true; break; }
-      keptUntil = y;
-    }
-    var rows = {};
-    invAssets.forEach(function (a) { rows[a.id] = st.invest[a.id].out; });
-    return { start: start, end: endYear, startAge: start - by, target: target, segments: segments, rows: rows, before: before, after: after, keptUntil: keptUntil, short: short, birthYear: by };
-  }
-
   // ---- 住宅ローンの試算（入力シート T114:AH125、住宅ローン返済表シート） ----
 
   // 元利均等返済。金利は3段階まで変えられ、2段階目以降は「前の段階が終わった時点の残高」を
@@ -1253,6 +1172,6 @@
     changeAt: changeAt, lumpAt: lumpAt, rangeAt: rangeAt,
     eduPlan: eduPlan, children: children, carOccurrences: carOccurrences, anchored: anchored,
     compute: compute, takeHome: takeHome, takeHomeFromSlip: takeHomeFromSlip, investSim: investSim, investNeed: investNeed, dependentGroup: dependentGroup, pensionEstimate: pensionEstimate, pensionDefaults: pensionDefaults,
-    pensionPlan: pensionPlan, riskState: riskState, riskShortfall: riskShortfall, riskDropDefaults: riskDropDefaults, needSimple: needSimple, needFromPlan: needFromPlan, drawdownPlan: drawdownPlan, pensionCap: pensionCap, pensionNet: pensionNet, grossFromNet: grossFromNet, wageCurve: wageCurve, salarySeries: salarySeries, loanSchedule: loanSchedule
+    pensionPlan: pensionPlan, riskState: riskState, riskShortfall: riskShortfall, riskDropDefaults: riskDropDefaults, needSimple: needSimple, needFromPlan: needFromPlan, pensionCap: pensionCap, pensionNet: pensionNet, grossFromNet: grossFromNet, wageCurve: wageCurve, salarySeries: salarySeries, loanSchedule: loanSchedule
   };
 }));

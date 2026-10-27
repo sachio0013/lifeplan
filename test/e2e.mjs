@@ -721,24 +721,25 @@ await fresh.close();
   await page.locator('#toast button').tap(); await page.waitForTimeout(150);
 }
 
-// 取り崩しの提案：保ちたい普通預金等を決めると、期間ごとの取り崩し額が出て、現金化の行に入れられる
+// 現金化の自動調整：オンにすると、老後の普通預金等が保ちたい額に保たれ、毎年の額は未来の表に出る
 {
   await go(page, '#seg-input');
   await go(page, '#tabs .tab[data-k="invest"]');
-  await page.locator('.ddcard .toggle').tap(); await page.waitForTimeout(200);
-  await page.waitForSelector('.ddseg');
-  const segs = await page.$$eval('.ddseg', (els) => els.map((e) => e.textContent.replace(/\s+/g, ' ').trim()));
-  const ok = await page.textContent('.ddcard .vmsg');
-  await page.locator('.ddcard').scrollIntoViewIfNeeded();
-  await page.screenshot({ path: join(shots, '26-drawdown.png') });
-  await page.locator('.ddcard .btn.block').tap(); await page.waitForTimeout(200);
-  const rows = await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); const st = s.plans.find((p) => p.id === s.activeId).state; return Object.values(st.invest).flatMap((v) => v.out.filter((r) => r.memo === '取り崩しの提案').map((r) => r.year + '-' + r.toYear + ':' + r.amount)); });
-  check('取り崩しの提案：65歳から10年ごとの額が出て、普通預金等を保てると知らせ、現金化の行に入れられる',
-    segs.length === 3 && /^65〜74歳/.test(segs[0]) && /保てます/.test(ok) && rows.length === 3, `${segs.join(' / ')} / ${ok.trim()} / ${rows.join(',')}`);
-  await page.locator('#toast button').tap(); await page.waitForTimeout(150);   // 元に戻す
-  const undone = await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); const st = s.plans.find((p) => p.id === s.activeId).state; return Object.values(st.invest).flatMap((v) => v.out.filter((r) => r.memo === '取り崩しの提案')).length; });
-  check('取り崩しの提案を入れても「元に戻す」で戻せる', undone === 0, String(undone));
-  await page.locator('.ddcard .toggle').tap(); await page.waitForTimeout(150);
+  await page.locator('#card-autoDraw button', { hasText: '自動で調整する' }).tap(); await page.waitForTimeout(200);
+  await page.waitForSelector('#f-ad-target');
+  const saved = await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return s.plans.find((p) => p.id === s.activeId).state.autoDraw; });
+  await page.fill('#f-ad-target', '1000'); await page.press('#f-ad-target', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
+  const st1 = await page.textContent('#card-autoDraw .vmsg');
+  const buckets = await page.$$eval('#card-autoDraw .ddseg', (els) => els.length);
+  await page.locator('#card-autoDraw').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(shots, '26-autodraw.png') });
+  await page.fill('#f-ad-target', '3000'); await page.press('#f-ad-target', 'Tab');
+  await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
+  const st2 = await page.textContent('#card-autoDraw .vmsg');
+  check('現金化の自動調整：オンにすると保てる年齢と10年ごとの額が出て、保ちたい額が高すぎれば使い切る年を知らせる',
+    /保てます/.test(st1) && buckets >= 2 && /使い切り/.test(st2) && saved.target === 1500 && saved.startAge > 0, `${st1.trim()} / ${buckets} / ${st2.trim()} / ${JSON.stringify(saved)}`);
+  await page.locator('#card-autoDraw button', { hasText: '自分で決める' }).tap(); await page.waitForTimeout(150);
 }
 
 // Excelに書き出す：CF表とグラフ入りの .xlsx が保存される
