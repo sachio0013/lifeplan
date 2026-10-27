@@ -447,6 +447,8 @@ await wp.locator('.bk .btn', { hasText: '追加する' }).tap();
 await wp.waitForTimeout(150);
 const afterImport = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
 check('バックアップを読み込むと、今のプランを残したまま追加される', JSON.stringify(afterImport) === '["記入例","うちの家計","記入例（2）","うちの家計（2）"]', `${afterImport}`);
+const importedDansin = await wp.evaluate(() => JSON.parse(localStorage.getItem('lifeplan.v2')).plans.find((p) => p.name === '記入例（2）').state.housing.filter((r) => r.dansin === true).length);
+check('バックアップを読み込んでも、住宅費の団信の印（true）が残る', importedDansin === 2, `団信=${importedDansin}`);
 
 // 細工されたファイルを読み込んでも、文字として表示されるだけで画面に要素が入り込まない
 const evil = JSON.parse(JSON.stringify(saved.plans[0]));

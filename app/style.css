@@ -612,3 +612,11 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 .rkbar .r { display: flex; justify-content: space-between; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .rkcard .calcrow .u small { display: block; font-size: 11.5px; color: var(--text-faint); white-space: normal; }
 .rkcard .calcrow.edited input { box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* 家計簿：投資資産の残高（名前の下に、前年末と今年末を1行ずつ） */
+.bkinv { padding: 9px 0 2px; }
+.bkinv .nm { font-size: 15px; font-weight: 700; }
+.bkinv .bkrow { padding: 4px 0; }
+/* 薄いピンクの枠の中の「開く」ボタンは、文字を濃くする（背景が白でないため） */
+.calcbox .toggle .lbl { color: var(--accent-ink); }
+.penplan a, .calcbox a { color: var(--accent-ink); }

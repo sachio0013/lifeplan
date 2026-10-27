@@ -604,3 +604,30 @@ test('もしもの場合：子が18歳を過ぎて5年で遺族厚生年金が�
   const wife65 = 1991 + 65;
   assert.ok(at(wife65).own > 0);
 });
+
+test('もしもの場合：遺される家族がいなければ葬儀・整理資金だけ、ひとり親は末子が独立するまで、配偶者の働き方も変えられる', () => {
+  const S = require('../app/sample.js');
+  // ひとり暮らし：預金200万円で葬儀・整理資金200万円はまかなえる。保険も貯蓄も無く葬儀代が300万円なら100万円不足
+  const d = S.templateAnswers('single', 'rent', 2026); d.birth1 = '1995/04/10';
+  const single = S.fromAnswers(d);
+  const a = E.riskShortfall(single, {});
+  assert.ok(a.info.alone);
+  assert.equal(a.need, 0);
+  assert.equal(E.riskShortfall(single, { funeral: 300 }).need, 100);
+  // ひとり親（配偶者なし・子1人）：末子が独立する年の前までで判定する
+  const p = S.sample();
+  p.family = p.family.filter((m) => m.relation !== '家族２' && m.relation !== '子供２');
+  p.salaries = p.salaries.filter((x) => x.memberId === 1);
+  const sp = E.riskShortfall(p, {});
+  assert.ok(!sp.info.alone);
+  assert.equal(sp.info.until, 2022 + 22 - 1);
+  // 配偶者が亡くなった後に働く：手取りが増えれば必要保障額は減る
+  const st = S.sample();
+  const base = E.riskShortfall(st, {}).need;
+  const work = E.riskShortfall(st, { spouseNet: 400, spouseUntil: 65 }).need;
+  assert.ok(work < base, `${work} < ${base}`);
+  const rs = E.riskState(st, { year: 2030, spouseNet: 400, spouseUntil: 65 });
+  const y = (yr) => E.compute(rs.state).years.find((x) => x.year === yr);
+  assert.equal(y(2030).income.salaries[1], 400);
+  assert.equal(y(2056).income.salaries[1], 0);              // 1991年生まれ：65歳の2056年から0
+});

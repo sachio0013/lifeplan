@@ -1932,7 +1932,7 @@
       '<div class="calcrow"><span class="u" style="width:120px">去年の年収<small>住民税の計算用・任意</small></span>' +
         numInput('f-th-' + sid + '-last', 'op', 96, c.lastIncome, 'A.thSet(' + sid + ",'lastIncome',this.value)", ';margin-left:auto' + bg) + '<span class="u">万円</span></div>' +
       '<div class="hint" style="padding:4px 0 0">住民税は去年の所得で決まり、6月から1年間引かれます。昇給・転職などで年収が変わったときに入れると正確になります。空欄なら今年と同じとして計算します。</div>' +
-      '<div class="calcsec">社会保険料<small>' + (th.socialActual ? '実額' : '年収の' + th.socialRate + '％') + 'で計算</small></div>' +
+      '<div class="calcsec">社会保険料' + (th.socialActual ? '<small>実額で計算</small>' : th.socialRate ? '<small>年収の' + th.socialRate + '％で計算</small>' : '') + '</div>' +
       '<div class="mini thsp" role="radiogroup" aria-label="健康保険の種類">' + [['kyokai', '協会けんぽ'], ['kumiai', '健保組合'], ['', 'わからない']].map(function (o) {
         var on = (c.health || '') === o[0];
         return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.thSet(' + sid + ",'health','" + o[0] + '\')">' + o[1] + '</button>';
@@ -2241,9 +2241,9 @@
     }).join('') + '<td></td></tr>';
 
     var inv = y.invests.map(function (v) {
-      return '<div class="bkrow divide"><span class="nm">' + esc(v.name) + '</span>' +
-        '<span class="u">前年末</span>' + bookAmountInput('f-bk-ivs-' + v.id, v.start, "A.bkInv(" + v.id + ",'start',this.value)", v.name + 'の前年末', 'op').replace('<span class="u">円</span>', '') +
-        '<span class="u">今年末（予想）</span>' + bookAmountInput('f-bk-ive-' + v.id, v.end, "A.bkInv(" + v.id + ",'end',this.value)", v.name + 'の今年末（予想）', 'op') + '</div>';
+      return '<div class="bkinv divide"><div class="nm">' + esc(v.name) + '</div>' +
+        '<div class="bkrow"><span class="u" style="flex:1">前年末</span>' + bookAmountInput('f-bk-ivs-' + v.id, v.start, "A.bkInv(" + v.id + ",'start',this.value)", v.name + 'の前年末', 'op') + '</div>' +
+        '<div class="bkrow"><span class="u" style="flex:1">今年末（予想）</span>' + bookAmountInput('f-bk-ive-' + v.id, v.end, "A.bkInv(" + v.id + ",'end',this.value)", v.name + 'の今年末（予想）', 'op') + '</div></div>';
     }).join('');
     var invTotal = y.invests.reduce(function (t, v) { return [t[0] + BK.num(v.start), t[1] + BK.num(v.end)]; }, [0, 0]);
 
@@ -2630,10 +2630,16 @@
     var rk = riskOf(), ad = riskAdults();
     return ad.filter(function (m) { return m.id === toNum(rk.memberId); })[0] || ad.filter(function (m) { return m.relation === '家族１'; })[0] || ad[0] || null;
   }
+  // 亡くなる年は、計算の範囲（開始年〜終わりの年）に収める
+  function riskYearRange() {
+    var ys = result && result.years.length ? result.years : E.compute(state).years;
+    return { from: state.startYear, to: ys.length ? ys[ys.length - 1].year : state.startYear };
+  }
   function riskInput(rk) {
-    var dead = riskDead();
-    return { memberId: dead ? dead.id : 0, year: toNum(rk.year) || state.startYear, livingRate: rk.livingRate, livingRate2: rk.livingRate2, indepAge: rk.indepAge, funeral: rk.funeral,
-      lumpIn: rk.lumpIn, insurance: rk.insurance, drop: rk.drop };
+    var dead = riskDead(), rg = riskYearRange();
+    var y = Math.round(toNum(rk.year)) || state.startYear;
+    return { memberId: dead ? dead.id : 0, year: Math.max(rg.from, Math.min(rg.to, y)), livingRate: rk.livingRate, livingRate2: rk.livingRate2, indepAge: rk.indepAge, funeral: rk.funeral,
+      lumpIn: rk.lumpIn, insurance: rk.insurance, drop: rk.drop, spouseNet: rk.spouseNet, spouseUntil: rk.spouseUntil };
   }
   function riskField(f, label, small, unit, value, w) {
     return '<div class="calcrow"><span class="u" style="flex:1;min-width:0">' + label + (small ? '<small>' + small + '</small>' : '') + '</span>' +
@@ -2642,11 +2648,12 @@
   function manYen(v) { return Math.round(v).toLocaleString('ja-JP'); }
 
   // いつもと、もしもの金融資産の推移
-  function riskChartSVG(base, risk, dy, width) {
+  function riskChartSVG(base, risk, dy, width, covered) {
     var W = Math.max(280, width || 320), H = 150, P = 8, L = 34;
     var ys = base.years, n = ys.length;
     if (n < 2) return '';
-    var vals = ys.map(function (y) { return y.assets.total; }).concat(risk.years.map(function (y) { return y.assets.total; }));
+    var vals = ys.map(function (y) { return y.assets.total; }).concat(risk.years.map(function (y) { return y.assets.total; }))
+      .concat(covered ? covered.years.map(function (y) { return y.assets.total; }) : []);
     var max = Math.max.apply(null, vals.concat([0])), min = Math.min.apply(null, vals.concat([0]));
     if (max === min) max = min + 1;
     var X = function (i) { return L + (W - L - P) * i / (n - 1); }, Y = function (v) { return P + (H - 2 * P) * (max - v) / (max - min); };
@@ -2660,8 +2667,10 @@
       (di >= 0 && di < n ? '<line x1="' + X(di).toFixed(1) + '" x2="' + X(di).toFixed(1) + '" y1="' + P + '" y2="' + (H - P) + '" stroke="var(--text-faint)" stroke-dasharray="4 4"/>' : '') +
       '<path d="' + line(ys) + '" fill="none" stroke="var(--s1)" stroke-width="2.5"/>' +
       '<path d="' + line(risk.years) + '" fill="none" stroke="var(--neg)" stroke-width="2.5"/>' +
+      (covered ? '<path d="' + line(covered.years) + '" fill="none" stroke="var(--good)" stroke-width="2.5" stroke-dasharray="6 4"/>' : '') +
     '</svg>' +
-    '<div class="catlegend"><span><i style="background:var(--s1)"></i>いつも</span><span><i style="background:var(--neg)"></i>もしも（' + dy + '年）</span></div>';
+    '<div class="catlegend"><span><i style="background:var(--s1)"></i>いつも</span><span><i style="background:var(--neg)"></i>もしも（' + dy + '年）</span>' +
+      (covered ? '<span><i style="background:var(--good)"></i>保険で備えた場合</span>' : '') + '</div>';
   }
 
   function riskHTML(width) {
@@ -2705,14 +2714,34 @@
     });
     var dansin = state.housing.filter(function (r) { return r.dansin; }).length;
     var need = withIns.need, need0 = noIns.need;
+    if (info.alone) {
+      return '<div class="rkres ' + (need > 0 ? 'ng' : 'ok') + '">' +
+          '<div class="k">' + name + 'が' + dy + '年（' + (dy - by) + '歳）に亡くなったら</div>' +
+          '<div class="row"><span>必要保障額</span><b>' + manYen(need0) + '</b><span class="u">万円</span></div>' +
+          '<div class="hint" style="padding:6px 0 0">遺される家族（配偶者や独立前の子）がいないので、必要になるのは葬儀・整理資金くらいです。' +
+            'その時の金融資産（約' + manYen(withIns.assets) + '万円）' + (need0 > 0 ? 'では足りない分です。' : 'でまかなえます。') +
+            '親の扶養や借入れがあれば、その分を葬儀・整理資金に足してください。</div>' +
+        '</div>' +
+        '<div class="calcsec">条件</div>' +
+        riskField('year', '亡くなる年', (dy - by) + '歳', '年', rk.year === undefined || rk.year === '' ? dy : rk.year, 76) +
+        riskField('funeral', '葬儀・整理資金', '', '万円', rk.funeral === undefined || rk.funeral === '' ? 200 : rk.funeral) +
+        riskField('insurance', '加入中の死亡保険金', '', '万円', rk.insurance === undefined ? '' : rk.insurance);
+    }
+    // 必要保障額を備えた場合の推移（グラフの3本目）
+    var covered = null;
+    if (need > 0) {
+      var cs = JSON.parse(JSON.stringify(withIns.state));
+      cs.lump.push({ id: 80900, year: dy, amount: need, memo: '' });
+      covered = E.compute(cs);
+    }
     return '<div class="rkres ' + (need > 0 ? 'ng' : 'ok') + '">' +
         '<div class="k">' + name + 'が' + dy + '年（' + (dy - by) + '歳）に亡くなったら</div>' +
         '<div class="row"><span>必要保障額</span><b>' + manYen(need0) + '</b><span class="u">万円</span></div>' +
         (toNum(rk.insurance) > 0 ? '<div class="row sub"><span>加入中の保険 ' + manYen(rk.insurance) + '万円を入れると</span>' +
           (need > 0 ? '<b>あと ' + manYen(need) + '</b><span class="u">万円</span>' : '<b class="okt">足りています</b>') + '</div>' : '') +
-        '<div class="hint" style="padding:6px 0 0">亡くなった年に一度にこの額が入れば、' + (base.years.length ? base.years[base.years.length - 1].year : '') + '年まで金融資産（預金＋投資）がマイナスになりません。</div>' +
+        '<div class="hint" style="padding:6px 0 0">亡くなった年に一度にこの額が入れば、' + (info.until !== Infinity && info.until ? info.until + '年（末子が独立する前の年）' : (base.years.length ? base.years[base.years.length - 1].year : '') + '年') + 'まで金融資産（預金＋投資）がマイナスになりません。</div>' +
       '</div>' +
-      riskChartSVG(base, withIns.cf, dy, width) +
+      riskChartSVG(base, withIns.cf, dy, width, covered) +
       '<div class="calcsec">遺族年金など</div>' +
       '<div class="ppbreak" style="font-size:13.5px">' + dy + '年：遺族基礎年金 ' + first.basic + ' ＋ 子の加算 ' + first.child + ' ＋ 遺族厚生年金 ' + first.emp + ' ＝ <b>' + penFmt(first.basic + first.child + first.emp) + '万円</b>（' + name + 'の厚生年金 ' + penFmt(info.emp) + '万円' + (info.empYears < 25 ? '・加入25年とみなす' : '') + 'から）</div>' +
       '<div class="rksteps">' + steps.slice(0, 8).map(function (x) {
@@ -2720,10 +2749,13 @@
       }).join('') + '</div>' +
       '<div class="hint" style="padding:4px 0 0">遺族厚生年金は、子がいる間は報酬比例の3/4。子が18歳を過ぎると遺族基礎年金が終わり、遺族厚生年金はその後5年間（2028年の改正の有期給付。加算で報酬比例の全額ほど）で終わります。65歳からは本人の年金です。非課税なので手取りのまま、将来の目減り（公的年金と同じ割合）を掛けています。</div>' +
       '<div class="calcsec">条件</div>' +
-      riskField('year', '亡くなる年', '今年なら「今すぐの場合」。' + (dy - by) + '歳', '年', dy, 76) +
+      riskField('year', '亡くなる年', '今年なら「今すぐの場合」。' + (dy - by) + '歳', '年', rk.year === undefined || rk.year === '' ? dy : rk.year, 76) +
+      (toNum(rk.year) && toNum(rk.year) !== dy ? '<div class="vmsg warn">' + ic('warn', 15) + '<span>計算できるのは' + riskYearRange().from + '〜' + riskYearRange().to + '年です。' + dy + '年として計算しています。</span></div>' : '') +
       riskField('livingRate', '遺族の生活費（末子独立まで）', '今の生活費に対する割合', '％', rk.livingRate === undefined || rk.livingRate === '' ? 80 : rk.livingRate, 64) +
       riskField('indepAge', '末子独立の年齢', info.indepYear && E.children(state).length ? '独立は' + info.indepYear + '年' : '子がいなければ、はじめから独立後の割合', '歳', rk.indepAge === undefined || rk.indepAge === '' ? 22 : rk.indepAge, 64) +
       riskField('livingRate2', '末子独立後の生活費', '今の生活費に対する割合', '％', rk.livingRate2 === undefined || rk.livingRate2 === '' ? 60 : rk.livingRate2, 64) +
+      (sp ? riskField('spouseNet', '遺された' + esc(memberName(sp.id)) + 'の手取り（年）', '空欄ならプランのまま。亡くなった後に働く・増やす予定があれば', '万円', rk.spouseNet === undefined ? '' : rk.spouseNet) +
+        (rk.spouseNet !== undefined && rk.spouseNet !== '' ? riskField('spouseUntil', '何歳まで働く', '', '歳', rk.spouseUntil === undefined || rk.spouseUntil === '' ? 65 : rk.spouseUntil, 64) : '') : '') +
       riskField('funeral', '葬儀・整理資金', '', '万円', rk.funeral === undefined || rk.funeral === '' ? 200 : rk.funeral) +
       riskField('lumpIn', '死亡退職金・弔慰金', '会社の規程で。DCの残高もここへ', '万円', rk.lumpIn === undefined ? '' : rk.lumpIn) +
       riskField('insurance', '加入中の死亡保険金', '団信は除く', '万円', rk.insurance === undefined ? '' : rk.insurance) +
@@ -2756,6 +2788,10 @@
   ];
   function riskSimpleHTML(dead) {
     var rk = riskOf(), ov = rk.simple || {};
+    var hasSpouse = riskAdults().some(function (m) { return m.id !== dead.id; });
+    if (!hasSpouse) {
+      return '<div class="hint" style="padding:8px 0 0">かんたん計算（Excelの必要保障額シート）は、配偶者が遺される場合の計算です。ひとり暮らしやひとり親の場合は「CF表で計算」を使ってください。</div>';
+    }
     var base = E.needFromPlan(state, riskInput(rk));
     var o = {};
     Object.keys(base).forEach(function (k) { o[k] = ov[k] !== undefined && ov[k] !== '' ? ov[k] : base[k]; });
@@ -3078,7 +3114,7 @@
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
     'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato', 'lastIncome', 'social',
-    'commute', 'loan', 'lumpIn', 'insurance', 'funeral', 'livingRate', 'livingRate2', 'deposit', 'invest', 'otherAssets', 'avgIncome', 'years', 'age', 'condolence', 'retirement', 'otherCompany', 'spouseNet', 'spouseYears', 'spouseAvg', 'spouseLifeYears', 'otherIncome', 'living', 'rate1', 'indepAge', 'rate2', 'loanYears', 'loanAnnual', 'dansin', 'rent', 'edu', 'insuranceUntil', 'carCost', 'carUntil', 'carTimes', 'carPrice', 'others', 'until', 'firstAge', 'firstIncome', 'pastYears', 'pastIncome', 'teikiEarn', 'teikiBasic', 'basicYears', 'startAge', 'contrib', 'cost', 'until', 'receive', 'target', 'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
+    'commute', 'loan', 'lumpIn', 'insurance', 'funeral', 'livingRate', 'livingRate2', 'spouseUntil', 'deposit', 'invest', 'otherAssets', 'avgIncome', 'years', 'age', 'condolence', 'retirement', 'otherCompany', 'spouseNet', 'spouseYears', 'spouseAvg', 'spouseLifeYears', 'otherIncome', 'living', 'rate1', 'indepAge', 'rate2', 'loanYears', 'loanAnnual', 'dansin', 'rent', 'edu', 'insuranceUntil', 'carCost', 'carUntil', 'carTimes', 'carPrice', 'others', 'until', 'firstAge', 'firstIncome', 'pastYears', 'pastIncome', 'teikiEarn', 'teikiBasic', 'basicYears', 'startAge', 'contrib', 'cost', 'until', 'receive', 'target', 'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });
@@ -3087,6 +3123,7 @@
       Object.keys(v).forEach(function (k) { o[k] = clean(v[k], k, numLeaves || k === 'eduAmount' || k === 'carBuyOverride'); });
       return o;
     }
+    if (typeof v === 'boolean') return v;   // 団信の印（dansin: true）など。数値の欄と同じ名前でも数値にしない
     if (numLeaves || NUM_KEYS.indexOf(key) >= 0) return v === '' || v == null ? '' : toNum(v);
     return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? v : '';
   }

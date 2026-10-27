@@ -560,6 +560,19 @@
       var ra = dy - dby;
       if (!num(s.retireAge) || num(s.retireAge) > ra) s.retireAge = Math.max(1, ra);
     });
+    // 遺された配偶者の働き方（spouseNet：亡くなった年からの手取りの年額、spouseUntil：何歳まで）。空欄ならプランのまま
+    if (spouse && risk.spouseNet !== undefined && risk.spouseNet !== '' && risk.spouseNet !== null) {
+      var sal = (st.salaries || []).filter(function (s) { return s.memberId === spouse.id; })[0];
+      if (!sal) {
+        sal = { id: 80500, who: spouse.name || spouse.relation, memberId: spouse.id, retireAge: 0, rows: [{ id: 80501, year: sy, amount: 0, growth: 0 }] };
+        st.salaries.push(sal);
+      }
+      sal.rows = sal.rows.filter(function (r, i) { return i === 0 || num(r.year) < dy; });
+      if (dy === sy) { sal.rows[0].amount = num(risk.spouseNet); sal.rows[0].growth = 0; }
+      else sal.rows.push({ id: 80502, year: dy, amount: num(risk.spouseNet), growth: 0 });
+      if (risk.spouseUntil !== undefined && risk.spouseUntil !== '' && num(risk.spouseUntil) > 0) sal.retireAge = num(risk.spouseUntil);
+      else if (!num(sal.retireAge)) sal.retireAge = 65;
+    }
 
     // 遺族年金
     var plan = pensionPlan(st);
@@ -663,12 +676,29 @@
 
   // 不足資金：亡くなる年に一度にいくら入れれば、最後まで金融資産（預金＋投資）がマイナスにならないか（万円、1万円単位で切り上げ）。
   // 投資は取り崩せるとみなす（預金が足りない年は積立も止まる）
+  // 遺される家族：配偶者がいなければ、独立前（22歳以下）の子が遺される家族。どちらもいなければ alone（必要なのは葬儀・整理資金だけ）。
+  // 配偶者がいなければ、末子が独立する年の前までで判定する（その後のお金は遺される家族のものではないため）
   function riskShortfall(state, risk) {
+    risk = risk || {};
     var rs = riskState(state, risk);
     var dy = rs.info.year;
+    var kids = children(state).map(function (c) { return parseDate(c.birth).y; }).filter(function (b) { return b && dy - b <= 22; });
+    var alone = !!rs.info.dead && !rs.info.spouse && !kids.length;
+    rs.info.alone = alone;
+    var until = rs.info.spouse || !kids.length ? Infinity : rs.info.indepYear - 1;
+    rs.info.until = until;
+    if (alone) {
+      // 亡くなる前の年の末の金融資産（開始年なら前年末の残高）で、葬儀・整理資金をまかなえるか
+      var base = compute(state);
+      var before = base.years.filter(function (r) { return r.year === dy - 1; })[0];
+      var assets = before ? before.assets.total : (state.assets || []).reduce(function (t, a) { return t + num(a.amount); }, 0);
+      var funeral = risk.funeral === undefined || risk.funeral === '' ? 200 : num(risk.funeral);
+      var lack = funeral - assets - num(risk.lumpIn) - num(risk.insurance);
+      return { need: lack > 0 ? Math.ceil(lack) : 0, minDeposit: assets, cf: base, state: state, info: rs.info, assets: assets };
+    }
     var minDep = function (st) {
       var r = compute(st), m = Infinity;
-      r.years.forEach(function (row) { if (row.year >= dy && row.assets.total < m) m = row.assets.total; });
+      r.years.forEach(function (row) { if (row.year >= dy && row.year <= until && row.assets.total < m) m = row.assets.total; });
       return { min: m, cf: r };
     };
     var first = minDep(rs.state);
