@@ -697,15 +697,17 @@
   //      spouseNet, spouseYears（配偶者の手取り×年数）, spouseAvg, spouseLifeYears（配偶者の生涯の平均年収と勤続年数）, otherIncome,
   //      living, rate1, indepAge, rate2（生活費、末子独立までの割合、独立年齢、その後の割合）,
   //      loanYears, loanAnnual, dansin（団信で相殺される％）, upkeep, rent, edu, insurance, insuranceUntil, carCost, carUntil, carTimes, carPrice, others,
-  //      until（何歳までの生活を見るか、既定90）, basic（基礎年金、既定80）, childAdd（子の加算、既定28） }
+  //      until（何歳までの生活を見るか、既定90）, basic（基礎年金、既定80）, childAdd（子の加算、既定28）, year（上限を決める年。プランの開始年） }
   function needSimple(o) {
     var d = function (k, v) { return o[k] === undefined || o[k] === '' || o[k] === null ? v : num(o[k]); };
     var until = d('until', 90), age = num(o.age);
     var kids = (o.kids || []).filter(function (k) { return k !== '' && k !== null && k !== undefined && isFinite(parseFloat(k)); }).map(num);
     var basicFull = d('basic', 80), childAdd = d('childAdd', 28);
     // 遺族年金等（シート M10:CE25）
-    var emp = Math.min(1000, num(o.avgIncome)) * PEN_RATE * Math.max(25, num(o.years));
-    var own = num(o.spouseAvg) * PEN_RATE * num(o.spouseLifeYears) * 0.75;
+    // 平均年収は、公的年金の見込みと同じ標準報酬の上限まで（その年の上限。今は1,080万円、2030年からは1,200万円）。シートは1,000万円
+    var cap = pensionCap(d('year', new Date().getFullYear()));
+    var emp = Math.min(cap, num(o.avgIncome)) * PEN_RATE * Math.max(25, num(o.years));
+    var own = Math.min(cap, num(o.spouseAvg)) * PEN_RATE * num(o.spouseLifeYears) * 0.75;
     var table = [], noKidYears = 0;
     for (var a = age; a <= until && table.length < 120; a++) {
       var n = kids.filter(function (k) { return k + (a - age) <= 18; }).length;
@@ -783,7 +785,7 @@
     var pastOnly = pd ? { avg: pd.pastYears ? r1(pd.past / PEN_RATE / pd.pastYears) : pd.current, years: pd.pastYears } : { avg: 0, years: 0 };
     var life = avg(ps);
     return {
-      deposit: cash, invest: inv, otherAssets: 0,
+      year: sy, deposit: cash, invest: inv, otherAssets: 0,
       avgIncome: pastOnly.avg, years: pastOnly.years,
       age: age, kids: kids,
       condolence: 0, retirement: 0, otherCompany: 0,

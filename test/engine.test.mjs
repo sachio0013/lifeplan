@@ -553,6 +553,15 @@ test('必要保障額（簡易版）：Excelの必要保障額シート（2028�
   assert.equal(r.need, 3317);
 });
 
+test('必要保障額（簡易版）：平均年収の上限は公的年金の見込みと同じ（今は1,080万円、2030年からは1,200万円）', () => {
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/excel-need.json', import.meta.url), 'utf8'));
+  const hi = { ...fx.input, avgIncome: 1500, spouseAvg: 1500 };
+  assert.ok(Math.abs(E.needSimple({ ...hi, year: 2026 }).emp - 1080 * 0.005481 * 25) < 1e-9);
+  assert.ok(Math.abs(E.needSimple({ ...hi, year: 2031 }).emp - 1200 * 0.005481 * 25) < 1e-9);
+  assert.ok(Math.abs(E.needSimple({ ...hi, year: 2026 }).own - 1080 * 0.005481 * 38 * 0.75) < 1e-9);
+  assert.equal(E.needFromPlan(require('../app/sample.js').sample(), {}).year, 2026);
+});
+
 test('もしもの場合（CF表）：亡くなる年から給与が0、生活費は末子独立まで8割・その後6割、団信で返済が消え、遺族年金が入り、不足資金を出す', () => {
   const S = require('../app/sample.js');
   const st = S.sample();
