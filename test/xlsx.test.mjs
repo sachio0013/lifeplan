@@ -63,3 +63,41 @@ test('ライフプランのExcel：サマリーとCF表、グラフ2つ（CF表�
   assert.ok(z['xl/drawings/_rels/drawing1.xml.rels'].includes('../charts/chart2.xml'));
   assert.ok(z['[Content_Types].xml'].includes('/xl/charts/chart1.xml'));
 });
+
+test('保障のExcel：保障サマリー（結果・条件・遺族年金・3本の推移グラフ）、もしものCF表、かんたん計算', () => {
+  const cf = {
+    years: [2026, 2027], ages: [{ label: '妻', values: [35, 36] }],
+    groups: [{ label: '収入', rows: [], total: { label: '収入計', key: 'income', values: [100, 100] } }, { label: '支出', rows: [], total: { label: '支出計', key: 'expense', values: [300, 300] } }],
+    balance: { label: '年間収支', values: [-200, -200] },
+    assets: { label: '金融資産残高（年末）', rows: [{ label: '普通預金等', key: 'deposit', values: [300, 100] }, { label: '投資資産計', key: 'investTotal', values: [0, 0] }], total: { label: '金融資産の合計', values: [300, 100] } },
+    extra: [{ label: '比較（金融資産の合計）', rows: [{ label: 'いつも', key: 'base', values: [900, 1000] }, { label: 'もしも', key: 'risk', values: [300, 100] }, { label: '保険で備えた場合', key: 'covered', values: [800, 600] }] }]
+  };
+  const z = unzip(X.riskWorkbook({
+    plan: 'テスト', date: new Date(2026, 9, 27), title: '夫が2026年（35歳）に亡くなったら', keys: [['必要保障額', 4023, '万円']],
+    conds: [['亡くなる人', '夫', ''], ['葬儀・整理資金', 200, '万円']], steps: [[2026, 35, 177.5], [2056, 65, 141.5]], cf,
+    simple: { need: 5547, expense: [['生活費', 100], ['支出の合計', 100]], income: [['今の金融資産', 10], ['収入の合計', 10]], table: [[35, 2, 80, 41.1, 56, 0, 177.1]] }
+  }));
+  assert.ok(['保障サマリー', 'もしものCF表', 'かんたん計算'].every((n) => z['xl/workbook.xml'].includes(`name="${n}"`)));
+  const ch = z['xl/charts/chart1.xml'];
+  assert.ok(ch.includes('<c:lineChart>') && (ch.match(/<c:ser>/g) || []).length === 3 && ch.includes('prstDash'));   // 保険で備えた場合は破線
+  assert.ok(z['xl/worksheets/sheet1.xml'].includes('<v>2026</v>'));
+  assert.ok(z['xl/worksheets/sheet3.xml'].includes('<v>5547</v>'));
+});
+
+test('家計簿のExcel：まとめ（区分別の積み上げ棒＋収入の折れ線）と、月×項目の1年の表', () => {
+  const m = (v) => Array(12).fill(v).concat([v * 12]);
+  const z = unzip(X.bookWorkbook({
+    year: 2026, date: new Date(2026, 9, 27),
+    blocks: [{ group: '１．支出' }, { label: '食費', values: m(50000) }, { label: '支出計', total: true, key: 'expense', values: m(50000) },
+      { group: '３．区分別' }, { label: '1 基本生活費', key: 'cat1', values: m(50000) }, { label: '収入計', total: true, key: 'income', values: m(300000) },
+      { label: '備考', text: true, values: Array(13).fill('') }],
+    cats: [{ key: 'cat1', label: '1 基本生活費', color: '2A78D6' }, { key: 'cat9', label: 'なし', color: '000000' }],
+    keys: [['収入の合計', 3600000, '円']]
+  }));
+  assert.ok(z['xl/workbook.xml'].includes('name="まとめ"') && z['xl/workbook.xml'].includes('name="2026年"'));
+  const ch = z['xl/charts/chart1.xml'];
+  assert.ok(ch.includes('<c:barChart>') && ch.includes('<c:lineChart>'));                  // 棒と折れ線を重ねる
+  assert.ok(ch.includes("'2026年'!$B$3:$M$3") && !ch.includes('$N$'));                     // 1〜12月だけ（年計は含めない）
+  assert.ok(ch.includes('<c:v>1月</c:v>') && ch.includes('<a:t>円</a:t>'));
+  assert.equal((ch.match(/<c:ser>/g) || []).length, 2);                                      // 行の無い区分は入れない
+});

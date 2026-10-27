@@ -724,15 +724,34 @@ await fresh.close();
 // Excelに書き出す：CF表とグラフ入りの .xlsx が保存される
 {
   await go(page, '#seg-cf');
-  await page.waitForSelector('.xlcard');
-  const [xl] = await Promise.all([page.waitForEvent('download'), page.locator('.xlcard .btn').tap()]);
+  await page.waitForSelector('#cfview .xlcard');
+  const [xl] = await Promise.all([page.waitForEvent('download'), page.locator('#cfview .xlcard .btn').tap()]);
   const xlPath = join(shots, 'export.xlsx');
   await xl.saveAs(xlPath);
   const buf = readFileSync(xlPath);
-  const msg = await page.textContent('.xlcard .vmsg');
+  const msg = await page.textContent('#cfview .xlcard .vmsg');
   const text = buf.toString('latin1');
   check('Excelに書き出す：グラフ入りの.xlsx（サマリー・CF表）が保存される', /^lifeplan_\d{8}\.xlsx$/.test(xl.suggestedFilename()) && buf.slice(0, 2).toString() === 'PK' &&
     text.includes('xl/charts/chart2.xml') && text.includes('xl/worksheets/sheet2.xml') && /ダウンロード/.test(msg), `${xl.suggestedFilename()} ${buf.length}B ${msg}`);
+}
+
+// 保障と家計簿もExcelに書き出せる
+{
+  await go(page, '#seg-risk');
+  await page.waitForSelector('#riskview .xlcard');
+  const [rx] = await Promise.all([page.waitForEvent('download'), page.locator('#riskview .xlcard .btn').tap()]);
+  const rPath = join(shots, 'export-risk.xlsx'); await rx.saveAs(rPath);
+  const rt = readFileSync(rPath).toString('latin1');
+  await go(page, '#seg-book');
+  await page.locator('.bkmodes button', { hasText: '1年の表' }).tap(); await page.waitForTimeout(200);
+  const [bx] = await Promise.all([page.waitForEvent('download'), page.locator('#bookview .xlcard .btn').tap()]);
+  const bPath = join(shots, 'export-book.xlsx'); await bx.saveAs(bPath);
+  const bt = readFileSync(bPath).toString('latin1');
+  await page.locator('.bkmodes button', { hasText: '月ごと' }).tap(); await page.waitForTimeout(150);
+  check('保障（もしもの場合）と家計簿（1年の表）も、グラフ入りのExcelに書き出せる',
+    /^lifeplan_hosho_\d{8}\.xlsx$/.test(rx.suggestedFilename()) && rt.startsWith('PK') && rt.includes('xl/worksheets/sheet3.xml') && rt.includes('xl/charts/chart1.xml') &&
+    /^kakeibo_\d{4}_\d{8}\.xlsx$/.test(bx.suggestedFilename()) && bt.startsWith('PK') && bt.includes('xl/charts/chart1.xml'),
+    `${rx.suggestedFilename()} ${bx.suggestedFilename()}`);
 }
 
 // 保障：もしもの場合の必要保障額（CF表で計算・かんたん計算）。団信の印、保険金で足りるか、プランとして保存

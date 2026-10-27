@@ -1075,62 +1075,153 @@
       '<div class="card tablecard"><h2 class="h3">キャッシュフロー表</h2><div class="sub">単位：万円。横にスクロールできます。</div>' +
         '<div class="tablewrap" tabindex="0" role="region" aria-label="キャッシュフロー表（横にスクロールできます）">' + tableHTML() + '</div>' +
       '</div>' +
-      '<div class="card xlcard"><div class="xlrow">' + ic('chart', 22) + '<div><b>Excelに書き出す</b><span>CF表とグラフ（金融資産の推移・収入と支出）を、色付きのExcelファイルで保存します。印刷や、家族・専門家との共有に。</span></div></div>' +
-        '<button class="btn block" onclick="A.exportXlsx()">Excelファイルで保存（.xlsx）</button>' +
-        (ui.xlsxMsg ? '<div class="vmsg ' + ui.xlsxMsg[1] + '">' + ic(ui.xlsxMsg[1] === 'ok' ? 'check' : 'warn', 15) + '<span>' + esc(ui.xlsxMsg[0]) + '</span></div>' : '') +
-      '</div>' +
+      xlsxCardHTML('cf', 'CF表とグラフ（金融資産の推移・収入と支出）を、色付きのExcelファイルで保存します。印刷や、家族・専門家との共有に。', 'A.exportXlsx()') +
       '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>' +
       DISCLAIMER;
   }
 
   // ---------- Excelに書き出す（app/xlsx.js） ----------
+  //
+  // 未来の表（cf）、保障（risk）、家計簿の1年の表（book）の3つ。ファイルはアプリの中で組み立てる。
 
-  function xlsxData() {
-    var ys = result.years, r1 = function (v) { return Math.round(v * 10) / 10; };
-    var col = function (f) { return ys.map(function (y) { return r1(f(y)); }); };
-    var last = ys[ys.length - 1];
-    var minY = ys.reduce(function (a, y) { return y.assets.total < a.assets.total ? y : a; }, ys[0]);
-    var sf = result.shortfall;
-    var by = baseBirth();
+  var r1x = function (v) { return Math.round(v * 10) / 10; };
+  // CF表の数字。行は「未来の表」と同じ（st と res は、もしもの場合のプランと計算結果のこともある）
+  function cfData(st, res) {
+    var ys = res.years;
+    var col = function (f) { return ys.map(function (y) { return r1x(f(y)); }); };
+    var who = function (id) { var m = byId(st.family, id); return m ? (m.name || m.relation) : 'その他'; };
     return {
-      plan: plan().name, date: new Date(), years: ys.map(function (y) { return y.year; }),
-      ages: state.family.map(function (m, i) { return { label: m.name || m.relation, values: ys.map(function (y) { return y.ages[i]; }) }; }),
+      years: ys.map(function (y) { return y.year; }),
+      ages: st.family.map(function (m, i) { return { label: m.name || m.relation, values: ys.map(function (y) { return y.ages[i]; }) }; }),
       groups: [
-        { label: '収入', rows: state.salaries.map(function (s, i) { return { label: memberName(s.memberId) + 'の給与', values: col(function (y) { return y.income.salaries[i]; }) }; })
+        { label: '収入', rows: st.salaries.map(function (sl, i) { return { label: who(sl.memberId) + 'の給与', values: col(function (y) { return y.income.salaries[i]; }) }; })
             .concat([{ label: '退職金・年金等', values: col(function (y) { return y.income.pension; }) }])
-            .concat(result.investNames.map(function (n, i) { return { label: n + 'の現金化', values: col(function (y) { return y.income.withdrawals[i]; }) }; })),
+            .concat(res.investNames.map(function (n, i) { return { label: n + 'の現金化', values: col(function (y) { return y.income.withdrawals[i]; }) }; })),
           total: { label: '収入計', key: 'income', values: col(function (y) { return y.income.total; }) } },
         { label: '支出', rows: [['基本生活費', 'living'], ['住宅費', 'housing'], ['教育費', 'education'], ['保険料', 'insurance'], ['自動車', 'car'], ['その他', 'other']]
             .map(function (k) { return { label: k[0], values: col(function (y) { return y.expense[k[1]]; }) }; })
-            .concat(result.investNames.map(function (n, i) { return { label: n + 'へ積立', values: col(function (y) { return y.expense.contributions[i]; }) }; })),
+            .concat(res.investNames.map(function (n, i) { return { label: n + 'へ積立', values: col(function (y) { return y.expense.contributions[i]; }) }; })),
           total: { label: '支出計', key: 'expense', values: col(function (y) { return y.expense.total; }) } }
       ],
       balance: { label: '年間収支', values: col(function (y) { return y.balance; }) },
       assets: { label: '金融資産残高（年末）', rows: [{ label: '普通預金等', key: 'deposit', values: col(function (y) { return y.assets.deposit; }) }]
-          .concat(result.investNames.map(function (n, i) { return { label: n, values: col(function (y) { return y.assets.investments[i]; }) }; }))
+          .concat(res.investNames.map(function (n, i) { return { label: n, values: col(function (y) { return y.assets.investments[i]; }) }; }))
           .concat([{ label: '投資資産計', key: 'investTotal', values: col(function (y) { return y.assets.investTotal; }) }]),
-        total: { label: '金融資産の合計', values: col(function (y) { return y.assets.total; }) } },
-      keys: [
-        ['終了時点（' + last.year + '年・家族１ ' + last.age + '歳）の金融資産', r1(last.assets.total), '万円', last.assets.total < 0],
-        ['金融資産がいちばん少ない年（' + minY.year + '年・' + minY.age + '歳）', r1(minY.assets.total), '万円', minY.assets.total < 0],
-        ['普通預金等がマイナスになる年', sf ? sf.year + '年（家族１が' + sf.age + '歳）' : 'ありません', ''],
-        ['計算する期間', ys[0].year + '年〜' + last.year + '年（' + ys.length + '年間）', '']
-      ],
-      family: state.family.map(function (m) {
-        var b = E.parseDate(m.birth);
-        return [m.relation, m.name || '', b.y ? b.y + '/' + ('0' + b.m).slice(-2) + '/' + ('0' + b.d).slice(-2) : '', b.y ? state.startYear - b.y : ''];
-      })
+        total: { label: '金融資産の合計', values: col(function (y) { return y.assets.total; }) } }
     };
   }
-  A.exportXlsx = function () {
-    if (!result.years.length) return;
-    var data;
-    try { data = window.LifePlanXlsx.lifeplanWorkbook(xlsxData()); } catch (e) { ui.xlsxMsg = ['Excelファイルを作れませんでした', 'error']; commit(); return; }
-    var d = new Date();
-    var name = 'ライフプラン_' + plan().name.replace(/[\\/:*?"<>|]/g, '') + '_' + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.xlsx';
-    var done = function (msg, level) { ui.xlsxMsg = [msg, level]; commit(); };
+  function xlsxData() {
+    var ys = result.years, last = ys[ys.length - 1];
+    var minY = ys.reduce(function (a, y) { return y.assets.total < a.assets.total ? y : a; }, ys[0]);
+    var sf = result.shortfall;
+    var d = cfData(state, result);
+    d.plan = plan().name; d.date = new Date();
+    d.keys = [
+      ['終了時点（' + last.year + '年・家族１ ' + last.age + '歳）の金融資産', r1x(last.assets.total), '万円', last.assets.total < 0],
+      ['金融資産がいちばん少ない年（' + minY.year + '年・' + minY.age + '歳）', r1x(minY.assets.total), '万円', minY.assets.total < 0],
+      ['普通預金等がマイナスになる年', sf ? sf.year + '年（家族１が' + sf.age + '歳）' : 'ありません', ''],
+      ['計算する期間', ys[0].year + '年〜' + last.year + '年（' + ys.length + '年間）', '']
+    ];
+    d.family = state.family.map(function (m) {
+      var b = E.parseDate(m.birth);
+      return [m.relation, m.name || '', b.y ? b.y + '/' + ('0' + b.m).slice(-2) + '/' + ('0' + b.d).slice(-2) : '', b.y ? state.startYear - b.y : ''];
+    });
+    return d;
+  }
+  // 保障（もしもの場合）：画面と同じ条件で
+  function riskXlsxData() {
+    var rk = riskOf(), dead = riskDead(); if (!dead) return null;
+    var input = riskInput(rk), dy = input.year, by = E.parseDate(dead.birth).y;
+    var withIns = E.riskShortfall(state, input);
+    var noIns = toNum(rk.insurance) > 0 ? E.riskShortfall(state, Object.assign({}, input, { insurance: 0 })) : withIns;
+    var info = withIns.info, sp = info.spouse, name = memberName(dead.id);
+    var res = withIns.cf, ys = res.years;
+    var cf = cfData(withIns.state, res);
+    var base = E.compute(state), baseBy = {};
+    base.years.forEach(function (y) { baseBy[y.year] = y.assets.total; });
+    var cmp = [{ label: 'いつも', key: 'base', values: ys.map(function (y) { return r1x(baseBy[y.year]); }) },
+      { label: 'もしも', key: 'risk', values: ys.map(function (y) { return r1x(y.assets.total); }) }];
+    if (withIns.need > 0 && !info.alone) {
+      var cs = JSON.parse(JSON.stringify(withIns.state));
+      cs.lump.push({ id: 80900, year: dy, amount: withIns.need, memo: '' });
+      var cov = E.compute(cs);
+      cmp.push({ label: '保険で備えた場合', key: 'covered', values: cov.years.map(function (y) { return r1x(y.assets.total); }) });
+    }
+    cf.extra = [{ label: '比較（金融資産の合計）', rows: cmp }];
+    var sv = {};
+    info.survivor.forEach(function (x) { sv[x.year] = x; });
+    if (info.survivor.length) {
+      var svRow = function (label, k) { return { label: label, values: ys.map(function (y) { return sv[y.year] ? sv[y.year][k] : ''; }) }; };
+      cf.extra.push({ label: '遺族年金など（年額）', rows: [svRow('遺族基礎年金', 'basic'), svRow('子の加算', 'child'), svRow('遺族厚生年金', 'emp'),
+        svRow('65歳からの上乗せ', 'extra'), svRow('遺された人の公的年金', 'own'), svRow('公的年金の合計', 'total')] });
+    }
+    var sby = sp ? E.parseDate(sp.birth).y : 0;
+    var steps = [];
+    info.survivor.forEach(function (x, i) { if (i === 0 || x.total !== info.survivor[i - 1].total) steps.push([x.year, sp ? x.year - sby : '', x.total]); });
+    var keys = [['必要保障額', noIns.need, '万円']];
+    if (toNum(rk.insurance) > 0) keys.push(['加入中の保険 ' + manYen(rk.insurance) + '万円を入れると、あと', withIns.need, '万円']);
+    var dflt = function (v, d) { return v === undefined || v === '' ? d : v; };
+    var conds = [
+      ['亡くなる人', name, ''], ['亡くなる年', dy + '年（' + (dy - by) + '歳）', ''],
+      ['遺族の生活費（末子独立まで）', dflt(rk.livingRate, 80), '％'], ['末子独立の年齢', dflt(rk.indepAge, 22), '歳'], ['末子独立後の生活費', dflt(rk.livingRate2, 60), '％'],
+      ['遺された配偶者の手取り（年）', rk.spouseNet === undefined || rk.spouseNet === '' ? 'プランのまま' : toNum(rk.spouseNet), rk.spouseNet === undefined || rk.spouseNet === '' ? '' : '万円'],
+      ['葬儀・整理資金', dflt(rk.funeral, 200), '万円'], ['死亡退職金・弔慰金', toNum(rk.lumpIn), '万円'], ['加入中の死亡保険金', toNum(rk.insurance), '万円'],
+      ['住宅ローンの団信', state.housing.filter(function (r) { return r.dansin; }).length ? 'あり（返済がなくなる）' : 'なし', '']
+    ];
+    var d = { plan: plan().name, date: new Date(), title: name + 'が' + dy + '年（' + (dy - by) + '歳）に亡くなったら', keys: keys, conds: conds, steps: steps, cf: cf, simple: null };
+    if (info.alone) d.title += '（遺される家族がいないため、葬儀・整理資金で判定）';
+    if (riskAdults().some(function (m) { return m.id !== dead.id; })) {
+      var r = E.needSimple(simpleInputs());
+      d.simple = {
+        need: r.need,
+        expense: [['生活費', r1x(r.expense.living)], ['住居費', r1x(r.expense.housing)], ['教育費', r1x(r.expense.edu)], ['保険料', r1x(r.expense.insurance)], ['自動車', r1x(r.expense.car)], ['その他', r1x(r.expense.other)], ['支出の合計', r1x(r.expense.total)]],
+        income: [['今の金融資産', r1x(r.income.assets)], ['遺族年金など', r1x(r.income.survivor)], ['会社から（弔慰金・死亡退職金）', r1x(r.income.company)], ['配偶者の収入', r1x(r.income.spouse)], ['その他', r1x(r.income.other)], ['収入の合計', r1x(r.income.total)]],
+        table: r.survivorTable.map(function (t) { return [t.age, t.kids, r1x(t.basic), r1x(t.emp), r1x(t.child), r1x(t.own65), r1x(t.total)]; })
+      };
+    }
+    return d;
+  }
+  // 家計簿の1年の表
+  var CAT_HEX = ['2A78D6', 'EB6834', '1BAF7A', 'EDA100', 'E87BA4', '008300'];
+  function bookXlsxData(y) {
+    var s = BK.summarize(y);
+    var vals = function (arr, total) { return arr.map(function (v) { return BK.filled(v) ? Math.round(BK.num(v)) : ''; }).concat([Math.round(total)]); };
+    var sum = function (arr) { return arr.reduce(function (a, v) { return a + BK.num(v); }, 0); };
+    var blocks = [{ group: '１．支出' }];
+    y.items.forEach(function (it) { blocks.push({ label: it.name, values: vals(it.m, sum(it.m)) }); });
+    blocks.push({ label: '支出計', total: true, key: 'expense', values: vals(s.months.map(function (m) { return m.expense; }), s.expense) });
+    blocks.push({ group: '２．決済手段別' });
+    Object.keys(s.byPay).forEach(function (k) { blocks.push({ label: k, values: vals(s.byPay[k], sum(s.byPay[k])) }); });
+    blocks.push({ group: '３．区分別（→ ライフプラン）' });
+    BK.CATS.forEach(function (c) { blocks.push({ label: c.no + ' ' + c.label, key: 'cat' + c.no, values: vals(s.months.map(function (m) { return m.cats[c.no]; }), s.catTotals[c.no]) }); });
+    blocks.push({ group: '４．手取収入' });
+    y.incomes.forEach(function (r) { blocks.push({ label: r.name, values: vals(r.m, sum(r.m)) }); });
+    if (s.deducted) blocks.push({ label: '給与天引き（自動）', values: vals(s.months.map(function (m) { return m.deducted; }), s.deducted) });
+    blocks.push({ label: '収入計', total: true, key: 'income', values: vals(s.months.map(function (m) { return m.income; }), s.income) });
+    blocks.push({ label: '備考', text: true, values: y.notes.map(function (n) { return n || ''; }).concat(['']) });
+    blocks.push({ group: '５．収支／残高' });
+    blocks.push({ label: '収支', total: true, values: vals(s.months.map(function (m) { return m.balance; }), s.balance) });
+    blocks.push({ label: '残高（記録）', values: s.months.map(function (m) { return Math.round(m.running); }).concat(['']) });
+    blocks.push({ label: '口座残高（実際）', values: s.months.map(function (m) { return m.actual == null ? '' : Math.round(m.actual); }).concat(['']) });
+    blocks.push({ label: '差額（0になること）', values: s.months.map(function (m) { return m.diff == null ? '' : Math.round(m.diff); }).concat(['']) });
+    var inv = y.invests.reduce(function (t, v) { return [t[0] + BK.num(v.start), t[1] + BK.num(v.end)]; }, [0, 0]);
+    var rate = s.income > 0 ? Math.round((s.income - s.expense + s.catTotals[6]) / s.income * 100) : '';
+    return {
+      year: ui.book.year, date: new Date(), blocks: blocks,
+      cats: BK.CATS.map(function (c, i) { return { key: 'cat' + c.no, label: c.no + ' ' + c.label, color: CAT_HEX[i] }; }),
+      keys: [['収入の合計', Math.round(s.income), '円'], ['支出の合計', Math.round(s.expense), '円'], ['収支', Math.round(s.balance), '円', s.balance < 0],
+        ['収入のうち貯蓄・投資に回せた割合', rate, rate === '' ? '' : '％'], ['記録した月', s.recorded + 'か月', ''],
+        ['投資資産（前年末 → 今年末）', Math.round(inv[0]).toLocaleString('ja-JP') + ' → ' + Math.round(inv[1]).toLocaleString('ja-JP') + '円', '']]
+    };
+  }
+
+  function ymd() { var d = new Date(); return d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2); }
+  function safeName(v) { return String(v).replace(/[\\/:*?"<>|]/g, ''); }
+  // 保存する（claude.ai ではアプリの保存、ほかのブラウザではダウンロード）。where は画面（cf・risk・book）
+  function saveXlsx(where, bytes, name, ascii) {
+    var done = function (msg, level) { ui.xlsxMsg = { where: where, text: msg, level: level }; commit(); };
     if (downloads) {
-      downloads.save({ filename: name, data: new Blob([data]) }).then(function () { done(name + ' を保存しました', 'ok'); }, function (e) {
+      downloads.save({ filename: name, data: new Blob([bytes]) }).then(function () { done(name + ' を保存しました', 'ok'); }, function (e) {
         var code = e && e.code;
         if (code === 'declined') done('保存を取りやめました', 'warn');
         else if (code === 'rate_limited') done('少し待ってから、もう一度押してください', 'warn');
@@ -1139,15 +1230,38 @@
       return;
     }
     try {
-      var url = URL.createObjectURL(new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      var url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
       var a = document.createElement('a');
       // ブラウザによっては日本語のファイル名が「download」になるので、ここでは英字の名前にする
-      var ascii = 'lifeplan_' + name.replace(/^.*_(\d{8})\.xlsx$/, '$1') + '.xlsx';
       a.href = url; a.download = ascii;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
       done(ascii + ' のダウンロードを始めました', 'ok');
     } catch (e) { done('この画面ではファイルに保存できませんでした', 'error'); }
+  }
+  function xlsxCardHTML(where, text, fn) {
+    var m = ui.xlsxMsg && ui.xlsxMsg.where === where ? ui.xlsxMsg : null;
+    return '<div class="card xlcard"><div class="xlrow">' + ic('chart', 22) + '<div><b>Excelに書き出す</b><span>' + text + '</span></div></div>' +
+      '<button class="btn block" onclick="' + fn + '">Excelファイルで保存（.xlsx）</button>' +
+      (m ? '<div class="vmsg ' + m.level + '">' + ic(m.level === 'ok' ? 'check' : 'warn', 15) + '<span>' + esc(m.text) + '</span></div>' : '') +
+    '</div>';
+  }
+  function buildXlsx(where, fn) {
+    try { return fn(); } catch (e) { ui.xlsxMsg = { where: where, text: 'Excelファイルを作れませんでした', level: 'error' }; commit(); return null; }
+  }
+  A.exportXlsx = function () {
+    if (!result.years.length) return;
+    var bytes = buildXlsx('cf', function () { return window.LifePlanXlsx.lifeplanWorkbook(xlsxData()); });
+    if (bytes) saveXlsx('cf', bytes, 'ライフプラン_' + safeName(plan().name) + '_' + ymd() + '.xlsx', 'lifeplan_' + ymd() + '.xlsx');
+  };
+  A.exportRisk = function () {
+    var bytes = buildXlsx('risk', function () { var d = riskXlsxData(); return d && window.LifePlanXlsx.riskWorkbook(d); });
+    if (bytes) saveXlsx('risk', bytes, 'もしもの保障_' + safeName(plan().name) + '_' + ymd() + '.xlsx', 'lifeplan_hosho_' + ymd() + '.xlsx');
+  };
+  A.exportBook = function () {
+    var y = bookYear(); if (!y) return;
+    var bytes = buildXlsx('book', function () { return window.LifePlanXlsx.bookWorkbook(bookXlsxData(y)); });
+    if (bytes) saveXlsx('book', bytes, '家計簿_' + ui.book.year + '年_' + ymd() + '.xlsx', 'kakeibo_' + ui.book.year + '_' + ymd() + '.xlsx');
   };
 
   // ---------- 公的年金の見込み（額面基準・プランの給与から） ----------
@@ -2327,7 +2441,8 @@
       '<div class="card tablecard"><h2 class="h3">' + ui.book.year + '年の年間収支</h2><div class="sub">単位：円。Excelの家計簿シートと同じ並びです。横にスクロールできます。</div>' +
         '<div class="tablewrap" tabindex="0" role="region" aria-label="年間収支の表"><table class="cf bk">' + '<thead>' + head + '</thead><tbody>' + h + '</tbody></table></div></div>' +
       '<div class="card bkgroup"><div class="head"><span class="ttl">投資資産の残高（NISA・iDeCo・株など）</span></div>' + inv +
-        '<div class="total divide"><span class="u" style="font-weight:700">合計</span><span class="v">' + yen(invTotal[0]) + ' → ' + yen(invTotal[1]) + '円</span></div></div>';
+        '<div class="total divide"><span class="u" style="font-weight:700">合計</span><span class="v">' + yen(invTotal[0]) + ' → ' + yen(invTotal[1]) + '円</span></div></div>' +
+      xlsxCardHTML('book', ui.book.year + '年の年間収支の表と、月ごとの支出（区分別）・収入のグラフを、Excelファイルで保存します。', 'A.exportBook()');
   }
 
   // ---- ライフプランへ反映 ----
@@ -2758,7 +2873,9 @@
       var on = m.id === dead.id;
       return '<button role="radio" aria-checked="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.rk(\'memberId\',' + m.id + ')">' + esc(memberName(m.id)) + '</button>';
     }).join('') + '</div>' : '';
-    return head + '<div class="card rkcard">' + sw + who + (mode === 'simple' ? riskSimpleHTML(dead) : riskCfHTML(dead, width)) + '</div>' + DISCLAIMER;
+    return head + '<div class="card rkcard">' + sw + who + (mode === 'simple' ? riskSimpleHTML(dead) : riskCfHTML(dead, width)) + '</div>' +
+      xlsxCardHTML('risk', '必要保障額と条件、遺族年金の移り変わり、いつも・もしもの推移のグラフ、もしもの場合のCF表、かんたん計算の内訳を、Excelファイルで保存します。保険の見直しの資料に。', 'A.exportRisk()') +
+      DISCLAIMER;
   }
 
   function riskCfHTML(dead, width) {
@@ -2857,16 +2974,22 @@
     ['carCost', '自動車の維持費（年）', '', '万円'], ['carUntil', '配偶者が何歳まで', '', '歳'], ['carTimes', '車の購入回数', '', '回'], ['carPrice', '1台あたり', '', '万円'],
     ['others', 'その他の支出', '旅行など', '万円'], ['until', '何歳までの生活を見るか', '配偶者の年齢', '歳']
   ];
+  // かんたん計算の入力：プランから作った初期値に、書き換えた欄（state.risk.simple）を重ねる
+  function simpleInputs() {
+    var rk = riskOf(), ov = rk.simple || {};
+    var base = E.needFromPlan(state, riskInput(rk));
+    var o = {};
+    Object.keys(base).forEach(function (k) { o[k] = ov[k] !== undefined && ov[k] !== '' ? ov[k] : base[k]; });
+    if (ov.others !== undefined && ov.others !== '') o.others = [ov.others];
+    return o;
+  }
   function riskSimpleHTML(dead) {
     var rk = riskOf(), ov = rk.simple || {};
     var hasSpouse = riskAdults().some(function (m) { return m.id !== dead.id; });
     if (!hasSpouse) {
       return '<div class="hint" style="padding:8px 0 0">かんたん計算（Excelの必要保障額シート）は、配偶者が遺される場合の計算です。ひとり暮らしやひとり親の場合は「CF表で計算」を使ってください。</div>';
     }
-    var base = E.needFromPlan(state, riskInput(rk));
-    var o = {};
-    Object.keys(base).forEach(function (k) { o[k] = ov[k] !== undefined && ov[k] !== '' ? ov[k] : base[k]; });
-    if (ov.others !== undefined && ov.others !== '') o.others = [ov.others];
+    var o = simpleInputs();
     var r = E.needSimple(o);
     var changed = Object.keys(ov).some(function (k) { return ov[k] !== undefined && ov[k] !== ''; });
     var rows = SIMPLE_FIELDS.map(function (f) {

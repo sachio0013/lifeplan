@@ -75,7 +75,7 @@
   var FONT = 'Meiryo UI';
 
   // スタイル（cellXfs の番号）
-  var S = { def: 0, title: 1, note: 2, head: 3, label: 4, num: 5, secLabel: 6, sec: 7, totLabel: 8, totNum: 9, age: 10, big: 11, key: 12, headLabel: 13, ageLabel: 14, unit: 15, text: 16, date: 17, keyBox: 18, bigNeg: 19 };
+  var S = { def: 0, title: 1, note: 2, head: 3, label: 4, num: 5, secLabel: 6, sec: 7, totLabel: 8, totNum: 9, age: 10, big: 11, key: 12, headLabel: 13, ageLabel: 14, unit: 15, text: 16, date: 17, keyBox: 18, bigNeg: 19, plain: 20 };
   function stylesXml() {
     var font = function (o) {
       return '<font>' + (o.b ? '<b/>' : '') + '<sz val="' + (o.sz || 10) + '"/><color rgb="FF' + (o.c || C.ink) + '"/><name val="' + FONT + '"/><family val="3"/><charset val="128"/></font>';
@@ -94,7 +94,7 @@
     var xf = [
       [0, 0, 0, 0], [0, 1, 0, 0], [0, 2, 0, 0], [0, 3, 2, 0, 'center'], [0, 0, 0, 1], [164, 0, 0, 1, 'right'],
       [0, 6, 3, 1], [0, 0, 3, 1], [0, 4, 4, 2], [164, 4, 4, 2, 'right'], [166, 2, 0, 1, 'center'], [164, 5, 5, 3, 'right'],
-      [0, 4, 5, 3], [0, 3, 2, 0, 'left'], [0, 2, 0, 1], [0, 2, 5, 3], [0, 0, 0, 1, 'left'], [0, 0, 0, 1, 'center'], [0, 2, 5, 3], [164, 7, 5, 3, 'right']
+      [0, 4, 5, 3], [0, 3, 2, 0, 'left'], [0, 2, 0, 1], [0, 2, 5, 3], [0, 0, 0, 1, 'left'], [0, 0, 0, 1, 'center'], [0, 2, 5, 3], [164, 7, 5, 3, 'right'], [0, 0, 0, 1, 'center']
     ];
     return HEAD + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
       '<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0;[Red]\\-#,##0;&quot;-&quot;"/><numFmt numFmtId="165" formatCode="#,##0.0;[Red]\\-#,##0.0"/><numFmt numFmtId="166" formatCode="0&quot;歳&quot;"/></numFmts>' +
@@ -166,20 +166,29 @@
     return '<c:numRef><c:f>' + x(f) + '</c:f><c:numCache><c:formatCode>' + (fmt || 'General') + '</c:formatCode><c:ptCount val="' + vals.length + '"/>' +
       vals.map(function (v, i) { return isFinite(v) ? '<c:pt idx="' + i + '"><c:v>' + Math.round(v * 10) / 10 + '</c:v></c:pt>' : ''; }).join('') + '</c:numCache></c:numRef>';
   }
-  // o: { title, type: 'bar'|'line', series: [{ name, nameRef, ref, values, color }], cats: { ref, values }, skip }
+  function strRefs(f, vals) {
+    return '<c:strRef><c:f>' + x(f) + '</c:f><c:strCache><c:ptCount val="' + vals.length + '"/>' +
+      vals.map(function (v, i) { return '<c:pt idx="' + i + '"><c:v>' + x(v) + '</c:v></c:pt>'; }).join('') + '</c:strCache></c:strRef>';
+  }
+  // o: { title, type: 'bar'|'line', series: [{ name, nameRef, ref, values, color, dash }], lines（棒に重ねる折れ線）, cats: { ref, values, str }, skip, unit }
   function chartXml(o) {
-    var ser = o.series.map(function (s, i) {
-      var head = '<c:idx val="' + i + '"/><c:order val="' + i + '"/><c:tx>' + strRef(s.nameRef, s.name) + '</c:tx>';
-      var cat = '<c:cat>' + numRef(o.cats.ref, o.cats.values) + '</c:cat><c:val>' + numRef(s.ref, s.values, '#,##0') + '</c:val>';
-      if (o.type === 'bar') {
-        return '<c:ser>' + head + '<c:spPr><a:solidFill><a:srgbClr val="' + s.color + '"/></a:solidFill></c:spPr><c:invertIfNegative val="0"/>' + cat + '</c:ser>';
-      }
-      return '<c:ser>' + head + '<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill><a:srgbClr val="' + s.color + '"/></a:solidFill><a:round/></a:ln></c:spPr>' +
-        '<c:marker><c:symbol val="none"/></c:marker>' + cat + '<c:smooth val="0"/></c:ser>';
-    }).join('');
+    var catXml = '<c:cat>' + (o.cats.str ? strRefs(o.cats.ref, o.cats.values) : numRef(o.cats.ref, o.cats.values)) + '</c:cat>';
+    var head = function (s, i) { return '<c:idx val="' + i + '"/><c:order val="' + i + '"/><c:tx>' + strRef(s.nameRef, s.name) + '</c:tx>'; };
+    var val = function (s) { return '<c:val>' + numRef(s.ref, s.values, '#,##0') + '</c:val>'; };
+    var lineSer = function (s, i) {
+      return '<c:ser>' + head(s, i) + '<c:spPr><a:ln w="28575" cap="rnd"><a:solidFill><a:srgbClr val="' + s.color + '"/></a:solidFill>' + (s.dash ? '<a:prstDash val="dash"/>' : '') + '<a:round/></a:ln></c:spPr>' +
+        '<c:marker><c:symbol val="none"/></c:marker>' + catXml + val(s) + '<c:smooth val="0"/></c:ser>';
+    };
+    var lineChart = function (list, from) {
+      return '<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>' + list.map(function (s, i) { return lineSer(s, from + i); }).join('') + '<c:marker val="1"/><c:axId val="5001"/><c:axId val="5002"/></c:lineChart>';
+    };
     var plot = o.type === 'bar'
-      ? '<c:barChart><c:barDir val="col"/><c:grouping val="stacked"/><c:varyColors val="0"/>' + ser + '<c:gapWidth val="40"/><c:overlap val="100"/><c:axId val="5001"/><c:axId val="5002"/></c:barChart>'
-      : '<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>' + ser + '<c:marker val="1"/><c:axId val="5001"/><c:axId val="5002"/></c:lineChart>';
+      ? '<c:barChart><c:barDir val="col"/><c:grouping val="stacked"/><c:varyColors val="0"/>' + o.series.map(function (s, i) {
+          return '<c:ser>' + head(s, i) + '<c:spPr><a:solidFill><a:srgbClr val="' + s.color + '"/></a:solidFill></c:spPr><c:invertIfNegative val="0"/>' + catXml + val(s) + '</c:ser>';
+        }).join('') + '<c:gapWidth val="' + (o.gap || 40) + '"/><c:overlap val="100"/><c:axId val="5001"/><c:axId val="5002"/></c:barChart>' +
+        (o.lines && o.lines.length ? lineChart(o.lines, o.series.length) : '')
+      : lineChart(o.series, 0);
+    var allSeries = o.series.concat(o.lines || []);
     var axLine = '<c:spPr><a:ln w="9525"><a:solidFill><a:srgbClr val="' + C.line + '"/></a:solidFill></a:ln></c:spPr>';
     return HEAD + '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
       '<c:roundedCorners val="0"/>' +
@@ -191,9 +200,9 @@
           '<c:catAx><c:axId val="5001"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/>' +
             '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="low"/>' + axLine + TXT(900, C.muted) +
             '<c:crossAx val="5002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:tickLblSkip val="' + (o.skip || 5) + '"/><c:noMultiLvlLbl val="0"/></c:catAx>' +
-          '<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/>' + (o.series.every(function (s) { return s.values.every(function (v) { return !(v < 0); }); }) ? '<c:min val="0"/>' : '') + '</c:scaling><c:delete val="0"/><c:axPos val="l"/>' +
+          '<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/>' + (allSeries.every(function (s) { return s.values.every(function (v) { return !(v < 0); }); }) ? '<c:min val="0"/>' : '') + '</c:scaling><c:delete val="0"/><c:axPos val="l"/>' +
             '<c:majorGridlines><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="F3E6EC"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>' +
-            '<c:title><c:tx><c:rich><a:bodyPr rot="0" vert="horz"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900" b="0"/></a:pPr><a:r><a:rPr lang="ja-JP" sz="900" b="0"><a:solidFill><a:srgbClr val="' + C.muted + '"/></a:solidFill></a:rPr><a:t>万円</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>' +
+            '<c:title><c:tx><c:rich><a:bodyPr rot="0" vert="horz"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="900" b="0"/></a:pPr><a:r><a:rPr lang="ja-JP" sz="900" b="0"><a:solidFill><a:srgbClr val="' + C.muted + '"/></a:solidFill></a:rPr><a:t>' + x(o.unit || '万円') + '</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>' +
             '<c:numFmt formatCode="#,##0" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>' +
             '<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>' + TXT(900, C.muted) + '<c:crossAx val="5001"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>' +
           '<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>' +
@@ -271,98 +280,196 @@
     return zip(files, o.date);
   }
 
-  // ---- ライフプランの書き出し ----
+  // ---- 表のシート（見出しの行＋区分・行） ----
   //
-  // d: { plan（プラン名）, date（Date）, years, ages: [{ label, values }],
-  //      groups: [{ label, rows: [{ label, values }], total: { label, values } }],   … 収入・支出
-  //      balance: { label, values }, assets: { label, rows: [...], total: {...} }, deposit（普通預金等の行の番号）, investTotal（投資資産計の行の番号）,
-  //      keys: [[見出し, 値, 単位, 赤字にするか]], family: [[続柄, 名前, 生年月日, 開始年の年齢]] }
-  function lifeplanWorkbook(d) {
-    var n = d.years.length, last = n;   // 年の列は B〜
-    var cf = new Sheet('CF表');
-    cf.cols = [[1, 1, 24], [2, n + 1, 8.6]];
-    cf.set(0, 0, 'キャッシュフロー表　' + d.plan, S.title); cf.height(0, 30);
-    cf.set(1, 0, '単位：万円（年末の残高）。この表は入力した条件にもとづく試算です。', S.note);
+  // t: { title, note, headLabel, heads（年や月）, pre: [{ label, values }]（年齢など）, blocks: [ { group } | { label, values, key, total, text } ],
+  //      widths: [項目の列, 値の列] }
+  // 返り値 { sheet, rowOf（key → 行の番号）, headRow, freezeRow, n }
+  function tableSheet(name, t) {
+    var n = t.heads.length;
+    var sh = new Sheet(name);
+    sh.cols = [[1, 1, (t.widths || [24])[0]], [2, n + 1, (t.widths || [24, 8.6])[1]]];
+    sh.set(0, 0, t.title, S.title); sh.height(0, 30);
+    if (t.note) sh.set(1, 0, t.note, S.note);
     var r = 2;
-    cf.set(r, 0, '年', S.headLabel);
-    d.years.forEach(function (y, i) { cf.set(r, i + 1, y, S.head); });
-    cf.height(r, 22);
-    var yearRow = r;
-    r++;
-    d.ages.forEach(function (a) {
-      cf.set(r, 0, a.label, S.ageLabel);
-      a.values.forEach(function (v, i) { cf.set(r, i + 1, v === null || v === undefined ? '' : v, S.age); });
+    sh.set(r, 0, t.headLabel || '年', S.headLabel);
+    t.heads.forEach(function (h, i) { sh.set(r, i + 1, h, S.head); });
+    sh.height(r, 22);
+    var headRow = r++;
+    (t.pre || []).forEach(function (a) {
+      sh.set(r, 0, a.label, S.ageLabel);
+      a.values.forEach(function (v, i) { sh.set(r, i + 1, v === null || v === undefined ? '' : v, S.age); });
       r++;
     });
-    var freezeRow = r;
-    var rowOf = {};
-    var putRows = function (g) {
-      cf.set(r, 0, g.label, S.secLabel);
-      for (var i = 1; i <= last; i++) cf.set(r, i, '', S.sec);
-      r++;
-      g.rows.forEach(function (row) {
-        cf.set(r, 0, '　' + row.label, S.label);
-        row.values.forEach(function (v, i) { cf.set(r, i + 1, v, S.num); });
-        if (row.key) rowOf[row.key] = r;
-        r++;
-      });
-      if (g.total) {
-        cf.set(r, 0, g.total.label, S.totLabel);
-        g.total.values.forEach(function (v, i) { cf.set(r, i + 1, v, S.totNum); });
-        if (g.total.key) rowOf[g.total.key] = r;
-        r++;
+    var freezeRow = r, rowOf = {};
+    t.blocks.forEach(function (b) {
+      if (b.group) {
+        sh.set(r, 0, b.group, S.secLabel);
+        for (var i = 1; i <= n; i++) sh.set(r, i, '', S.sec);
+      } else {
+        sh.set(r, 0, b.total ? b.label : '　' + b.label, b.total ? S.totLabel : S.label);
+        b.values.forEach(function (v, i) { sh.set(r, i + 1, v === null || v === undefined ? '' : v, b.text ? S.text : b.total ? S.totNum : S.num); });
+        if (b.key) rowOf[b.key] = r;
       }
-    };
-    d.groups.forEach(putRows);
-    cf.set(r, 0, d.balance.label, S.totLabel);
-    d.balance.values.forEach(function (v, i) { cf.set(r, i + 1, v, S.totNum); });
-    rowOf.balance = r; r++;
-    putRows(d.assets);
+      r++;
+    });
+    return { sheet: sh, rowOf: rowOf, headRow: headRow, freezeRow: freezeRow, n: n, lastRow: r - 1 };
+  }
+  // グラフの系列（表の行を参照）
+  function seriesOf(tb, key, name, color, o) {
+    var row = tb.rowOf[key], vals = [];
+    for (var i = 1; i <= tb.n; i++) { var c = tb.sheet.cells[row + ',' + i]; vals.push(c && typeof c.v === 'number' ? c.v : NaN); }
+    var q = "'" + tb.sheet.name + "'!";
+    return Object.assign({ name: name, nameRef: q + '$A$' + (row + 1), ref: q + '$B$' + (row + 1) + ':$' + col(tb.n) + '$' + (row + 1), values: vals, color: color }, o || {});
+  }
+  function catsOf(tb, str) {
+    var vals = [];
+    for (var i = 1; i <= tb.n; i++) vals.push(tb.sheet.cells[tb.headRow + ',' + i].v);
+    return { ref: "'" + tb.sheet.name + "'!$B$" + (tb.headRow + 1) + ':$' + col(tb.n) + '$' + (tb.headRow + 1), values: vals, str: !!str };
+  }
+  function printTitles(tb, index) {
+    return { sheet: index, ref: "'" + tb.sheet.name + "'!$A:$A,'" + tb.sheet.name + "'!$" + (tb.headRow + 1) + ':$' + tb.freezeRow };
+  }
+  function dateText(dt) { return dt.getFullYear() + '年' + (dt.getMonth() + 1) + '月' + dt.getDate() + '日に作成'; }
 
-    // サマリー
-    var sm = new Sheet('サマリー');
-    sm.cols = [[1, 1, 30], [2, 2, 16], [3, 3, 8], [4, 9, 11]];
-    sm.set(0, 0, 'ライフプラン表　' + d.plan, S.title); sm.height(0, 34);
-    var dt = d.date || new Date();
-    sm.set(1, 0, dt.getFullYear() + '年' + (dt.getMonth() + 1) + '月' + dt.getDate() + '日に作成。入力した条件にもとづく試算で、将来を約束するものではありません。', S.note);
+  // まとめのシート：タイトル、ポイント（見出し・値・単位）、表、グラフの場所
+  // m: { title, note, keys: [[見出し, 値, 単位, 赤字]], tables: [{ label, head: [...], rows: [[...]], styles: [...] }], widths }
+  function summarySheet(name, m) {
+    var sm = new Sheet(name);
+    sm.cols = m.widths || [[1, 1, 30], [2, 2, 16], [3, 3, 8], [4, 9, 11]];
+    sm.set(0, 0, m.title, S.title); sm.height(0, 34);
+    sm.set(1, 0, m.note, S.note);
     var k = 3;
-    sm.set(k, 0, 'ポイント', S.secLabel); sm.set(k, 1, '', S.sec); sm.set(k, 2, '', S.sec); k++;
-    d.keys.forEach(function (row) {
-      sm.set(k, 0, row[0], S.keyBox);
-      sm.set(k, 1, row[1], typeof row[1] === 'number' ? (row[3] ? S.bigNeg : S.big) : S.keyBox);
-      sm.set(k, 2, row[2] || '', S.unit);
-      sm.height(k, 30);
+    if (m.keys && m.keys.length) {
+      sm.set(k, 0, m.keysLabel || 'ポイント', S.secLabel); sm.set(k, 1, '', S.sec); sm.set(k, 2, '', S.sec); k++;
+      m.keys.forEach(function (row) {
+        sm.set(k, 0, row[0], S.keyBox);
+        sm.set(k, 1, row[1], typeof row[1] === 'number' ? (row[3] ? S.bigNeg : S.big) : S.keyBox);
+        sm.set(k, 2, row[2] || '', S.unit);
+        sm.height(k, 30);
+        k++;
+      });
+      k++;
+    }
+    (m.tables || []).forEach(function (t) {
+      var w = t.head.length;
+      sm.set(k, 0, t.label, S.secLabel); for (var j = 1; j < w; j++) sm.set(k, j, '', S.sec); k++;
+      t.head.forEach(function (h, i) { sm.set(k, i, h, i ? S.head : S.headLabel); }); k++;
+      t.rows.forEach(function (row, ri) {
+        var tot = t.total && ri === t.rows.length - 1;
+        row.forEach(function (v, i) {
+          var st = typeof v === 'number'
+            ? (tot ? S.totNum : (t.ageCols || []).indexOf(i) >= 0 ? S.age : (t.plainCols || []).indexOf(i) >= 0 ? S.plain : S.num)
+            : i ? (tot ? S.totNum : S.date) : (tot ? S.totLabel : S.text);
+          sm.set(k, i, v, st);
+        });
+        k++;
+      });
       k++;
     });
-    k++;
-    sm.set(k, 0, '家族', S.secLabel); for (var j = 1; j <= 3; j++) sm.set(k, j, '', S.sec); k++;
-    ['続柄', '名前', '生年月日', '年齢'].forEach(function (h, i) { sm.set(k, i, h, i ? S.head : S.headLabel); }); k++;
-    d.family.forEach(function (f) { f.forEach(function (v, i) { sm.set(k, i, v, i === 3 ? S.age : i === 2 ? S.date : S.text); }); k++; });
-    k += 1;
-    var chartTop = k;
-    var cfRef = function (row, from, to) { return "'CF表'!$" + col(from) + '$' + (row + 1) + ':$' + col(to) + '$' + (row + 1); };
-    var nameRef = function (row) { return "'CF表'!$A$" + (row + 1); };
-    var cats = { ref: cfRef(yearRow, 1, last), values: d.years };
-    var vals = function (row) { var a = []; for (var i = 1; i <= last; i++) { var c = cf.cells[row + ',' + i]; a.push(c && typeof c.v === 'number' ? c.v : NaN); } return a; };
-    var skip = n > 40 ? 5 : n > 20 ? 2 : 1;
-    var charts = [
-      { title: '金融資産残高の推移', type: 'bar', cats: cats, skip: skip, series: [
-        { name: '普通預金等', nameRef: nameRef(rowOf.deposit), ref: cfRef(rowOf.deposit, 1, last), values: vals(rowOf.deposit), color: C.deposit },
-        { name: '投資資産', nameRef: nameRef(rowOf.investTotal), ref: cfRef(rowOf.investTotal, 1, last), values: vals(rowOf.investTotal), color: C.invest }
-      ] },
-      { title: '収入と支出', type: 'line', cats: cats, skip: skip, series: [
-        { name: '収入計', nameRef: nameRef(rowOf.income), ref: cfRef(rowOf.income, 1, last), values: vals(rowOf.income), color: C.income },
-        { name: '支出計', nameRef: nameRef(rowOf.expense), ref: cfRef(rowOf.expense, 1, last), values: vals(rowOf.expense), color: C.expense }
-      ] }
-    ];
-    var anchors = [{ from: [0, chartTop], to: [9, chartTop + 20] }, { from: [0, chartTop + 21], to: [9, chartTop + 41] }];
-    sm.set(chartTop + 42, 0, '詳しい数字は「CF表」のシートにあります。グラフは「CF表」のセルを参照しているので、表の数字を書き換えるとグラフも変わります。', S.note);
-
-    return workbook([
-      { sheet: sm, opts: { tab: C.deposit, portrait: true, fitWidth: 1, fitHeight: 1 }, charts: charts, anchors: anchors },
-      { sheet: cf, opts: { tab: C.invest, freeze: [freezeRow, 1], fitWidth: Math.max(1, Math.ceil(n / 20)), fitHeight: 1 } }
-    ], { title: 'ライフプラン表　' + d.plan, date: d.date, printTitles: [{ sheet: 1, ref: "'CF表'!$A:$A,'CF表'!$" + (yearRow + 1) + ':$' + freezeRow }] });
+    return { sheet: sm, next: k };
   }
 
-  return { zip: zip, crc32: crc32, Sheet: Sheet, workbook: workbook, lifeplanWorkbook: lifeplanWorkbook, col: col };
+  // ---- ライフプラン（未来の表）の書き出し ----
+  //
+  // d: { plan, date, years, ages: [{ label, values }], groups: [{ label, rows: [{ label, values, key }], total: { label, values, key } }],
+  //      balance: { label, values }, assets: { label, rows, total }, keys: [[見出し, 値, 単位, 赤字]], family: [[続柄, 名前, 生年月日, 年齢]] }
+  // 行の key：income（収入計）、expense（支出計）、deposit（普通預金等）、investTotal（投資資産計）
+  function cfBlocks(d) {
+    var blocks = [];
+    var put = function (g) {
+      blocks.push({ group: g.label });
+      g.rows.forEach(function (r) { blocks.push(r); });
+      if (g.total) blocks.push(Object.assign({ total: true }, g.total));
+    };
+    d.groups.forEach(put);
+    blocks.push(Object.assign({ total: true }, d.balance));
+    put(d.assets);
+    (d.extra || []).forEach(put);
+    return blocks;
+  }
+  function lifeplanWorkbook(d) {
+    var dt = d.date || new Date();
+    var tb = tableSheet('CF表', { title: 'キャッシュフロー表　' + d.plan, note: '単位：万円（年末の残高）。この表は入力した条件にもとづく試算です。', heads: d.years, pre: d.ages, blocks: cfBlocks(d) });
+    var sm = summarySheet('サマリー', {
+      title: 'ライフプラン表　' + d.plan, note: dateText(dt) + '。入力した条件にもとづく試算で、将来を約束するものではありません。',
+      keys: d.keys, tables: [{ label: '家族', head: ['続柄', '名前', '生年月日', '年齢'], rows: d.family, ageCols: [3] }]
+    });
+    var top = sm.next, cats = catsOf(tb), skip = d.years.length > 40 ? 5 : d.years.length > 20 ? 2 : 1;
+    var charts = [
+      { title: '金融資産残高の推移', type: 'bar', cats: cats, skip: skip, series: [seriesOf(tb, 'deposit', '普通預金等', C.deposit), seriesOf(tb, 'investTotal', '投資資産', C.invest)] },
+      { title: '収入と支出', type: 'line', cats: cats, skip: skip, series: [seriesOf(tb, 'income', '収入計', C.income), seriesOf(tb, 'expense', '支出計', C.expense)] }
+    ];
+    sm.sheet.set(top + 42, 0, '詳しい数字は「CF表」のシートにあります。グラフは「CF表」のセルを参照しているので、表の数字を書き換えるとグラフも変わります。', S.note);
+    return workbook([
+      { sheet: sm.sheet, opts: { tab: C.deposit, portrait: true, fitWidth: 1, fitHeight: 1 }, charts: charts, anchors: [{ from: [0, top], to: [9, top + 20] }, { from: [0, top + 21], to: [9, top + 41] }] },
+      { sheet: tb.sheet, opts: { tab: C.invest, freeze: [tb.freezeRow, 1], fitWidth: Math.max(1, Math.ceil(tb.n / 20)), fitHeight: 1 } }
+    ], { title: 'ライフプラン表　' + d.plan, date: dt, printTitles: [printTitles(tb, 1)] });
+  }
+
+  // ---- 保障（もしもの場合）の書き出し ----
+  //
+  // d: { plan, date, title（「夫が2026年（35歳）に亡くなったら」）, keys, conds: [[見出し, 値, 単位]], steps: [[年, 配偶者の年齢, 額]],
+  //      cf: lifeplanWorkbook の d と同じ形（もしもの場合のCF。extra に比較の行 base・risk・covered と遺族年金の行）,
+  //      simple: { need, income: [[見出し, 額]], expense: [[見出し, 額]], table: [[年齢, 子, 基礎, 厚生, 子の加算, 65歳から, 計]] } | null }
+  function riskWorkbook(d) {
+    var dt = d.date || new Date();
+    var tb = tableSheet('もしものCF表', { title: 'もしもの場合のキャッシュフロー表　' + d.plan, note: d.title + '。単位：万円（年末の残高）。', heads: d.cf.years, pre: d.cf.ages, blocks: cfBlocks(d.cf) });
+    var sm = summarySheet('保障サマリー', {
+      title: 'もしもの保障　' + d.plan, note: dateText(dt) + '。' + d.title + '。入力した条件にもとづく試算で、特定の保険商品をすすめるものではありません。',
+      keysLabel: '結果', keys: d.keys,
+      tables: [
+        { label: '条件', head: ['項目', '値', '単位'], rows: d.conds },
+        { label: '遺族年金など（年額・手取り）', head: ['年から', '配偶者の年齢', '万円'], rows: d.steps, plainCols: [0], ageCols: [1] }
+      ],
+      widths: [[1, 1, 34], [2, 2, 16], [3, 3, 10], [4, 9, 11]]
+    });
+    var top = sm.next, cats = catsOf(tb), skip = d.cf.years.length > 40 ? 5 : d.cf.years.length > 20 ? 2 : 1;
+    var lines = [seriesOf(tb, 'base', 'いつも', C.invest), seriesOf(tb, 'risk', 'もしも', 'C0392B')];
+    if (tb.rowOf.covered !== undefined) lines.push(seriesOf(tb, 'covered', '保険で備えた場合', C.income, { dash: true }));
+    var charts = [{ title: '金融資産の推移（いつも・もしも）', type: 'line', cats: cats, skip: skip, series: lines }];
+    var anchors = [{ from: [0, top], to: [9, top + 22] }];
+    sm.sheet.set(top + 23, 0, '「もしものCF表」のシートに、もしもの場合の年ごとの収入・支出・遺族年金があります。', S.note);
+    var sheets = [
+      { sheet: sm.sheet, opts: { tab: 'C0392B', portrait: true, fitWidth: 1, fitHeight: 1 }, charts: charts, anchors: anchors },
+      { sheet: tb.sheet, opts: { tab: C.deposit, freeze: [tb.freezeRow, 1], fitWidth: Math.max(1, Math.ceil(tb.n / 20)), fitHeight: 1 } }
+    ];
+    if (d.simple) {
+      var s = d.simple;
+      var ss = summarySheet('かんたん計算', {
+        title: '必要保障額のかんたん計算　' + d.plan, note: 'Excel「必要保障額」シートの考え方（支出の合計−収入の合計）。' + (s.note || ''),
+        keysLabel: '結果', keys: [['必要保障額', s.need, '万円']],
+        tables: [
+          { label: '支出', head: ['項目', '万円'], rows: s.expense, total: true },
+          { label: '収入', head: ['項目', '万円'], rows: s.income, total: true },
+          { label: '遺族年金など（配偶者の年齢ごと・年額）', head: ['年齢', '18歳以下の子', '遺族基礎年金', '遺族厚生年金', '子の加算', '65歳から', '計'], rows: s.table, ageCols: [0], plainCols: [1] }
+        ],
+        widths: [[1, 1, 30], [2, 7, 13]]
+      });
+      sheets.push({ sheet: ss.sheet, opts: { tab: C.invest, portrait: true, fitWidth: 1, fitHeight: 0 } });
+    }
+    return workbook(sheets, { title: 'もしもの保障　' + d.plan, date: dt, printTitles: [printTitles(tb, 1)] });
+  }
+
+  // ---- 家計簿（1年の表）の書き出し ----
+  //
+  // d: { year, date, blocks（tableSheet の blocks。key: cat1〜cat6・income・expense）, cats: [{ key, label, color }], keys: [[見出し, 値, 単位]] }
+  function bookWorkbook(d) {
+    var dt = d.date || new Date();
+    var heads = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '年計'];
+    var tb = tableSheet(d.year + '年', { title: d.year + '年の家計簿（年間収支）', note: '単位：円。Excel「家計簿（年間収支）」シートと同じ並びです。', headLabel: '項目', heads: heads, blocks: d.blocks, widths: [26, 11] });
+    var sm = summarySheet('まとめ', { title: d.year + '年の家計簿', note: dateText(dt) + '。', keys: d.keys });
+    var top = sm.next;
+    // グラフは1〜12月（年計の列は含めない）
+    var month = function (srs) { srs.ref = srs.ref.replace(/\$N\$/, '$M$'); srs.values = srs.values.slice(0, 12); return srs; };
+    var cats = catsOf(tb, true); cats.ref = cats.ref.replace(/\$N\$/, '$M$'); cats.values = cats.values.slice(0, 12);
+    var bars = d.cats.filter(function (c) { return tb.rowOf[c.key] !== undefined; }).map(function (c) { return month(seriesOf(tb, c.key, c.label, c.color)); });
+    var charts = [{ title: '月ごとの支出（区分別）と収入', type: 'bar', cats: cats, skip: 1, unit: '円', gap: 60, series: bars, lines: [month(seriesOf(tb, 'income', '収入', C.ink))] }];
+    return workbook([
+      { sheet: sm.sheet, opts: { tab: C.deposit, portrait: true, fitWidth: 1, fitHeight: 1 }, charts: charts, anchors: [{ from: [0, top], to: [9, top + 22] }] },
+      { sheet: tb.sheet, opts: { tab: C.invest, freeze: [tb.freezeRow, 1], fitWidth: 1, fitHeight: 0 } }
+    ], { title: d.year + '年の家計簿', date: dt, printTitles: [printTitles(tb, 1)] });
+  }
+
+  return { zip: zip, crc32: crc32, Sheet: Sheet, workbook: workbook, tableSheet: tableSheet, lifeplanWorkbook: lifeplanWorkbook, riskWorkbook: riskWorkbook, bookWorkbook: bookWorkbook, col: col };
 }));
