@@ -523,28 +523,37 @@ test('手取額：健康保険は年収2,241万円で頭打ち（雇用保険は
 });
 
 // ---- 必要保障額 ----
-test('必要保障額（簡易版）：Excelの必要保障額シート（2028年度改正版）の記入例と一致（3,111万円）', () => {
+test('必要保障額（簡易版）：Excelの必要保障額シート（2028年度改正版）の記入例と同じ式（子がいる間の遺族厚生年金だけ3/4にしたので3,317万円）', () => {
   const fx = JSON.parse(readFileSync(new URL('./fixtures/excel-need.json', import.meta.url), 'utf8'));
   const r = E.needSimple(fx.input);
   const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-6, `${msg}: ${a} ≠ ${b}`);
   close(r.emp, fx.out.O10, '夫の報酬比例（25年みなし）');
   close(r.own, fx.out.Y10, '妻の報酬比例×0.75');
   assert.equal(r.survivorTable.length, fx.survivor.length);
-  r.survivorTable.forEach((row, i) => close(row.total, fx.survivor[i], `妻${row.age}歳の遺族年金等`));
+  // シートは子がいる間も遺族厚生年金を報酬比例の全額にしている。アプリは法律どおり3/4なので、その年は全額の1/4だけ少ない
+  const less = fx.out.O10 * 0.25;
+  let lessTotal = 0;
+  r.survivorTable.forEach((row, i) => {
+    const d = row.kids > 0 ? less : 0;
+    lessTotal += d;
+    close(row.total, fx.survivor[i] - d, `妻${row.age}歳の遺族年金等`);
+  });
+  assert.equal(r.survivorTable.filter((x) => x.kids > 0).length, 15);
   close(r.income.assets, fx.out.G9, '金融資産');
-  close(r.income.survivor, fx.out.G19, '遺族年金等');
+  close(r.income.survivor, fx.out.G19 - lessTotal, '遺族年金等');
   close(r.income.company, fx.out.G24, '会社からの保障');
   close(r.income.spouse, fx.out.G26, '配偶者収入');
-  close(r.income.total, fx.out.G34, '収入合計');
+  close(r.income.total, fx.out.G34 - lessTotal, '収入合計');
   close(r.expense.living, fx.out.G42, '生活費');
   close(r.expense.housing, fx.out.G48, '住居費');
   close(r.expense.insurance, fx.out.G58, '保険料');
   close(r.expense.car, fx.out.G62, '自動車');
   close(r.expense.total, fx.out.G69, '支出計');
-  assert.equal(r.need, fx.out.G71);
+  assert.equal(r.need, Math.round(fx.out.G69 - (fx.out.G34 - lessTotal)));
+  assert.equal(r.need, 3317);
 });
 
-test('もしもの場合（CF表）：亡くなる年から給与が0、生活費7割、団信で返済が消え、遺族年金が入り、不足資金を出す', () => {
+test('もしもの場合（CF表）：亡くなる年から給与が0、生活費は末子独立まで8割・その後6割、団信で返済が消え、遺族年金が入り、不足資金を出す', () => {
   const S = require('../app/sample.js');
   const st = S.sample();
   st.housing.forEach((r) => { r.dansin = true; });
@@ -553,7 +562,11 @@ test('もしもの場合（CF表）：亡くなる年から給与が0、生活�
   const y = (r, yr) => r.years.find((x) => x.year === yr);
   assert.ok(y(risk, 2029).income.salaries[0] > 0);
   assert.equal(y(risk, 2030).income.salaries[0], 0);                                  // 夫の給与は2030年から0
-  assert.ok(Math.abs(y(risk, 2030).expense.living - y(base, 2030).expense.living * 0.7) < 0.01);   // 生活費は7割
+  assert.ok(Math.abs(y(risk, 2030).expense.living - y(base, 2030).expense.living * 0.8) < 0.01);   // 生活費は8割
+  assert.equal(rs.info.indepYear, 2024 + 22);                                                         // 下の子（2024年生まれ）が22歳
+  assert.ok(Math.abs(y(risk, 2045).expense.living - y(base, 2045).expense.living * 0.8) < 0.01);
+  assert.ok(Math.abs(y(risk, 2046).expense.living - y(base, 2046).expense.living * 0.6) < 0.01);   // 独立してからは6割
+  assert.ok(Math.abs(y(risk, 2060).expense.living - y(base, 2060).expense.living * 0.6) < 0.01);
   assert.ok(y(risk, 2030).expense.housing < y(base, 2030).expense.housing);           // 団信
   const sv = rs.info.survivor[0];
   assert.ok(sv.basic > 0 && sv.child > 0 && sv.emp > 0, JSON.stringify(sv));          // 子がいる間は遺族基礎＋子の加算＋遺族厚生
@@ -574,6 +587,7 @@ test('もしもの場合：子が18歳を過ぎて5年で遺族厚生年金が�
   const last18 = Math.max(...st.family.filter((m) => m.relation.startsWith('子供')).map((m) => parseInt(m.birth) + 18));
   const at = (yr) => sv.find((x) => x.year === yr);
   assert.ok(at(last18).child > 0);
+  assert.ok(Math.abs(at(last18).emp - at(last18 + 1).emp * 0.75) < 0.11);   // 子がいる間は3/4、いなくなってから5年は全額（有期給付加算）
   assert.equal(at(last18 + 1).child, 0);
   assert.ok(at(last18 + 5).emp > 0);
   assert.equal(at(last18 + 6).emp, 0);                    // 有期給付は5年

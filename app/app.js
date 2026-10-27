@@ -2632,7 +2632,7 @@
   }
   function riskInput(rk) {
     var dead = riskDead();
-    return { memberId: dead ? dead.id : 0, year: toNum(rk.year) || state.startYear, livingRate: rk.livingRate, funeral: rk.funeral,
+    return { memberId: dead ? dead.id : 0, year: toNum(rk.year) || state.startYear, livingRate: rk.livingRate, livingRate2: rk.livingRate2, indepAge: rk.indepAge, funeral: rk.funeral,
       lumpIn: rk.lumpIn, insurance: rk.insurance, drop: rk.drop };
   }
   function riskField(f, label, small, unit, value, w) {
@@ -2718,10 +2718,12 @@
       '<div class="rksteps">' + steps.slice(0, 8).map(function (x) {
         return '<span>' + x.year + '年' + (sp ? '（' + esc(memberName(sp.id)) + ' ' + (x.year - sby) + '歳）' : '') + '<b>' + penFmt(x.total) + '</b>万円</span>';
       }).join('') + '</div>' +
-      '<div class="hint" style="padding:4px 0 0">子が18歳を過ぎると遺族基礎年金が終わり、遺族厚生年金もその5年後に終わります（2028年の改正）。65歳からは本人の年金です。非課税なので手取りのまま、将来の目減り（公的年金と同じ割合）を掛けています。</div>' +
+      '<div class="hint" style="padding:4px 0 0">遺族厚生年金は、子がいる間は報酬比例の3/4。子が18歳を過ぎると遺族基礎年金が終わり、遺族厚生年金はその後5年間（2028年の改正の有期給付。加算で報酬比例の全額ほど）で終わります。65歳からは本人の年金です。非課税なので手取りのまま、将来の目減り（公的年金と同じ割合）を掛けています。</div>' +
       '<div class="calcsec">条件</div>' +
       riskField('year', '亡くなる年', '今年なら「今すぐの場合」。' + (dy - by) + '歳', '年', dy, 76) +
-      riskField('livingRate', '遺族の生活費', '今の生活費に対する割合', '％', rk.livingRate === undefined || rk.livingRate === '' ? 70 : rk.livingRate, 64) +
+      riskField('livingRate', '遺族の生活費（末子独立まで）', '今の生活費に対する割合', '％', rk.livingRate === undefined || rk.livingRate === '' ? 80 : rk.livingRate, 64) +
+      riskField('indepAge', '末子独立の年齢', info.indepYear && E.children(state).length ? '独立は' + info.indepYear + '年' : '子がいなければ、はじめから独立後の割合', '歳', rk.indepAge === undefined || rk.indepAge === '' ? 22 : rk.indepAge, 64) +
+      riskField('livingRate2', '末子独立後の生活費', '今の生活費に対する割合', '％', rk.livingRate2 === undefined || rk.livingRate2 === '' ? 60 : rk.livingRate2, 64) +
       riskField('funeral', '葬儀・整理資金', '', '万円', rk.funeral === undefined || rk.funeral === '' ? 200 : rk.funeral) +
       riskField('lumpIn', '死亡退職金・弔慰金', '会社の規程で。DCの残高もここへ', '万円', rk.lumpIn === undefined ? '' : rk.lumpIn) +
       riskField('insurance', '加入中の死亡保険金', '団信は除く', '万円', rk.insurance === undefined ? '' : rk.insurance) +
@@ -2730,7 +2732,7 @@
         var on = drop.indexOf(c.id) >= 0;
         return '<label class="deprow"><input type="checkbox" id="f-rk-drop-' + c.id + '"' + (on ? ' checked' : '') + ' onchange="A.rkDrop(' + c.id + ',this.checked)"><span class="nm">' + esc(c.label) + '</span></label>';
       }).join('') : '') +
-      '<div class="hint" style="padding:8px 0 0">' + name + 'の給与は亡くなった年から0、生活費は割合をかけた額、公的年金は遺された人の年金と遺族年金に置き換えます。そのほかの支出（教育費・住宅費・車・保険料など）はプランのままです。</div>' +
+      '<div class="hint" style="padding:8px 0 0">' + name + 'の給与は亡くなった年から0、生活費は末子独立まで・独立後の割合をかけた額、公的年金は遺された人の年金と遺族年金に置き換えます。そのほかの支出（教育費・住宅費・車・保険料など）はプランのままです。</div>' +
       '<button class="btn block" style="margin-top:12px" onclick="A.rkSave()">' + ic('chart', 18) + 'このもしもの場合をプランとして保存（未来の表で見る）</button>';
   }
 
@@ -2773,14 +2775,14 @@
         parts.filter(function (p) { return p[1] > 0; }).map(function (p) { return '<div class="r"><span>' + p[0] + '</span><span>' + manYen(p[1]) + '</span></div>'; }).join('') + '</div>';
     };
     return '<div class="rkres ' + (r.need > 0 ? 'ng' : 'ok') + '">' +
-        '<div class="k">' + esc(memberName(dead.id)) + 'に今、万一のことがあったら（Excelの必要保障額シートと同じ計算）</div>' +
+        '<div class="k">' + esc(memberName(dead.id)) + 'に今、万一のことがあったら（Excelの必要保障額シートの考え方）</div>' +
         '<div class="row"><span>必要保障額</span><b>' + manYen(r.need) + '</b><span class="u">万円</span></div>' +
       '</div>' +
       '<div class="rkcols">' +
         bar('支出の合計', [['生活費', r.expense.living], ['住居費', r.expense.housing], ['教育費', r.expense.edu], ['保険料', r.expense.insurance], ['自動車', r.expense.car], ['その他', r.expense.other]], r.expense.total) +
         bar('収入の合計', [['今の金融資産', r.income.assets], ['遺族年金など', r.income.survivor], ['会社から', r.income.company], ['配偶者の収入', r.income.spouse], ['その他', r.income.other]], r.income.total) +
       '</div>' +
-      '<div class="hint" style="padding:6px 0 0">18歳以下（独立前）の子：' + kids + '（家族構成から）。遺族年金は2028年の改正（子が18歳を過ぎて5年で遺族厚生年金が終わる）を見込んでいます。</div>' +
+      '<div class="hint" style="padding:6px 0 0">18歳以下（独立前）の子：' + kids + '（家族構成から）。遺族年金は2028年の改正（子が18歳を過ぎて5年で遺族厚生年金が終わる）を見込み、子がいる間の遺族厚生年金は報酬比例の3/4です（Excelのシートは全額）。</div>' +
       rows +
       (changed ? '<button class="btn ghost block" style="margin-top:12px" onclick="A.rkSimpleReset()">プランから入れた値に戻す</button>' : '') +
       '<div class="hint" style="padding:8px 0 0">金額のほとんどはプランから入れています。書き換えた欄には印が付きます。時間の流れ（物価・運用・教育費の時期）を入れて確かめるなら「CF表で計算」へ。</div>';
@@ -3076,7 +3078,7 @@
   // 読み込んだファイルの数値の欄は数値に直す。画面に出すときに、数値の欄は文字として扱っていないため。
   var NUM_KEYS = ['id', 'memberId', 'year', 'toYear', 'amount', 'growth', 'retireAge', 'startYear', 'endAge', 'depositRate',
     'inflation', 'rate', 'fromYear', 'every', 'untilAge', 'income', 'kids', 'nextId', 'from', 'to', 'payFrom', 'payTo', 'basic', 'adjust', 'start', 'upkeep', 'spouseIncome', 'g16', 'g19', 'elderLive', 'elderAway', 'life', 'ideco', 'other', 'furusato', 'lastIncome', 'social',
-    'commute', 'loan', 'lumpIn', 'insurance', 'funeral', 'livingRate', 'deposit', 'invest', 'otherAssets', 'avgIncome', 'years', 'age', 'condolence', 'retirement', 'otherCompany', 'spouseNet', 'spouseYears', 'spouseAvg', 'spouseLifeYears', 'otherIncome', 'living', 'rate1', 'indepAge', 'rate2', 'loanYears', 'loanAnnual', 'dansin', 'rent', 'edu', 'insuranceUntil', 'carCost', 'carUntil', 'carTimes', 'carPrice', 'others', 'until', 'firstAge', 'firstIncome', 'pastYears', 'pastIncome', 'teikiEarn', 'teikiBasic', 'basicYears', 'startAge', 'contrib', 'cost', 'until', 'receive', 'target', 'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
+    'commute', 'loan', 'lumpIn', 'insurance', 'funeral', 'livingRate', 'livingRate2', 'deposit', 'invest', 'otherAssets', 'avgIncome', 'years', 'age', 'condolence', 'retirement', 'otherCompany', 'spouseNet', 'spouseYears', 'spouseAvg', 'spouseLifeYears', 'otherIncome', 'living', 'rate1', 'indepAge', 'rate2', 'loanYears', 'loanAnnual', 'dansin', 'rent', 'edu', 'insuranceUntil', 'carCost', 'carUntil', 'carTimes', 'carPrice', 'others', 'until', 'firstAge', 'firstIncome', 'pastYears', 'pastIncome', 'teikiEarn', 'teikiBasic', 'basicYears', 'startAge', 'contrib', 'cost', 'until', 'receive', 'target', 'gPay', 'gAfter', 'gDeduct', 'gTax', 'gSocial', 'gSmall', 'gResident'];
   // numLeaves：教育費・車の金額の上書き（「キー → 金額」の形）の中は、末端がすべて数値
   function clean(v, key, numLeaves) {
     if (Array.isArray(v)) return v.map(function (x) { return clean(x, null, numLeaves); });

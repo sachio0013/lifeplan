@@ -507,7 +507,8 @@
 
   // 遺族年金の1年分（万円）。
   //   遺族基礎年金：18歳以下（その年の年末で）の子がいる間、基礎年金の満額＋子の加算（子1人ごと）。65歳からは本人の老齢基礎年金
-  //   遺族厚生年金：亡くなった人の報酬比例（加入が25年に満たなければ25年とみなす）。子がいなくなってから5年で終わる（2028年改正の有期給付）
+  //   遺族厚生年金：亡くなった人の報酬比例（加入が25年に満たなければ25年とみなす）の3/4。子がいなくなってからの5年間は、
+  //     2028年改正の有期給付（有期給付加算で報酬比例の全額ほど）で、その後は無い
   //   65歳から：本人の老齢厚生年金と、亡くなった人の報酬比例の3/4の多いほう
   // o: { basic（基礎年金の満額）, emp（亡くなった人の報酬比例）, own（遺された人の報酬比例。65歳からの比較用）, age, kids（18歳以下の子の数）, noKidYears（子がいない年の通算） }
   // 返り値は { basic, emp, child, own65 }（own65 は65歳からの老齢厚生年金＋上乗せ分の合計で、本人の年金を含む）
@@ -515,7 +516,7 @@
     var noKid = o.kids === 0;
     return {
       basic: noKid && o.age < 65 ? 0 : o.basic,
-      emp: o.age >= 65 || o.noKidYears > 5 ? 0 : o.emp,
+      emp: o.age >= 65 ? 0 : o.kids > 0 ? o.emp * 0.75 : o.noKidYears > 5 ? 0 : o.emp,
       child: o.kids * CHILD_ADD,
       own65: o.age >= 65 ? Math.max(o.emp * 0.75, o.own) : 0
     };
@@ -590,7 +591,7 @@
         surv = row.basic + row.emp + row.child + row.extra;
       } else if (n > 0) {
         // 配偶者がいなければ子が受ける（子の加算は2人目から）
-        row.basic = BASIC_FULL; row.emp = E; row.child = (n - 1) * CHILD_ADD;
+        row.basic = BASIC_FULL; row.emp = E * 0.75; row.child = (n - 1) * CHILD_ADD;
         surv = row.basic + row.emp + row.child;
       }
       surv *= adjust;
@@ -604,19 +605,29 @@
     st.penAuto = false;
     st.pubPension = rows.map(function (r, i) { return { id: 80000 + i, year: r.year, amount: r.amount, memo: '' }; });
 
-    // 基本生活費：亡くなる年から、今の価値の金額×割合
-    var rate = (risk.livingRate === undefined || risk.livingRate === '' ? 70 : num(risk.livingRate)) / 100;
+    // 基本生活費：亡くなる年から末子が独立するまでは今の価値の金額×割合1（既定80％）、独立してからは×割合2（既定60％）。
+    // 末子の独立は、いちばん下の子の生年＋独立の年齢（既定22歳）。子がいなければ亡くなる年から割合2
+    var pctOr = function (v, d) { return (v === undefined || v === '' || v === null ? d : num(v)) / 100; };
+    var rate1 = pctOr(risk.livingRate, 80), rate2 = pctOr(risk.livingRate2, 60);
+    var indep = kids.length ? Math.max.apply(null, kids) + (risk.indepAge === undefined || risk.indepAge === '' ? 22 : num(risk.indepAge)) : dy;
+    info.indepYear = indep;
+    var mult = function (y) { return y < indep ? rate1 : rate2; };
     var L = st.living || [];
     if (L.length) {
-      if (dy === sy) L.forEach(function (r) { r.amount = num(r.amount) * rate; });
-      else {
-        // 亡くなる年の前に使われている行（1行目は開始年から）
-        var cur = L[0], curY = sy;
-        L.forEach(function (r, i) { if (i > 0 && num(r.year) < dy && num(r.year) >= curY) { cur = r; curY = num(r.year); } });
-        var at = L.filter(function (r, i) { return i > 0 && num(r.year) === dy; });
-        L.forEach(function (r, i) { if (i > 0 && num(r.year) >= dy) r.amount = num(r.amount) * rate; });
-        if (!at.length) L.push({ id: 80100, year: dy, amount: num(cur.amount) * rate, memo: '' });
-      }
+      var ly = function (r, i) { return i === 0 ? sy : num(r.year); };
+      // その年に使われている今の価値の金額（1行目は開始年から、同じ年の行は合算）
+      var valueAt = function (Y) {
+        var best = -Infinity, sum = 0;
+        L.forEach(function (r, i) { var ry = ly(r, i); if (ry > Y) return; if (ry > best) { best = ry; sum = num(r.amount); } else if (ry === best) sum += num(r.amount); });
+        return sum;
+      };
+      var add = [];
+      [dy, indep].forEach(function (Y) {
+        if (Y < dy || Y < sy || Y === sy) return;
+        if (!L.some(function (r, i) { return i > 0 && num(r.year) === Y; }) && !add.some(function (a) { return a.year === Y; })) add.push({ year: Y, amount: valueAt(Y) });
+      });
+      L.forEach(function (r, i) { var ry = ly(r, i); if (ry >= dy) r.amount = num(r.amount) * mult(ry); });
+      add.forEach(function (a, k) { L.push({ id: 80100 + k, year: a.year, amount: a.amount * mult(a.year), memo: '' }); });
     }
 
     // 住宅費：団信ありの行は、亡くなる年から返済分を引く
@@ -700,8 +711,9 @@
       var n = kids.filter(function (k) { return k + (a - age) <= 18; }).length;
       if (!n) noKidYears++;
       var sv = survivorYear({ basic: basicFull, emp: emp, own: own, age: a, kids: n, noKidYears: noKidYears });
-      // シートは子の加算を独自の額（childAdd）で計算し、遺族厚生年金は有期のあいだ65歳以降も続く
-      var e = noKidYears > 5 ? 0 : emp;
+      // シートは子の加算を独自の額（childAdd）で計算し、遺族厚生年金は有期のあいだ65歳以降も続く。
+      // 子がいる間の遺族厚生年金は3/4（シートは全額。アプリでは法律どおり3/4にした）
+      var e = n > 0 ? emp * 0.75 : noKidYears > 5 ? 0 : emp;
       table.push({ age: a, kids: n, basic: sv.basic, emp: e, own65: sv.own65, child: n * childAdd, total: sv.basic + e + sv.own65 + n * childAdd });
     }
     var survivor = table.reduce(function (s, r) { return s + r.total; }, 0);
