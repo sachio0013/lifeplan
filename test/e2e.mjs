@@ -243,13 +243,14 @@ await page.waitForSelector('#f-living-1-amt');
 const persisted = await page.inputValue('#f-living-1-amt');
 check('再読み込みしても入力が残っている', persisted === '520', `基本生活費=${persisted}`);
 
-// サンプルに戻す（確認つき）
-await page.locator('.reset button').tap();
-await page.waitForTimeout(100);
-await page.locator('.reset button', { hasText: '記入例に戻す' }).tap();
-await page.waitForTimeout(150);
-const resetVal = await page.inputValue('#f-living-1-amt');
-check('「記入例の内容に戻す」で初期値に戻る', resetVal === '360', `基本生活費=${resetVal}`);
+// 入力画面の一番下に、入力を消してしまう「記入例に戻す」ボタンは置かない（間違って押さないように）
+const resetBtns = await page.locator('#inputview button', { hasText: '記入例' }).count();
+check('入力画面に「記入例に戻す」ボタンが無い', resetBtns === 0, `${resetBtns}`);
+// 以降の確認のため、表示中のプランを記入例の内容にしておく
+await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); s.plans.find((p) => p.id === s.activeId).state = window.LifePlanSample.sample(); localStorage.setItem('lifeplan.v2', JSON.stringify(s)); });
+await page.reload();
+await go(page, '#seg-input');
+await page.waitForSelector('#f-living-1-amt');
 
 // iPhoneは16px未満の入力欄をタップすると画面を拡大してしまうので、全部16px以上にしておく
 await go(page, '#tabs .tab[data-k="basic"]');

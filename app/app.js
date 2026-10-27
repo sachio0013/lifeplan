@@ -87,7 +87,6 @@
     openMember: 0,
     openCalc: 0,
     carDetailOpen: false,
-    confirmReset: false,
     confirmDelMember: 0,
     wz: null,          // かんたん入力の途中の答え
     sheet: false,      // プランの一覧を開いているか
@@ -423,7 +422,7 @@
       state = plan().state;
       undo = null;
       document.getElementById('toast').hidden = true;
-      ui.confirmDelMember = 0; ui.confirmDelPlan = 0; ui.confirmReset = false; ui.loanConfirm = false;
+      ui.confirmDelMember = 0; ui.confirmDelPlan = 0; ui.loanConfirm = false;
       commit();
     },
     privacy: function () { snapshotless('入力した家計簿とプランは、この端末のブラウザの中だけに保存されます。どこにも送られません'); },
@@ -454,15 +453,6 @@
       if (v === 'book') ui.book.shown = '';
       render();
       sc.scrollTop = v === 'input' ? ui.inputScroll : 0;
-    },
-    resetAsk: function () { ui.confirmReset = true; commit(); },
-    resetNo: function () { ui.confirmReset = false; commit(); },
-    resetYes: function () {
-      snapshot('記入例の内容に戻しました');
-      state = plan().state = window.LifePlanSample.sample();
-      ui.confirmReset = false; ui.openMember = 0; ui.openCalc = 0;
-      commit();
-      document.getElementById('scroll').scrollTop = 0;
     }
   };
   window.A = A;
@@ -940,9 +930,6 @@
     });
 
     h += '<footer class="done">入力はここまでです。おつかれさまでした。</footer>';
-    h += '<div class="reset">' + (ui.confirmReset
-      ? '<div class="q">表示中のプランの入力をすべて消して、記入例の内容に戻しますか？</div><div class="row"><button class="btn" onclick="A.resetYes()">記入例に戻す</button><button class="btn ghost" onclick="A.resetNo()">やめる</button></div>'
-      : '<button class="btn ghost" onclick="A.resetAsk()">このプランを記入例の内容に戻す</button>') + '</div>';
     return h;
   }
 
@@ -3336,7 +3323,7 @@
     var p = byId(store.plans, id); if (!p) return;
     store.activeId = id;
     state = p.state;
-    ui.openMember = 0; ui.openCalc = 0; ui.carDetailOpen = false; ui.confirmReset = false; ui.inputScroll = 0;
+    ui.openMember = 0; ui.openCalc = 0; ui.carDetailOpen = false; ui.inputScroll = 0;
     ui.loanConfirm = false;
     quiet = true;
   }
