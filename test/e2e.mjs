@@ -339,6 +339,8 @@ await wp.waitForTimeout(100);
 check('かんたん入力を途中で閉じるときは確かめる', /保存されません/.test(askClose) && (await wp.inputValue('#w-name1')) === 'わたし', askClose);
 await wp.locator('.wznav .btn', { hasText: '次へ' }).tap();
 await wp.waitForTimeout(100);
+const making = await wp.evaluate(() => [document.getElementById('planname').textContent, document.getElementById('planbtn').disabled]);
+check('かんたん入力の間は、上にプラン名ではなく「新しいプランを作成中」と出て、プランの切り替えは押せない', making[0] === '新しいプランを作成中' && making[1] === true, making.join(' '));
 const needBirth = await wp.locator('.wz .vmsg').textContent().catch(() => '');
 check('かんたん入力：生年月日が無いと先に進まず、理由が出る', /生年月日/.test(needBirth) && /期間と家族１/.test(await wp.textContent('.wzt')), needBirth);
 await wp.fill('#w-startYear', '2026'); await wp.press('#w-startYear', 'Tab');

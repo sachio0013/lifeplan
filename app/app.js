@@ -3508,7 +3508,13 @@
     });
     document.getElementById('seg-book').classList.toggle('due', bookDue());
     document.getElementById('tabbar').hidden = ui.view === 'cover' || ui.view === 'wizard';
-    document.getElementById('planname').textContent = plan().name;
+    // かんたん入力の間は、まだ無い新しいプランを作っているので、今のプラン名ではなく「作成中」と出す（切り替えもしない）
+    var making = ui.view === 'wizard';
+    var pb = document.getElementById('planbtn');
+    pb.disabled = making;
+    pb.classList.toggle('making', making);
+    pb.setAttribute('aria-label', making ? '新しいプランを作成中' : 'プランを切り替える・管理する');
+    document.getElementById('planname').textContent = making ? '新しいプランを作成中' : plan().name;
     var sheet = document.getElementById('sheetwrap');
     var wasOpen = !sheet.hidden;
     sheet.hidden = !ui.sheet;

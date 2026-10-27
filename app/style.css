@@ -620,3 +620,8 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 /* 薄いピンクの枠の中の「開く」ボタンは、文字を濃くする（背景が白でないため） */
 .calcbox .toggle .lbl { color: var(--accent-ink); }
 .penplan a, .calcbox a { color: var(--accent-ink); }
+
+/* かんたん入力の間のプラン名（作成中） */
+#planbtn.making { cursor: default; color: var(--text); }
+#planbtn.making > .ic { display: none; }
+#planbtn.making #planname { font-size: 16px; }
