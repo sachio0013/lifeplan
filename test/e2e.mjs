@@ -384,7 +384,7 @@ await wp.waitForSelector('#chart');
 const wzCols = await wp.$$eval('table.cf thead th', (ths) => ths.length - 1);
 const wzHero = await wp.textContent('.hero');
 check('かんたん入力を終えると、そのプランのCF表が開く（2026〜1986+95年）', wzCols === 2081 - 2026 + 1 && /2081年/.test(wzHero) && wzOverflow <= 0, `${wzCols}列 ${wzHero.slice(0, 30)}`);
-const guideItems = await wp.$$eval('#cf .guide .gi .gt', (els) => els.map((e) => e.textContent));
+const guideItems = await wp.$$eval('#cf .guide:not(.fix) .gi .gt', (els) => els.map((e) => e.textContent));
 await wp.screenshot({ path: join(shots, '10b-guide.png') });
 check('CF表の上に、選んだ気になることに合わせた「次の一歩」が出る', JSON.stringify(guideItems) === '["家を買った場合と比べる","積立投資の効果を見る","節約の効果を見る"]', guideItems.join(' / '));
 await wp.reload();
@@ -406,18 +406,29 @@ await wp.locator('.sheet .btn', { hasText: '複製' }).tap();
 await wp.waitForTimeout(100);
 const afterDup = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
 const topName = await wp.textContent('#planname');
-check('プランの名前を変えて複製できる', JSON.stringify(planNames) === '["記入例","わが家"]' && JSON.stringify(afterDup) === '["記入例","うちの家計","うちの家計のコピー"]' && topName === 'うちの家計のコピー', `${planNames} → ${afterDup} / 表示中=${topName}`);
+check('かんたん入力でプランを作ると、書き換えていない記入例は一覧から外れる', JSON.stringify(planNames) === '["わが家"]', `${planNames}`);
+check('プランの名前を変えて複製できる', JSON.stringify(afterDup) === '["うちの家計","うちの家計のコピー"]' && topName === 'うちの家計のコピー', `${planNames} → ${afterDup} / 表示中=${topName}`);
 await wp.locator('.pl', { hasText: 'うちの家計のコピー' }).locator('button.del').tap();
 await wp.waitForTimeout(50);
 await wp.locator('.plconfirm .btn', { hasText: '削除する' }).tap();
 await wp.waitForTimeout(100);
 const afterDel = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
-check('削除は確認してから行う', JSON.stringify(afterDel) === '["記入例","うちの家計"]', `${afterDel}`);
-await wp.locator('.pl .pick', { hasText: '記入例' }).tap();
+check('削除は確認してから行う', JSON.stringify(afterDel) === '["うちの家計"]', `${afterDel}`);
+// 記入例は表紙から、今のプランを残したまま開ける
+await wp.locator('.sheet .btn', { hasText: '表紙' }).tap();
+await wp.waitForSelector('.cover');
+await wp.locator('.cvtop .btn', { hasText: '保存したプランの続きから' }).waitFor();
+await wp.locator('.cvalt .btn', { hasText: '記入例' }).tap();
+await wp.waitForSelector('#f-start');
+const withEx = await wp.evaluate(() => JSON.parse(localStorage.getItem('lifeplan.v2')).plans.map((p) => p.name));
+check('表紙の「記入例を見てみる」で、記入例が別のプランとして開く', JSON.stringify(withEx) === '["うちの家計","記入例"]' && (await wp.textContent('#planname')) === '記入例', `${withEx}`);
+await go(wp, '#planbtn');
+await wp.waitForSelector('.sheet');
+await wp.locator('.pl .pick', { hasText: 'うちの家計' }).tap();
 await wp.waitForTimeout(150);
 const sheetClosed = (await wp.locator('.sheet').count()) === 0;
 const exampleEnd = await wp.textContent('#planname');
-check('プランを選ぶと切り替わり、一覧が閉じる', sheetClosed && exampleEnd === '記入例', exampleEnd);
+check('プランを選ぶと切り替わり、一覧が閉じる', sheetClosed && exampleEnd === 'うちの家計', exampleEnd);
 
 // 比較：2つのプランの推移と主な数字を並べる
 await go(wp, '#seg-cmp');
@@ -430,7 +441,7 @@ const cbox = await wp.locator('#cmpchart').boundingBox();
 await wp.touchscreen.tap(cbox.x + cbox.width * 0.6, cbox.y + cbox.height * 0.5);
 await wp.waitForTimeout(100);
 const ctip = await wp.locator('#cmptip').textContent();
-check('比較画面に2本の推移・差つきの表・タップで年ごとの値が出る', lines === 2 && JSON.stringify(heads) === '["記入例","うちの家計"]' && diffs >= 3 && cmpOverflow <= 0 && /年記入例[\d,−]+万うちの家計/.test(ctip), `lines=${lines} heads=${heads} diffs=${diffs} tip=${ctip}`);
+check('比較画面に2本の推移・差つきの表・タップで年ごとの値が出る', lines === 2 && JSON.stringify(heads) === '["うちの家計","記入例"]' && diffs >= 3 && cmpOverflow <= 0 && /年うちの家計[\d,−]+万記入例/.test(ctip), `lines=${lines} heads=${heads} diffs=${diffs} tip=${ctip}`);
 await wp.screenshot({ path: join(shots, '13-compare.png'), fullPage: false });
 await wp.locator('.tablecard').scrollIntoViewIfNeeded();
 await wp.screenshot({ path: join(shots, '14-compare-table.png') });
@@ -442,19 +453,19 @@ const [dl] = await Promise.all([wp.waitForEvent('download'), wp.locator('.bk .bt
 const dlPath = join(shots, dl.suggestedFilename());
 await dl.saveAs(dlPath);
 const saved = JSON.parse(readFileSync(dlPath, 'utf8'));
-check('バックアップのファイルにすべてのプランが入る', /^lifeplan-backup-\d{8}\.json$/.test(dl.suggestedFilename()) && saved.plans.length === 2 && saved.plans[1].name === 'うちの家計', `${dl.suggestedFilename()} plans=${saved.plans.map((p) => p.name)}`);
+check('バックアップのファイルにすべてのプランが入る', /^lifeplan-backup-\d{8}\.json$/.test(dl.suggestedFilename()) && saved.plans.length === 2 && saved.plans[0].name === 'うちの家計', `${dl.suggestedFilename()} plans=${saved.plans.map((p) => p.name)}`);
 await wp.setInputFiles('#f-backup-file', dlPath);
 await wp.waitForSelector('.bk .plconfirm');
 await wp.screenshot({ path: join(shots, '15-backup.png') });
 await wp.locator('.bk .btn', { hasText: '追加する' }).tap();
 await wp.waitForTimeout(150);
 const afterImport = await wp.$$eval('.pl .nm', (els) => els.map((e) => e.textContent));
-check('バックアップを読み込むと、今のプランを残したまま追加される', JSON.stringify(afterImport) === '["記入例","うちの家計","記入例（2）","うちの家計（2）"]', `${afterImport}`);
+check('バックアップを読み込むと、今のプランを残したまま追加される', JSON.stringify(afterImport) === '["うちの家計","記入例","うちの家計（2）","記入例（2）"]', `${afterImport}`);
 const importedDansin = await wp.evaluate(() => JSON.parse(localStorage.getItem('lifeplan.v2')).plans.find((p) => p.name === '記入例（2）').state.housing.filter((r) => r.dansin === true).length);
 check('バックアップを読み込んでも、住宅費の団信の印（true）が残る', importedDansin === 2, `団信=${importedDansin}`);
 
 // 細工されたファイルを読み込んでも、文字として表示されるだけで画面に要素が入り込まない
-const evil = JSON.parse(JSON.stringify(saved.plans[0]));
+const evil = JSON.parse(JSON.stringify(saved.plans.find((p) => p.name === '記入例')));
 evil.name = '<img src=x id=pwn1>';
 evil.state.living[1].year = '"><img src=x id=pwn2>';
 evil.state.living[1].id = "1);document.title='pwn';(";
@@ -868,6 +879,63 @@ await dp.locator('.cvalt .btn', { hasText: '記入例' }).tap();
 await dp.waitForSelector('#f-start');
 await dp.waitForTimeout(300);
 await dp.screenshot({ path: join(shots, '6-input-dark.png') });
+
+// 足りなくなるプラン：未来の表で「足りなくならないためには」を計算して示し、ボタンで試せる。保障では、もともと足りない分を分けて示す
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
+  const fp = await c.newPage();
+  fp.on('pageerror', (e) => errors.push(e.message));
+  await fp.goto(url);
+  await fp.waitForSelector('.cover');
+  // 記入例の基本生活費を年20万円ずつ増やす（77歳で足りなくなり、そのとき投資資産がある）
+  await fp.evaluate(() => {
+    const st = window.LifePlanSample.sample(); st.living.forEach((r) => { r.amount += 20; });
+    localStorage.setItem('lifeplan.v2', JSON.stringify({ version: 2, activeId: 1, nextPlanId: 2, plans: [{ id: 1, name: 'うち', state: st }], prefs: { yearMode: 'year', welcomed: true }, book: { years: {}, nextId: 1 } }));
+  });
+  await fp.reload();
+  await go(fp, '#seg-cf');
+  await fp.waitForSelector('#fix');
+  const fixItems = await fp.$$eval('#fix .gi .gt', (els) => els.map((e) => e.textContent));
+  const fixText = await fp.textContent('#fix');
+  const sumHead = await fp.textContent('#summary .worst');
+  await fp.locator('.alert .alink').tap(); await fp.waitForTimeout(600);
+  await fp.screenshot({ path: join(shots, '27-fix.png') });
+  check('足りなくなるとき、未来の表に「投資資産を現金化する」「基本生活費を月◯万円減らす」が計算して出る（上のバーは「最大◯万円不足」）',
+    JSON.stringify(fixItems) === '["投資資産を現金化する","基本生活費を見直す","ほかに見直せること"]' && /月[\d.]+万円/.test(fixText) && /万円不足/.test(sumHead), `${fixItems} / ${sumHead}`);
+  // 生活費を減らしたプランを作って比べると、そのプランは足りなくならない
+  await go(fp, '#seg-cf');
+  await fp.waitForSelector('#fix');
+  await fp.locator('#fix .btn', { hasText: '減らしたプランを作って比べる' }).tap();
+  await fp.waitForSelector('#cmpchart');
+  const cmpHeads = await fp.$$eval('table.cmpt thead th', (els) => els.map((e) => e.textContent).filter(Boolean));
+  const shortRow = await fp.locator('table.cmpt tr', { hasText: '預金が不足する年齢' }).textContent();
+  check('「減らしたプランを作って比べる」で、生活費を減らしたプランと並べて比べられ、そのプランは不足しない',
+    cmpHeads.length === 2 && /生活費 月[\d.]+万円減/.test(cmpHeads[1]) && /なし/.test(shortRow), `${cmpHeads} / ${shortRow.trim()}`);
+  // 自動で現金化すると、足りなくならない
+  await go(fp, '#planbtn'); await fp.waitForSelector('.sheet');
+  await fp.locator('.pl .nm', { hasText: /^うち$/ }).tap(); await fp.waitForTimeout(150);
+  await go(fp, '#seg-cf');
+  await fp.waitForSelector('#fix');
+  await fp.locator('#fix .btn', { hasText: '自動で現金化する' }).tap(); await fp.waitForTimeout(200);
+  const fixedAlert = await fp.locator('#cf .alert').count();
+  const ad = await fp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return s.plans.find((p) => p.id === s.activeId).state.autoDraw; });
+  check('「自動で現金化する」で投資からの現金化がオンになり、足りなくならない（元に戻せる）', fixedAlert === 0 && ad.on === true && /元に戻す/.test(await fp.textContent('#toast')), JSON.stringify(ad));
+  // 入力の最後から、未来の表・保障へ進める
+  await go(fp, '#seg-input');
+  const endBtns = await fp.$$eval('footer.done .btn', (els) => els.map((e) => e.textContent));
+  check('入力画面の最後に「未来の表を見る」「もしもの保障を見る」がある', JSON.stringify(endBtns) === '["未来の表を見る","もしもの保障を見る"]', `${endBtns}`);
+  // 保障：いつものプランでも足りない分を分けて示す（基本生活費を年60万円ずつ増やしたプラン）
+  await fp.evaluate(() => {
+    const st = window.LifePlanSample.sample(); st.living.forEach((r) => { r.amount += 60; });
+    localStorage.setItem('lifeplan.v2', JSON.stringify({ version: 2, activeId: 1, nextPlanId: 2, plans: [{ id: 1, name: 'うち', state: st }], prefs: { yearMode: 'year', welcomed: true }, book: { years: {}, nextId: 1 } }));
+  });
+  await fp.reload();
+  await go(fp, '#seg-risk');
+  await fp.waitForSelector('.rkres');
+  const rkText = await fp.textContent('.rkres');
+  check('保障：もともと足りないプランでは、必要保障額のうち「万一がなくても足りない分」と「保険で備える目安」を分けて示す', /万一のことがなくても足りない分/.test(rkText) && /保険で備える目安/.test(rkText), rkText.replace(/\s+/g, ' ').slice(0, 120));
+  await c.close();
+}
 
 check('コンソールエラーが無い', errors.length === 0, errors.slice(0, 3).join(' / '));
 

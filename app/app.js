@@ -91,6 +91,7 @@
     wz: null,          // かんたん入力の途中の答え
     sheet: false,      // プランの一覧を開いているか
     confirmDelPlan: 0,
+    whyOpen: {},
     cmp: null,         // 比較で選んでいるプランの id
     backup: { msg: '', level: '', text: false, pending: null },
     penDetail: {},                         // 公的年金の見込みで、人ごとの設定を開いているか（'state-1' など）
@@ -929,7 +930,7 @@
       h += investCard(a, 'out', a.name + 'の現金化', false);
     });
 
-    h += '<footer class="done">入力はここまでです。おつかれさまでした。</footer>';
+    h += '<footer class="done">入力はここまでです。おつかれさまでした。<div class="row"><button class="btn" onclick="A.view(\'cf\')">未来の表を見る</button><button class="btn ghost" onclick="A.view(\'risk\')">もしもの保障を見る</button></div></footer>';
     return h;
   }
 
@@ -955,7 +956,7 @@
     var warn = !!result.shortfall;
     var head = warn
       ? '<div class="warnline">' + ic('warn', 18) + '<span>' + result.shortfall.age + '歳で預金が不足</span>' +
-        '<span class="worst">最大 ' + man(result.shortfall.minDeposit) + '万円</span></div>'
+        '<span class="worst">最大 ' + man(-result.shortfall.minDeposit) + '万円不足</span></div>'
       : '<div class="row"><span class="lbl">終了時点（' + result.endAge + '歳）の金融資産</span><span class="amt">' + man(result.endTotal) + '<span class="unit"> 万円</span></span></div>';
     var stroke = warn ? 'var(--neg)' : 'var(--sage)';
     var fill = warn ? 'var(--neg-soft)' : 'var(--sage-soft)';
@@ -1143,12 +1144,13 @@
       '<div class="hero"><div class="k">終了時点（' + last.year + '年・家族１ ' + last.age + '歳）の金融資産</div>' +
         '<div class="v">' + man(result.endTotal) + '<small> 万円</small></div>' +
         '<div class="note">うち普通預金等 ' + man(last.assets.deposit) + '万円・投資資産 ' + man(last.assets.investTotal) + '万円</div></div>' +
-      (sf ? '<div class="alert">' + ic('warn', 19) + '<span>' + sf.year + '年（家族１が' + sf.age + '歳）に普通預金等がマイナスになります。最も少ない年で ' + man(sf.minDeposit) + '万円です。</span></div>' : '') +
+      (sf ? '<div class="alert">' + ic('warn', 19) + '<span>' + sf.year + '年（家族１が' + sf.age + '歳）に普通預金等がマイナスになります。最も少ない年で ' + man(sf.minDeposit) + '万円です。<button class="alink" onclick="A.toFix()">足りなくならないためには ↓</button></span></div>' : '') +
       '<div class="card chartcard"><h2 class="h3">金融資産残高の推移</h2>' +
         '<div class="keys"><span><i style="background:var(--c-deposit)"></i>普通預金等</span><span><i style="background:var(--c-invest)"></i>投資資産</span></div>' +
         chartSVG(width) +
         '<div class="tip" id="tip" hidden></div>' +
       '</div>' +
+      (sf ? fixHTML() : '') +
       '<div class="card tablecard"><h2 class="h3">キャッシュフロー表</h2><div class="sub">単位：万円。横にスクロールできます。</div>' +
         '<div class="tablewrap" tabindex="0" role="region" aria-label="キャッシュフロー表（横にスクロールできます）">' + tableHTML() + '</div>' +
       '</div>' +
@@ -1156,6 +1158,85 @@
       '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>' +
       DISCLAIMER;
   }
+
+  // ---------- 足りなくならないためには（未来の表で、普通預金等がマイナスになるとき） ----------
+  //
+  // 効果を計算して示す：投資資産があるなら自動の現金化、基本生活費を月いくら減らせば足りるか。ほかの見直しは入力の欄へ案内する。
+  var fixMemo = { key: '', v: null };
+  function fixOptions() {
+    var key = JSON.stringify(state);
+    if (fixMemo.key === key) return fixMemo.v;
+    var sf = result.shortfall, v = {};
+    var ok = function (st) { return !E.compute(st).shortfall; };
+    var copy = function () { return JSON.parse(JSON.stringify(state)); };
+    var at = result.years.filter(function (y) { return y.year === sf.year; })[0];
+    if (!(state.autoDraw && state.autoDraw.on) && at && at.assets.investTotal >= 1) {
+      var startAge = Math.min(adInputs().startAge, sf.age);
+      [300, 100, 0].some(function (t) {
+        var st = copy(); st.autoDraw = { on: true, target: t, startAge: startAge };
+        if (ok(st)) { v.draw = { target: t, startAge: startAge, invest: at.assets.investTotal }; return true; }
+        return false;
+      });
+    }
+    var max = Math.max.apply(null, state.living.map(function (r) { return toNum(r.amount); }).concat([0]));
+    var cut = function (r) { var st = copy(); st.living.forEach(function (x) { x.amount = Math.max(0, Math.round((toNum(x.amount) - r) * 10) / 10); }); return st; };
+    if (max > 0 && ok(cut(max))) {
+      var lo = 0, hi = max;
+      while (hi - lo > 0.5) { var mid = (lo + hi) / 2; if (ok(cut(mid))) hi = mid; else lo = mid; }
+      var m = Math.ceil(hi / 12 * 10) / 10;
+      for (var k = 0; k < 20 && !ok(cut(Math.round(m * 120) / 10)); k++) m = Math.round((m + 0.1) * 10) / 10;
+      v.cut = { monthly: m, annual: Math.round(m * 120) / 10 };
+    } else v.cut = null;
+    fixMemo = { key: key, v: v };
+    return v;
+  }
+  function fixHTML() {
+    var sf = result.shortfall, v = fixOptions(), last = result.years[result.years.length - 1];
+    var item = function (t, p, btns) {
+      return '<div class="gi"><div class="gt"><span class="dot"></span>' + t + '</div><p>' + p + '</p><div class="row">' + btns + '</div></div>';
+    };
+    var go = function (k, label) { return '<button class="btn ghost" onclick="A.fixGo(\'' + k + '\')">' + label + '</button>'; };
+    var h = '';
+    if (v.draw) {
+      h += item('投資資産を現金化する', sf.age + '歳のとき、投資資産が' + man(v.draw.invest) + '万円あります。' + v.draw.startAge + '歳から、普通預金等が' + man(v.draw.target) +
+        '万円を下回る分だけ投資から自動で現金化すると、' + last.age + '歳までマイナスになりません。', '<button class="btn" onclick="A.fixDraw()">自動で現金化する</button>');
+    }
+    h += item('基本生活費を見直す', v.cut
+      ? '基本生活費を<b>月' + penFmt(v.cut.monthly) + '万円</b>（年' + penFmt(v.cut.annual) + '万円）減らすと、' + last.age + '歳まで普通預金等がマイナスになりません。'
+      : '基本生活費を減らすだけでは足りません。収入や大きな支出も見直しましょう。',
+      v.cut ? '<button class="btn' + (v.draw ? ' ghost' : '') + '" onclick="A.fixCut()">減らしたプランを作って比べる</button>' : go('living', '基本生活費を見る'));
+    h += item('ほかに見直せること', '働く年数や収入、年金を受け取りはじめる年齢（遅らせるほど増えます）、住まいの費用、' + (E.children(state).length ? '教育費の進路、' : '') + '保険料など。',
+      go('income', '働き方・収入') + go('pension', '年金') + go('housing', '住宅費') + (E.children(state).length ? go('edu', '教育費') : ''));
+    return '<div class="guide fix" id="fix">' +
+      '<div class="gh">' + fpFace(40) + '<div><div class="t">足りなくならないためには</div><div class="s">いまの入力のまま、どこを変えれば足りるかを計算しました</div></div></div>' +
+      h + '</div>';
+  }
+  A.toFix = function () {
+    var el = document.getElementById('fix'), sc = document.getElementById('scroll');
+    if (el && sc) sc.scrollTo({ top: sc.scrollTop + el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 12, behavior: 'smooth' });
+  };
+  A.fixDraw = function () {
+    var v = fixOptions(); if (!v.draw) return;
+    snapshot('投資資産の自動の現金化をオンにしました（入力の「投資」で変えられます）');
+    state.autoDraw = { on: true, target: v.draw.target, startAge: v.draw.startAge };
+    commit();
+  };
+  A.fixCut = function () {
+    var v = fixOptions(); if (!v.cut) return;
+    var base = plan();
+    var p = { id: store.nextPlanId++, name: uniqueName(base.name + '（生活費 月' + penFmt(v.cut.monthly) + '万円減）'), state: JSON.parse(JSON.stringify(base.state)) };
+    p.state.living.forEach(function (x) { x.amount = Math.max(0, Math.round((toNum(x.amount) - v.cut.annual) * 10) / 10); });
+    store.plans.splice(store.plans.indexOf(base) + 1, 0, p);
+    compareNow({ base: base, copy: p });
+  };
+  A.fixGo = function (k) {
+    if (k === 'pension') {
+      var p1 = state.family.filter(function (m) { return m.relation === '家族１'; })[0];
+      if (p1 && state.penAuto) ui.penDetail['state-' + p1.id] = true;
+      jumpTo('card-pubPension');
+    } else if (k === 'edu') { var kid = E.children(state)[0]; jumpTo(kid ? 'card-edu-' + kid.id : 'card-family'); }
+    else jumpTo({ income: 'sec-income', housing: 'card-housing', living: 'card-living' }[k]);
+  };
 
   // ---------- Excelに書き出す（app/xlsx.js） ----------
   //
@@ -1236,6 +1317,7 @@
     var steps = [];
     info.survivor.forEach(function (x, i) { if (i === 0 || x.total !== info.survivor[i - 1].total) steps.push([x.year, sp ? x.year - sby : '', x.total]); });
     var keys = [['必要保障額', noIns.need, '万円']];
+    if (noIns.baseNeed > 0) keys.push(['うち、万一がなくても足りない分', noIns.baseNeed, '万円'], ['保険で備える目安', noIns.need - noIns.baseNeed, '万円']);
     if (toNum(rk.insurance) > 0) keys.push(['加入中の保険 ' + manYen(rk.insurance) + '万円を入れると、あと', withIns.need, '万円']);
     var dflt = function (v, d) { return v === undefined || v === '' ? d : v; };
     var conds = [
@@ -1408,9 +1490,10 @@
     return '<div class="penp">' +
       '<div class="pnm">' + name + '<small>' + st.startYear + '年末で' + p.age + '歳</small></div>' +
       '<div class="ppres"><span>' + p.startAge + '歳（' + p.startYear + '年）から</span><b>' + penFmt(p.amount) + '</b><span class="u">万円／年</span></div>' +
-      '<div class="ppbreak">（' + earnText + ' ＋ 基礎年金 ' + penFmt(p.basic) + factorText + ' ＝ 額面 ' + penFmt(p.gross) + '万円 → 税・社会保険料を引いて ' + penFmt(p.net) + '万円 → 目減り' + adjust + '％で ' + penFmt(p.amount) + '万円</div>' +
-      (p.mode !== 'teiki' || !p.over50 ? '<div class="hint" style="padding:4px 0 0">' + (p.futureYears ? 'これからの分は、プランの給与から' + p.futureYears + '年分（' + p.lastWork + '歳まで）。' : 'プランに給与が無いので、これからの厚生年金は0です。') +
-        (p.cappedYears ? '年収が上限を超える' + p.cappedYears + '年は、上限で計算しています。' : '') + '</div>' : '') +
+      why(mode, '計算の内訳',
+        '<div class="ppbreak">（' + earnText + ' ＋ 基礎年金 ' + penFmt(p.basic) + factorText + ' ＝ 額面 ' + penFmt(p.gross) + '万円 → 税・社会保険料を引いて ' + penFmt(p.net) + '万円 → 目減り' + adjust + '％で ' + penFmt(p.amount) + '万円</div>' +
+        (p.mode !== 'teiki' || !p.over50 ? '<div class="hint" style="padding:4px 0 0">' + (p.futureYears ? 'これからの分は、プランの給与から' + p.futureYears + '年分（' + p.lastWork + '歳まで）。' : 'プランに給与が無いので、これからの厚生年金は0です。') +
+          (p.cappedYears ? '年収が上限を超える' + p.cappedYears + '年は、上限で計算しています。' : '') + '</div>' : '')) +
       '<button class="toggle" aria-expanded="' + open + '" onclick="A.ppDetail(\'' + key + '\')"><span class="lbl">' + (open ? '設定を閉じる' : 'もっと正確に（受け取る年齢など）') + '</span><span class="chev">' + chevron(open) + '</span></button>' +
       (open ? '<div class="ppset">' +
         field('startAge', '受け取りはじめる年齢', '65歳より遅らせると1か月0.7％増え、早めると0.4％減ります', '歳から', 64) +
@@ -1426,6 +1509,12 @@
     '</div>';
   }
 
+  // かんたん入力（初めての人）では、内訳と計算のしかたをたたんでおく。入力画面ではそのまま見せる
+  function why(mode, label, html) {
+    if (mode !== 'wz') return html;
+    return '<details class="ppwhy"' + (ui.whyOpen[label] ? ' open' : '') + ' ontoggle="A.whyT(this)" data-k="' + label + '"><summary>' + label + '</summary>' + html + '</details>';
+  }
+  A.whyT = function (el) { ui.whyOpen[el.getAttribute('data-k')] = el.open; };
   function penPlanHTML(mode) {
     var st = penStateOf(mode);
     var plan = st ? E.pensionPlan(st) : { people: [], rows: [], adjust: 90 };
@@ -1434,11 +1523,12 @@
     return '<div class="penplan">' +
       '<div class="hint" style="padding:0 0 6px">プランの給与を額面に直して、厚生年金と基礎年金を見込みます。役職定年や再雇用で給与が下がる行も、そのまま反映されます。わかっていることを「もっと正確に」で入れるほど、確かになります。</div>' +
       (people || '<div class="hint">家族１の生年月日を入れると見込めます。</div>') +
-      '<div class="calcrow" style="margin-top:12px"><span class="u" style="flex:1;min-width:0">将来の目減りを見込んだ割合<small>所得代替率の低下に備えて、9割で見ています</small></span>' +
-        numInput('f-pp-' + mode + '-adj', 'op', 64, pp.adjust === undefined || pp.adjust === '' ? 90 : pp.adjust, "A.ppAdj('" + mode + "',this.value)", ';margin-left:auto') + '<span class="u">％</span></div>' +
-      '<div class="hint" style="padding:4px 0 0"><a href="https://www.excelcf.net/lossofpension/" target="_blank" rel="noopener">20～30年後、公的年金は今より1割くらい減少？</a></div>' +
-      (mode === 'state' && plan.rows.length > 1 ? '<div class="pprows">' + plan.rows.map(function (r) { return '<span>' + r.year + '年から 合計 <b>' + penFmt(r.amount) + '</b>万円</span>'; }).join('') + '</div>' : '') +
-      '<div class="hint" style="padding:8px 0 0">' + PEN_NOTE + '</div>' +
+      why(mode, '目減りの割合と、計算のしかた',
+        '<div class="calcrow" style="margin-top:12px"><span class="u" style="flex:1;min-width:0">将来の目減りを見込んだ割合<small>所得代替率の低下に備えて、9割で見ています</small></span>' +
+          numInput('f-pp-' + mode + '-adj', 'op', 64, pp.adjust === undefined || pp.adjust === '' ? 90 : pp.adjust, "A.ppAdj('" + mode + "',this.value)", ';margin-left:auto') + '<span class="u">％</span></div>' +
+        '<div class="hint" style="padding:4px 0 0"><a href="https://www.excelcf.net/lossofpension/" target="_blank" rel="noopener">20～30年後、公的年金は今より1割くらい減少？</a></div>' +
+        (mode === 'state' && plan.rows.length > 1 ? '<div class="pprows">' + plan.rows.map(function (r) { return '<span>' + r.year + '年から 合計 <b>' + penFmt(r.amount) + '</b>万円</span>'; }).join('') + '</div>' : '') +
+        '<div class="hint" style="padding:8px 0 0">' + PEN_NOTE + '</div>') +
     '</div>';
   }
 
@@ -1884,10 +1974,12 @@
         '<p>家族と収入・支出を入れるだけで、これから先の貯金と資産の流れがグラフで見られます。住宅購入、教育費、老後、積立投資の「もしも」も試せます。</p>' +
       '</div>' +
       '<div class="trust"><span>' + ic('lock', 16) + '登録いらず</span><span>' + ic('lock', 16) + 'データを外に送らない</span><span>' + ic('lock', 16) + '商品の勧誘なし</span></div>' +
+      '<div class="cvtop">' + (hasOwn ? '<button class="btn big" onclick="A.coverLeave(\'input\')">保存したプランの続きから</button><button class="btn ghost" onclick="A.coverGo()">新しくはじめる</button>'
+        : '<button class="btn big" onclick="A.coverGo()">さっそくはじめる</button><span>3つの質問に答えて、6ステップで入力します</span>') + '</div>' +
       '<ol class="cvsteps">' + steps.map(function (st, i) {
         return '<li><span class="no">' + (i + 1) + '</span><div><b>' + st[0] + '</b><span>' + st[1] + '</span></div></li>';
       }).join('') + '</ol>' +
-      '<section class="cvq"><h2><span class="qn">Q1</span>家族のかたちは？</h2><div class="opts" role="radiogroup" aria-label="家族のかたち">' + fam + '</div></section>' +
+      '<section class="cvq" id="cvq1"><h2><span class="qn">Q1</span>家族のかたちは？</h2><div class="opts" role="radiogroup" aria-label="家族のかたち">' + fam + '</div></section>' +
       '<section class="cvq"><h2><span class="qn">Q2</span>住まいは？</h2><div class="opts two" role="radiogroup" aria-label="住まい">' + homes + '</div></section>' +
       '<section class="cvq"><h2><span class="qn">Q3</span>気になることは？<small>いくつでも</small></h2><div class="needs">' + needs + '</div></section>' +
       '<div class="cvcta">' +
@@ -1895,7 +1987,6 @@
         '<p>金額は、家族のかたちに合わせた目安の例です。質問に答えながら、ご自分の数字に書き換えていきます（6ステップ・生年月日だけは必ず入れます）。</p>' +
       '</div>' +
       '<div class="cvalt">' +
-        (hasOwn ? '<button class="btn ghost" onclick="A.coverLeave(\'input\')">保存したプランの続きから</button>' : '') +
         '<button class="btn ghost" onclick="A.coverExample()">記入例（共働きの夫婦と子供2人）を見てみる</button>' +
       '</div>' +
       '<p class="cvnote">入力した内容は、この端末のブラウザの中だけに保存されます。計算は、Excel「ライフプラン表」と同じです。</p>' +
@@ -1904,6 +1995,10 @@
   }
 
   A.coverSet = function (field, v) { ui.cover[field] = v; commit(); };
+  A.coverGo = function () {
+    var el = document.getElementById('cvq1'), sc = document.getElementById('scroll');
+    if (el && sc) sc.scrollTo({ top: sc.scrollTop + el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 12, behavior: 'smooth' });
+  };
   A.coverNeed = function (k) {
     var n = ui.cover.needs, i = n.indexOf(k);
     if (i >= 0) n.splice(i, 1); else n.push(k);
@@ -3006,6 +3101,9 @@
         (toNum(rk.insurance) > 0 ? '<div class="row sub"><span>加入中の保険 ' + manYen(rk.insurance) + '万円を入れると</span>' +
           (need > 0 ? '<b>あと ' + manYen(need) + '</b><span class="u">万円</span>' : '<b class="okt">足りています</b>') + '</div>' : '') +
         '<div class="hint" style="padding:6px 0 0">亡くなった年に一度にこの額が入れば、' + (info.until !== Infinity && info.until ? info.until + '年（末子が独立する前の年）' : (base.years.length ? base.years[base.years.length - 1].year : '') + '年') + 'まで金融資産（預金＋投資）がマイナスになりません。</div>' +
+        (noIns.baseNeed > 0 ? '<div class="vmsg warn" style="margin-top:10px">' + ic('warn', 15) + '<span>このうち約' + manYen(noIns.baseNeed) + '万円は、万一のことがなくても足りない分です（いつものプランでも金融資産がマイナスになります）。' +
+          '保険で備える目安は、残りの<b>約' + manYen(need0 - noIns.baseNeed) + '万円</b>です。足りない分は、未来の表の「足りなくならないためには」で見直せます。</span></div>' +
+          '<div style="margin-top:8px"><button class="btn ghost" onclick="A.view(\'cf\')">未来の表で見直す</button></div>' : '') +
       '</div>' +
       riskChartSVG(base, withIns.cf, dy, width, covered) +
       '<div class="calcsec">遺族年金など</div>' +
@@ -3306,6 +3404,9 @@
     if (w.step < WZ_STEPS.length - 1) { w.step++; commit(); document.getElementById('scroll').scrollTop = 0; return; }
     // 完成：新しいプランとして加え、そのプランのCF表を開く
     var st = window.LifePlanSample.applyNeeds(window.LifePlanSample.fromAnswers(w.d), w.needs);
+    // 最初から入っている記入例は、書き換えていなければ外す（自分のプランと見知らぬ家族を比べないように。表紙からいつでも開ける）
+    var pristine = JSON.stringify(window.LifePlanSample.sample());
+    store.plans = store.plans.filter(function (x) { return !(x.name === '記入例' && JSON.stringify(x.state) === pristine); });
     var p = { id: store.nextPlanId++, name: uniqueName(w.d._ref ? 'わが家' : 'プラン' + (store.plans.length + 1)), state: st };
     store.plans.push(p);
     if (w.needs.length) store.guide = { planId: p.id, needs: w.needs.slice(), done: [], hidden: false };

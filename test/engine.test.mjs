@@ -668,3 +668,20 @@ test('現金化の自動調整：税金のかかる口座 → iDeCo → NISA の
   // NISAを使いはじめる年には、ほかの口座を使い切っている（その年に残りを使い切ってから足りない分をNISAから）
   assert.ok(nisaFirst.assets.investments[n('投資信託')] < 1 && nisaFirst.assets.investments[n('iDeCo')] < 1);
 });
+
+test('もしもの場合：いつものプランでも足りない分（baseNeed）を分けて出す', () => {
+  const S = require('../app/sample.js');
+  // 記入例は、万一がなければ足りるので0
+  assert.equal(E.riskShortfall(S.sample(), {}).baseNeed, 0);
+  // 基本生活費を年60万円ずつ増やすと、万一がなくても足りなくなる
+  const st = S.sample(); st.living.forEach((r) => { r.amount += 60; });
+  const rk = E.riskShortfall(st, {});
+  assert.ok(rk.baseNeed > 0 && rk.baseNeed < rk.need, `${rk.baseNeed} / ${rk.need}`);
+  // その額を同じ年に入れれば、いつものプランは最後まで金融資産がマイナスにならない（少なければなる）
+  const minTotal = (x) => {
+    const s = JSON.parse(JSON.stringify(st)); s.lump.push({ id: 99, year: st.startYear, amount: x, memo: '' });
+    return Math.min(...E.compute(s).years.map((y) => y.assets.total));
+  };
+  assert.ok(minTotal(rk.baseNeed) >= -0.01);
+  assert.ok(minTotal(rk.baseNeed - 2) < 0);
+});

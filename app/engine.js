@@ -719,11 +719,11 @@
       r.years.forEach(function (row) { if (row.year >= dy && row.year <= until && row.assets.total < m) m = row.assets.total; });
       return { min: m, cf: r };
     };
-    var first = minDep(rs.state);
-    var need = 0;
-    if (first.min < 0) {
+    // 亡くなった年に一度に入れれば、見る期間に金融資産がマイナスにならない最小の額
+    var needOf = function (base, first) {
+      if (first.min >= 0) return 0;
       var withX = function (x) {
-        var st = JSON.parse(JSON.stringify(rs.state));
+        var st = JSON.parse(JSON.stringify(base));
         st.lump.push({ id: 80400, year: dy, amount: x, memo: '' });
         return minDep(st).min;
       };
@@ -732,9 +732,18 @@
       var lo = 0, hi = Math.max(1, Math.ceil(-first.min));
       for (var k = 0; k < 20 && withX(hi) < -0.01; k++) hi *= 2;
       while (hi - lo > 0.5) { var mid = (lo + hi) / 2; if (withX(mid) < -0.01) lo = mid; else hi = mid; }
-      need = Math.ceil(hi - 1e-6);
+      return Math.ceil(hi - 1e-6);
+    };
+    var first = minDep(rs.state);
+    var need = needOf(rs.state, first);
+    // 万一がなくても足りない分（いつものプランで同じ期間を見たとき）。保険ではなく家計の見直しで備えるお金
+    var baseNeed = 0;
+    if (need > 0 && rs.info.dead) {
+      var plain = JSON.parse(JSON.stringify(state));
+      plain.lump = plain.lump || [];
+      baseNeed = Math.min(need, needOf(plain, minDep(plain)));
     }
-    return { need: need, minDeposit: first.min, cf: first.cf, state: rs.state, info: rs.info };
+    return { need: need, baseNeed: baseNeed, minDeposit: first.min, cf: first.cf, state: rs.state, info: rs.info };
   }
 
   // ---- 必要保障額の簡易計算（Excel「必要保障額」シート、2028年度改正版） ----

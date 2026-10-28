@@ -202,6 +202,7 @@ input::placeholder { color: var(--text-faint); font-weight: 500; }
 .total { display: flex; align-items: baseline; gap: 8px; padding: 10px 0 4px; }
 .total .v { font-size: 16px; font-weight: 900; margin-left: auto; font-variant-numeric: tabular-nums; }
 footer.done { text-align: center; font-size: 13px; font-weight: 500; color: var(--text-faint); padding: 18px 0 0; }
+footer.done .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 12px; }
 
 /* はじめての案内 */
 .welcome { margin: 12px 0 0; padding: 16px 18px; border-radius: 22px; background: linear-gradient(135deg, var(--accent-soft), var(--fill-opt)); color: var(--accent-ink); }
@@ -240,6 +241,7 @@ footer.done { text-align: center; font-size: 13px; font-weight: 500; color: var(
 .hero .note { font-size: 13.5px; font-weight: 500; color: var(--text-muted); margin-top: 2px; }
 .alert { display: flex; gap: 8px; align-items: flex-start; background: var(--neg-soft); color: var(--neg); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; font-weight: 700; line-height: 1.6; }
 .alert .ic { margin-top: 2px; }
+.alert .alink { display: block; margin-top: 4px; padding: 6px 0; border: none; background: none; color: inherit; font: inherit; font-size: 13.5px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .chartcard { padding: 14px 12px 10px; position: relative; }
 .chartcard .h3 { margin: 0 4px 6px; font-size: 14.5px; font-weight: 900; }
 .keys { display: flex; gap: 14px; margin: 0 4px 6px; font-size: 13px; font-weight: 700; color: var(--text-muted); }
@@ -370,6 +372,7 @@ table.cmpt .df.down { color: var(--neg); }
 /* FPからの次の一歩 */
 .guide { margin: 12px 0 4px; padding: 14px 16px 6px; border-radius: 22px; background: linear-gradient(160deg, var(--accent-soft), var(--surface) 70%); box-shadow: var(--shadow); }
 #cf .guide { margin-top: 6px; margin-bottom: 14px; }
+#cf .guide.fix { margin-top: 14px; }
 .guide .gh { display: flex; gap: 10px; align-items: center; }
 .guide .gh .t { font-size: 16px; font-weight: 900; color: var(--accent-ink); }
 .guide .gh .s { font-size: 12.5px; font-weight: 500; color: var(--text-muted); line-height: 1.5; }
@@ -406,6 +409,9 @@ table.cmpt .df.down { color: var(--neg); }
 
 /* 表紙の安心ポイント */
 .trust { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 14px; }
+.cvtop { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 16px 0 4px; }
+.cvtop .btn { width: 100%; max-width: 420px; }
+.cvtop span { font-size: 12.5px; font-weight: 500; color: var(--text-muted); }
 .trust span { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; background: var(--sage-soft); color: var(--good); font-size: 13px; font-weight: 700; }
 
 /* 未来の表：家計簿にもとづくプラン */
@@ -640,3 +646,10 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 .ddseg .amt small { display: block; font-size: 12px; }
 .adcard .vmsg { margin-top: 10px; }
 .adcard .calcrow .u small { display: block; font-size: 11.5px; color: var(--text-faint); white-space: normal; }
+
+/* かんたん入力でたたんでおく内訳 */
+.ppwhy { margin-top: 6px; }
+.ppwhy summary { display: flex; align-items: center; gap: 6px; min-height: 40px; font-size: 13.5px; font-weight: 700; color: var(--accent-ink); cursor: pointer; list-style: none; }
+.ppwhy summary::-webkit-details-marker { display: none; }
+.ppwhy summary::after { content: ''; width: 7px; height: 7px; border-right: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted); transform: rotate(45deg) translateY(-2px); margin-left: auto; margin-right: 6px; }
+.ppwhy[open] summary::after { transform: rotate(225deg) translateY(-2px); }
