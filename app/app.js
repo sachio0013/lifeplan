@@ -91,6 +91,7 @@
     wz: null,          // かんたん入力の途中の答え
     sheet: false,      // プランの一覧を開いているか
     confirmDelPlan: 0,
+    confirmWipe: false,
     whyOpen: {},
     cmp: null,         // 比較で選んでいるプランの id
     backup: { msg: '', level: '', text: false, pending: null },
@@ -423,7 +424,9 @@
       state = plan().state;
       undo = null;
       document.getElementById('toast').hidden = true;
-      ui.confirmDelMember = 0; ui.confirmDelPlan = 0; ui.loanConfirm = false;
+      ui.confirmDelMember = 0; ui.confirmDelPlan = 0; ui.loanConfirm = false; ui.confirmWipe = false;
+      // 最後のプランの削除や「すべて消す」を戻したときは、表紙から入力に戻る
+      if (ui.view === 'cover' && store.prefs.welcomed) ui.view = 'input';
       commit();
     },
     privacy: function () { snapshotless('入力した家計簿とプランは、この端末のブラウザの中だけに保存されます。どこにも送られません'); },
@@ -3454,9 +3457,19 @@
     commit();
   };
   A.planDel = function (id) {
-    if (store.plans.length < 2) return;
     if (ui.confirmDelPlan !== id) { ui.confirmDelPlan = id; commit(); return; }
     snapshot('プラン「' + byId(store.plans, id).name + '」を削除しました');
+    if (store.plans.length < 2) {
+      // 最後のプラン：はじめて開いたときと同じ（記入例だけ・表紙から）に戻す。家計簿は残す
+      var ex = { id: store.nextPlanId++, name: '記入例', state: window.LifePlanSample.sample() };
+      store.plans = [ex]; store.guide = null; store.prefs.welcomed = false;
+      ui.confirmDelPlan = 0; ui.cmp = null; ui.sheet = false;
+      switchTo(ex.id);
+      ui.view = 'cover';
+      commit();
+      document.getElementById('scroll').scrollTop = 0;
+      return;
+    }
     store.plans = store.plans.filter(function (p) { return p.id !== id; });
     if (ui.cmp) ui.cmp = ui.cmp.filter(function (x) { return x !== id; });
     ui.confirmDelPlan = 0;
@@ -3464,6 +3477,20 @@
     commit();
   };
   A.planDelNo = function () { ui.confirmDelPlan = 0; commit(); };
+  A.wipeAsk = function () { ui.confirmWipe = true; commit(); };
+  A.wipeNo = function () { ui.confirmWipe = false; commit(); };
+  A.wipeYes = function () {
+    snapshot('すべてのデータを消しました');
+    var next = freshStore();
+    next.plans[0].id = next.activeId = store.nextPlanId; next.nextPlanId = store.nextPlanId + 1;
+    store = next;
+    ui.confirmWipe = false; ui.confirmDelPlan = 0; ui.cmp = null; ui.sheet = false;
+    ui.cover = { family: 'kid2', home: 'rent', needs: [] };
+    switchTo(store.activeId);
+    ui.view = 'cover';
+    commit();
+    document.getElementById('scroll').scrollTop = 0;
+  };
   A.planNew = function () { ui.sheet = false; A.wizOpen(); };
   A.cmpToggle = function (id) {
     var sel = cmpSelection();
@@ -3680,9 +3707,10 @@
         '<button class="pick" onclick="A.planSwitch(' + p.id + ')" aria-current="' + on + '">' +
           '<span class="radio"></span><span class="nm">' + esc(p.name) + '</span><span class="sub' + (r.shortfall ? ' neg' : '') + '">' + sub + '</span>' +
         '</button>' +
-        (store.plans.length > 1 ? '<button class="del" style="margin:0" aria-label="「' + esc(p.name) + '」を削除" onclick="A.planDel(' + p.id + ')">' + ic('del', 20) + '</button>' : '') +
+        '<button class="del" style="margin:0" aria-label="「' + esc(p.name) + '」を削除" onclick="A.planDel(' + p.id + ')">' + ic('del', 20) + '</button>' +
       '</div>' +
-      (ui.confirmDelPlan === p.id ? '<div class="plconfirm"><span>「' + esc(p.name) + '」を削除しますか？元に戻せません</span>' +
+      (ui.confirmDelPlan === p.id ? '<div class="plconfirm"><span>「' + esc(p.name) + '」を削除しますか？' +
+        (store.plans.length < 2 ? '最後のプランなので、削除すると表紙（はじめの画面）に戻ります。家計簿はそのまま残ります。' : '') + '</span>' +
         '<button class="btn danger" onclick="A.planDel(' + p.id + ')">削除する</button><button class="btn ghost" onclick="A.planDelNo()">やめる</button></div>' : '');
     }).join('');
     return '<div class="backdrop" onclick="A.planSheet()"></div>' +
@@ -3698,6 +3726,12 @@
           '<button class="btn" onclick="A.planNew()">＋ かんたん入力で作る</button>' +
         '</div>' +
         '<div id="backup"></div>' +
+        '<div class="wipe"><div class="lb">すべてのデータを消す</div>' +
+          '<div class="hint" style="padding:0 0 8px">プラン・家計簿・給与明細をすべて消して、はじめて開いたときの状態に戻します。必要なら先に「ファイルに保存」でバックアップを取ってください。</div>' +
+          (ui.confirmWipe
+            ? '<div class="plconfirm"><span>本当にすべて消しますか？プラン' + store.plans.length + '件と家計簿が消えます。</span><button class="btn danger" onclick="A.wipeYes()">すべて消す</button><button class="btn ghost" onclick="A.wipeNo()">やめる</button></div>'
+            : '<button class="btn ghost" onclick="A.wipeAsk()">すべて消して最初から</button>') +
+        '</div>' +
       '</div>';
   }
 

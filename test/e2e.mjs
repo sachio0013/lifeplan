@@ -937,6 +937,38 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
   await c.close();
 }
 
+// 最後のプランも削除でき、表紙に戻る。「すべて消して最初から」は家計簿も消し、元に戻せる
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
+  const xp = await c.newPage();
+  xp.on('pageerror', (e) => errors.push(e.message));
+  await xp.goto(url);
+  await xp.evaluate(() => {
+    const st = window.LifePlanSample.sample();
+    const book = { years: {}, nextId: 1 }; book.years['2026'] = window.LifePlanBook.sampleYear(book);
+    localStorage.setItem('lifeplan.v2', JSON.stringify({ version: 2, activeId: 1, nextPlanId: 2, plans: [{ id: 1, name: 'プラン1', state: st }], prefs: { yearMode: 'year', welcomed: true }, book }));
+  });
+  await xp.reload();
+  await go(xp, '#planbtn'); await xp.waitForSelector('.sheet');
+  await xp.locator('.pl', { hasText: 'プラン1' }).locator('button.del').tap(); await xp.waitForTimeout(80);
+  const ask = await xp.textContent('.plconfirm');
+  await xp.locator('.plconfirm .btn', { hasText: '削除する' }).tap();
+  await xp.waitForSelector('.cover');
+  const st1 = await xp.evaluate(() => JSON.parse(localStorage.getItem('lifeplan.v2')));
+  check('最後のプランも削除でき、はじめて開いたときと同じ表紙に戻る（家計簿は残る）',
+    /最後のプラン/.test(ask) && JSON.stringify(st1.plans.map((p) => p.name)) === '["記入例"]' && st1.prefs.welcomed === false && Object.keys(st1.book.years).length === 1, `${st1.plans.map((p) => p.name)} / ${ask.trim()}`);
+  await xp.locator('#toast button').tap(); await xp.waitForTimeout(150);
+  const back = await xp.evaluate(() => JSON.parse(localStorage.getItem('lifeplan.v2')).plans.map((p) => p.name));
+  check('最後のプランの削除も「元に戻す」で戻せ、入力画面に戻る', JSON.stringify(back) === '["プラン1"]' && !(await xp.locator('#coverview').isVisible()), `${back}`);
+  await go(xp, '#planbtn'); await xp.waitForSelector('.sheet');
+  await xp.locator('.wipe .btn', { hasText: 'すべて消して最初から' }).tap(); await xp.waitForTimeout(80);
+  await xp.locator('.wipe .btn', { hasText: 'すべて消す' }).tap();
+  await xp.waitForSelector('.cover');
+  const st2 = await xp.evaluate(() => JSON.parse(localStorage.getItem('lifeplan.v2')));
+  check('「すべて消して最初から」で、プランも家計簿も消えて表紙に戻る', JSON.stringify(st2.plans.map((p) => p.name)) === '["記入例"]' && Object.keys(st2.book.years).length === 0 && st2.prefs.welcomed === false, JSON.stringify(st2.book));
+  await c.close();
+}
+
 check('コンソールエラーが無い', errors.length === 0, errors.slice(0, 3).join(' / '));
 
 await browser.close();

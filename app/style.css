@@ -288,6 +288,8 @@ table.cf td .sw { display: inline-block; width: 9px; height: 9px; border-radius:
 .plconfirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--neg-soft); color: var(--neg); font-size: 13.5px; font-weight: 700; }
 .plconfirm span { flex-basis: 100%; }
 .btn.danger { background: var(--neg); color: var(--surface); }
+.wipe { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.wipe .lb { font-size: 14px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
 .sheetbtns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 
 /* 比較画面 */
