@@ -769,7 +769,7 @@ await fresh.close();
   await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
   const st2 = await page.textContent('#card-autoDraw .vmsg');
   check('現金化の自動調整：オンにすると保てる年齢と10年ごとの額が出て、保ちたい額が高すぎれば使い切る年を知らせる',
-    /保てます/.test(st1) && buckets >= 2 && /使い切り/.test(st2) && saved.target === 1500 && saved.startAge > 0, `${st1.trim()} / ${buckets} / ${st2.trim()} / ${JSON.stringify(saved)}`);
+    /保てます/.test(st1) && buckets >= 2 && /使い切り/.test(st2) && saved.target === 1000 && saved.startAge > 0, `${st1.trim()} / ${buckets} / ${st2.trim()} / ${JSON.stringify(saved)}`);
   await page.locator('#card-autoDraw button', { hasText: '自分で決める' }).tap(); await page.waitForTimeout(150);
 }
 

@@ -760,7 +760,7 @@
     var m1 = state.family.filter(function (m) { return m.relation === '家族１'; })[0];
     var sal = m1 && state.salaries.filter(function (x) { return x.memberId === m1.id; })[0];
     var retire = sal && toNum(sal.retireAge) ? toNum(sal.retireAge) : 65;
-    return { on: !!d.on, target: d.target === undefined || d.target === '' ? 1500 : toNum(d.target), startAge: d.startAge === undefined || d.startAge === '' ? retire : toNum(d.startAge) };
+    return { on: !!d.on, target: d.target === undefined || d.target === '' ? 1000 : toNum(d.target), startAge: d.startAge === undefined || d.startAge === '' ? retire : toNum(d.startAge) };
   }
   function adChartSVG(off, on, start, target) {
     var W = 320, H = 140, P = 8, L = 40;
@@ -1331,7 +1331,7 @@
     var at = result.years.filter(function (y) { return y.year === sf.year; })[0];
     if (!(state.autoDraw && state.autoDraw.on) && at && at.assets.investTotal >= 1) {
       var startAge = Math.min(adInputs().startAge, sf.age);
-      [300, 100, 0].some(function (t) {
+      [1000, 300, 100, 0].some(function (t) {
         var st = copy(); st.autoDraw = { on: true, target: t, startAge: startAge };
         if (ok(st)) { v.draw = { target: t, startAge: startAge, invest: at.assets.investTotal }; return true; }
         return false;
