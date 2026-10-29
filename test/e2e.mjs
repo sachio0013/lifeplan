@@ -343,7 +343,8 @@ await wp.waitForTimeout(100);
 const making = await wp.evaluate(() => [document.getElementById('planname').textContent, document.getElementById('planbtn').disabled]);
 check('かんたん入力の間は、上にプラン名ではなく「新しいプランを作成中」と出て、プランの切り替えは押せない', making[0] === '新しいプランを作成中' && making[1] === true, making.join(' '));
 const needBirth = await wp.locator('.wz .vmsg').textContent().catch(() => '');
-check('かんたん入力：生年月日が無いと先に進まず、理由が出る', /生年月日/.test(needBirth) && /期間と家族１/.test(await wp.textContent('.wzt')), needBirth);
+check('かんたん入力：生年月日が無いと先に進まず、理由が出る', /生年月日/.test(needBirth) && /家計の中心の人/.test(await wp.textContent('.wzt')), needBirth);
+await wp.locator('.wzmore summary').tap();
 await wp.fill('#w-startYear', '2026'); await wp.press('#w-startYear', 'Tab');
 await wp.fill('#w-birth1', '1986-07-10'); await wp.locator('#w-birth1').blur();
 await wp.screenshot({ path: join(shots, '8-wizard-1.png') });
@@ -365,8 +366,16 @@ const refAfter = await wp.$$eval('.wz .refchip', (els) => els.length);
 check('表紙の選択がかんたん入力に反映され、参考値の印は書き換えると消える',
   famPreset[0] && famPreset[1] === 1 && refBefore === 1 && depRef === '350' && refAfter === 0, `家族２=${famPreset[0]} 子供=${famPreset[1]} 参考値 ${depRef} 印 ${refBefore}→${refAfter}`);
 await next();
-await wp.fill('#w-sal1', '450'); await wp.press('#w-sal1', 'Tab');
-await wp.fill('#w-sal2', '200'); await wp.press('#w-sal2', 'Tab');
+// 給与は「毎月の手取り＋ボーナス」で聞き、年額にする。円で入れてしまったら知らせる
+await wp.fill('#w-sal1-m', '300000'); await wp.press('#w-sal1-m', 'Tab');
+await wp.locator('.wznav .btn', { hasText: '次へ' }).tap(); await wp.waitForTimeout(100);
+const yenErr = await wp.locator('.wz .vmsg').first().textContent().catch(() => '');
+for (const [id, v] of [['#w-sal1-m', '30'], ['#w-sal1-b', '90'], ['#w-sal2-m', '15'], ['#w-sal2-b', '20']]) {
+  await wp.fill(id, v); await wp.press(id, 'Tab'); await wp.waitForTimeout(120);
+}
+const salSum = await wp.$$eval('.wz .wzsum', (els) => els.map((e) => e.textContent.replace(/\s+/g, '')));
+check('かんたん入力の給与は、毎月の手取り＋ボーナスから1年の額を出す。円で入れると「万円で」と知らせて先に進まない',
+  /万円/.test(yenErr) && /収入/.test(await wp.textContent('.wzt')) && JSON.stringify(salSum) === '["1年で450万円","1年で200万円"]', `${yenErr} / ${salSum}`);
 await next();
 await wp.waitForSelector('.wz .ppres');
 const wzPen = await wp.$$eval('.wz .ppres b', (els) => els.map((e) => parseFloat(e.textContent)));
@@ -375,8 +384,12 @@ await wp.screenshot({ path: join(shots, '9c-wizard-pension.png') });
 check('かんたん入力の年金は、入れた給与から自動で見込み（2人分）、額を入れなくても先に進める',
   wzPen.length === 2 && wzPen.every((v) => v > 100 && v < 300) && wzPension === '', `${wzPen.join('・')} / 入力=${wzPension}`);
 await next();
-await wp.fill('#w-living', '280'); await wp.press('#w-living', 'Tab');
-await wp.fill('#w-housing', '130'); await wp.press('#w-housing', 'Tab');
+// 支出は1か月の額で聞く（1年分は12倍）
+for (const [id, v] of [['#w-living-m', '23.5'], ['#w-housing-m', '11']]) {
+  await wp.fill(id, v); await wp.press(id, 'Tab'); await wp.waitForTimeout(120);
+}
+const expSum = await wp.$$eval('.wz .wzsum', (els) => els.map((e) => e.textContent.replace(/\s+/g, '')));
+check('かんたん入力の支出は1か月の額で入れ、1年の額（12倍）を添える', expSum[0] === '1年で282万円' && expSum[1] === '1年で132万円', `${expSum}`);
 const wzOverflow = await wp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 await wp.screenshot({ path: join(shots, '10-wizard-6.png') });
 await next();
@@ -599,7 +612,7 @@ await fresh.close();
   const thisMonth = new Date().getMonth();
   // 1か月目：食費（全角・カンマ付きでも可）と給与を入れる
   const food = await page.$$eval('.bkrow', (rows) => { const r = rows.find((x) => x.querySelector('.nm') && /食費/.test(x.querySelector('.nm').textContent)); return r && r.querySelector('input').id; });
-  const sal = await page.$$eval('.bkrow', (rows) => { const r = rows.find((x) => x.querySelector('.nm') && /給与手取り（家族１）/.test(x.querySelector('.nm').textContent)); return r && r.querySelector('input').id; });
+  const sal = await page.$$eval('.bkrow', (rows) => { const r = rows.find((x) => x.querySelector('.nm') && /給与手取り（夫）/.test(x.querySelector('.nm').textContent)); return r && r.querySelector('input').id; });
   await page.fill(`#${food}`, '５２，０００'); await page.press(`#${food}`, 'Tab');
   await page.fill(`#${sal}`, '300000'); await page.press(`#${sal}`, 'Tab');
   await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
@@ -817,7 +830,7 @@ await fresh.close();
   check('保障（かんたん計算）：プランから入れた値で必要保障額が出て、死亡退職金1,000万円を入れると1,000万円減り、書き換えた欄に印が付く',
     simple0 > 0 && simple0 - simple1 === Math.min(1000, simple0) && edited === 1, `${simple0} → ${simple1} 印=${edited}`);
   await page.locator('.rkcard .btn.ghost', { hasText: 'プランから入れた値に戻す' }).tap(); await page.waitForTimeout(150);
-  await page.locator('.rkmode button', { hasText: 'CF表で計算' }).tap(); await page.waitForTimeout(200);
+  await page.locator('.rkmode button', { hasText: 'プランで計算' }).tap(); await page.waitForTimeout(200);
   const plansBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('lifeplan.v2')).plans.length);
   await page.locator('.rkcard .btn.block', { hasText: 'プランとして保存' }).tap();
   await page.waitForSelector('#chart');
@@ -966,6 +979,48 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
   await xp.waitForSelector('.cover');
   const st2 = await xp.evaluate(() => JSON.parse(localStorage.getItem('lifeplan.v2')));
   check('「すべて消して最初から」で、プランも家計簿も消えて表紙に戻る', JSON.stringify(st2.plans.map((p) => p.name)) === '["記入例"]' && Object.keys(st2.book.years).length === 0 && st2.prefs.welcomed === false, JSON.stringify(st2.book));
+  await c.close();
+}
+
+// 家を買うか考えている人の流れ：結果がひとことで出て、家を買ったプランと比べ、家の値段は家を買ったプランで変える（今の住まいのプランは変えない）
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
+  const hp = await c.newPage();
+  hp.on('pageerror', (e) => errors.push(e.message));
+  await hp.goto(url);
+  await hp.waitForSelector('.cover');
+  await hp.locator('.cover .opt', { hasText: '4人家族' }).tap();
+  await hp.locator('.cover .need', { hasText: '家を買う' }).tap();
+  await hp.locator('.cvcta .btn').tap();
+  await hp.waitForSelector('.wz');
+  const births = { 0: ['#w-birth1'], 1: ['#w-birth2', '#w-kid-0', '#w-kid-1'] };
+  const vals = { '#w-birth1': '19920610', '#w-birth2': '19940305', '#w-kid-0': '20210415', '#w-kid-1': '20240901' };
+  for (let st = 0; st < 6; st++) {
+    for (const id of births[st] || []) { await hp.fill(id, vals[id]); await hp.locator(id).blur(); await hp.waitForTimeout(120); }
+    await hp.locator('.wznav .btn', { hasText: /次へ|この内容で計算する/ }).tap(); await hp.waitForTimeout(150);
+  }
+  await hp.waitForSelector('#chart');
+  const verdict = await hp.textContent('.verdict');
+  check('未来の表のいちばん上に、結果がひとことで出る（だれが何歳のときか）', /このままだと|足りる見込み/.test(verdict) && /家族１が\d+歳/.test(verdict), verdict.trim().slice(0, 60));
+  const eduStage = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); const p = s.plans.find((x) => x.id === s.activeId).state; return p.edu[10]; });
+  check('かんたん入力の教育費は大学まで（大学院は「進学しない」）', eduStage[5] === '大学（私文）' && eduStage[6] === '進学しない', `${eduStage}`);
+  await hp.locator('#cf .guide .btn', { hasText: '家の値段・ローンを変える' }).tap(); await hp.waitForTimeout(400);
+  const st1 = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return { names: s.plans.map((p) => p.name), active: s.plans.find((p) => p.id === s.activeId).name, baseLoan: s.plans[0].state.loanCalc || null }; });
+  const loanVisible = await hp.locator('#f-loan-amount').isVisible();
+  check('「家の値段・ローンを変える」で、家を買ったプランの住宅ローンの欄が開く（今の住まいのプランにはローンを入れない）',
+    st1.active === 'わが家（家を買う）' && st1.baseLoan === null && loanVisible && (await hp.inputValue('#f-loan-amount')) === '4000', JSON.stringify(st1));
+  await hp.fill('#f-loan-amount', '3000'); await hp.press('#f-loan-amount', 'Tab'); await hp.waitForTimeout(150);
+  await hp.locator('#loanbox .btn', { hasText: '住宅費に反映する' }).tap(); await hp.waitForTimeout(150);
+  const placed = await hp.locator('.plconfirm .btn', { hasText: '置き換える' }).count();
+  if (placed) { await hp.locator('.plconfirm .btn', { hasText: '置き換える' }).tap(); await hp.waitForTimeout(150); }
+  const toastMsg = await hp.textContent('#toast');
+  await go(hp, '#seg-cmp');
+  await hp.waitForSelector('.cmpsay');
+  const say = await hp.textContent('.cmpsay');
+  check('比較のいちばん上に「くらべると」が文で出て、それぞれのプランを開くボタンがある（反映したら比較へ案内）',
+    /「わが家（家を買う）」/.test(say) && /万円/.test(say) && (await hp.locator('.cmpsay .btn').count()) === 2 && /比較/.test(toastMsg), say.replace(/\s+/g, ' ').slice(0, 120));
+  await hp.locator('.cmpsay .btn', { hasText: 'わが家（家を買う）の中身' }).tap(); await hp.waitForTimeout(400);
+  check('比較から家を買ったプランを開くと、住宅ローンの欄（3,000万円）が出る', (await hp.locator('#f-loan-amount').isVisible()) && (await hp.inputValue('#f-loan-amount')) === '3000', await hp.textContent('#planname'));
   await c.close();
 }
 

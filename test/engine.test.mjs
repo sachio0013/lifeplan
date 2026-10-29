@@ -334,7 +334,13 @@ test('表紙で選んだ家族のかたちの参考値から、確認箇所な�
       const r = E.compute(s);
       assert.equal(r.years.at(-1).age, 95);
       assert.equal(r.years[0].expense.contributions[0], 36);   // 積立投資：NISAに年36万円
-      assert.equal(s.loanCalc.amount, 4000);                    // 住宅購入：ローンの試算に参考値
+      assert.equal(s.loanCalc, undefined);                      // 住宅購入は、家を買ったプランを別に作って試す（今の住まいのプランは変えない）
+      s.family.filter((m) => m.relation.startsWith('子供')).forEach((c) => {
+        const at = (i) => E.eduPlan(s, c).find((x) => x.index === i);
+        assert.equal(at(5).stage, '大学（私文）');
+        assert.equal(at(6).stage, '進学しない');                 // 大学院は行かない前提（選べば入る）
+        assert.equal(at(6).amount, 0);
+      });
     }
   }
 });

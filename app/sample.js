@@ -80,7 +80,7 @@
   }
 
   // かんたん入力の答えから、プランの入力一式を作る。答えていない項目は空（0円・行なし）にする。
-  // 教育費の進路はサンプルと同じ（公立→私立文系の大学→大学院）。あとで支出セクションで選び直せる。
+  // 教育費の進路は、公立→私立文系の大学まで（大学院は「進学しない」）。あとで支出セクションで選び直せる。
   function fromAnswers(d) {
     function n(v) { var x = parseFloat(v); return isFinite(x) ? x : 0; }
     var sy = n(d.startYear);
@@ -92,7 +92,7 @@
       var id = 10 + i;
       var age = sy - (parseInt(String(k.birth || '').slice(0, 4), 10) || sy);
       family.push({ id: id, name: k.name || '', gender: '', relation: '子供' + (i + 1), birth: k.birth, job: age < 6 ? '乳幼児' : '学生' });
-      edu[id] = ['保育園0～3歳', '保育園4～6歳', '小学校（公）', '中学校（公）', '高校（公）', '大学（私文）', '大学院'];
+      edu[id] = ['保育園0～3歳', '保育園4～6歳', '小学校（公）', '中学校（公）', '高校（公）', '大学（私文）', '進学しない'];
     });
     var salaries = [{ id: 1, who: d.name1 || '家族１', memberId: 1, retireAge: n(d.retire1), rows: [{ id: 1, year: sy, amount: n(d.sal1), growth: n(d.growth) }] }];
     if (d.has2 && n(d.sal2) > 0) {
@@ -187,7 +187,7 @@
       sal1: REF.sal1[fi], retire1: 65, growth: 1, sal2: f.adults > 1 ? REF.sal2[fi] : '', retire2: 65, retireLump: 0,
       pension: '', pensionAge: 65,     // 公的年金は給与から自動で見込む
       living: REF.living[fi], housing: REF[home][fi], insurance: REF.insurance[fi], inflation: 1,
-      _ref: {}
+      home: home, _ref: {}
     };
     for (var k = 0; k < f.kids; k++) d.kids.push({ name: '', birth: '' });
     ['deposit', 'sal1', 'sal2', 'pension', 'living', 'housing', 'insurance'].forEach(function (key) { if (d[key] !== '') d._ref[key] = true; });
@@ -201,9 +201,7 @@
     if (needs.indexOf('invest') >= 0) {
       state.invest[2].add = [{ id: 1, year: sy, toYear: Math.max(sy, by + 59), amount: 36, memo: '参考値：月3万円' }];
     }
-    if (needs.indexOf('house') >= 0) {
-      state.loanCalc = { start: sy + 2, amount: 4000, years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: '' }], upkeep: 40 };
-    }
+    // 家を買うかは、家を買ったプラン（画面の「家を買ったプランと比べる」で作る）で試す。今の住まいのプランは変えない
     return state;
   }
 
