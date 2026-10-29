@@ -2037,7 +2037,7 @@
       '<ol class="cvsteps">' + steps.map(function (st, i) {
         return '<li><span class="no">' + (i + 1) + '</span><div><b>' + st[0] + '</b><span>' + st[1] + '</span></div></li>';
       }).join('') + '</ol>' +
-      '<section class="cvq" id="cvq1"><h2><span class="qn">Q1</span>家族のかたちは？</h2><div class="opts" role="radiogroup" aria-label="家族のかたち">' + fam + '</div></section>' +
+      '<section class="cvq" id="cvq1"><h2><span class="qn">Q1</span>家族のかたちは？</h2><p class="cvqnote">生まれる予定の子や、これからほしいと考えている子どもも含めて選んでください。</p><div class="opts" role="radiogroup" aria-label="家族のかたち">' + fam + '</div></section>' +
       '<section class="cvq"><h2><span class="qn">Q2</span>住まいは？</h2><div class="opts two" role="radiogroup" aria-label="住まい">' + homes + '</div></section>' +
       '<section class="cvq"><h2><span class="qn">Q3</span>気になることは？<small>いくつでも</small></h2><div class="needs">' + needs + '</div></section>' +
       '<div class="cvcta">' +
@@ -3759,7 +3759,7 @@
           wzField('endAge', '何歳になるまで計算するか', '歳まで', { width: 80 }),
           err.startYear || err.endAge);
     } else if (s === 1) {
-      lead = 'いっしょに暮らす家族を入れます。子供の生年月日から、教育費が自動で入ります。';
+      lead = 'いっしょに暮らす家族を入れます。子供の生年月日から、教育費が自動で入ります。生まれる予定の子や、これからほしいと考えている子どもも、予定の生年月日で入れておくと、将来のお金まで見通せます。';
       body = '<button class="check' + (d.has2 ? ' on' : '') + '" role="switch" aria-checked="' + d.has2 + '" onclick="A.wz(\'has2\',' + !d.has2 + ')"><span class="box"></span>夫・妻（パートナー）がいる</button>' +
         (d.has2 ? wzField('name2', 'パートナーの呼び名', '', { text: true, placeholder: '例：妻、わたし（なくてもOK）' }) + wzField('birth2', 'パートナーの生年月日', '', { date: true }) : '') +
         '<div class="lb" style="margin-top:16px">子供（' + d.kids.length + '人）</div>' +
