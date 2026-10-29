@@ -707,3 +707,6 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 .pvtrack { position: relative; height: 12px; margin-top: 6px; border-radius: 999px; background: var(--fill-opt); overflow: visible; }
 .pvtrack span { display: block; height: 100%; border-radius: 999px; background: var(--sage); }
 .pvtrack i { position: absolute; top: -3px; width: 2px; height: 18px; background: var(--text-muted); border-radius: 1px; }
+
+.wzskip { text-align: center; margin: 10px 0 2px; }
+.linkbtn { border: none; background: none; padding: 10px 8px; min-height: 44px; color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }

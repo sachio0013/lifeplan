@@ -2102,6 +2102,12 @@
       var it = GUIDE[k], done = g.done.indexOf(k) >= 0;
       var text = it.p;
       if (k === 'edu' && !E.children(byId(store.plans, g.planId).state).length) text = '子供の欄を足して生年月日を入れると、在学年と教育費が自動で入ります。';
+      if (k === 'invest') {
+        var gs = byId(store.plans, g.planId).state, adds = [];
+        Object.keys(gs.invest || {}).forEach(function (a) { (gs.invest[a].add || []).forEach(function (r) { if (toNum(r.amount) > 0) adds.push(r); }); });
+        text = adds.length ? '積立投資を年' + man(toNum(adds[0].amount)) + '万円（月' + (Math.round(toNum(adds[0].amount) / 12 * 10) / 10) + '万円）入れてあります。積み立てなかった場合のプランと比べてみましょう。'
+          : '入力画面の「投資」で積立を入れて、積み立てなかった場合と比べてみましょう。';
+      }
       if (k === 'save') {
         var lv = (byId(store.plans, g.planId).state.living[0] || {}).amount;
         if (toNum(lv)) text += '（今の基本生活費 年' + man(lv) + '万円 → 1割で年' + (Math.round(toNum(lv) / 10 * 10) / 10) + '万円、月' + (Math.round(toNum(lv) / 120 * 10) / 10) + '万円）';
@@ -3351,8 +3357,8 @@
       startYear: new Date().getFullYear(), endAge: 90, name1: '', birth1: '',
       has2: false, name2: '', birth2: '', kids: [],
       deposit: '', nisa: 0, ideco: 0, rate: 3,
-      sal1: '', retire1: 65, growth: 1, sal2: '', retire2: 65, retireLump: 0,
-      pension: '', pensionAge: 65,
+      sal1: '', retire1: 65, growth: 1, sal2: '', retire2: 65, retireLump: 1500, retireLumpAge: 60,
+      pension: '', pensionAge: 65, nisaMonthly: 5, car: true, carCost: 15, carPrice: 300,
       living: '', housing: '', insurance: 0, inflation: 0.5
     };
   }
@@ -3494,6 +3500,7 @@
       body = wzField('deposit', '貯金（現金・普通預金・定期預金）', '万円') +
         wzField('nisa', 'NISA', '万円', { optional: true, hint: 'やっていなければ0のまま' }) +
         wzField('ideco', 'iDeCo', '万円', { optional: true, hint: 'やっていなければ0のまま' }) +
+        wzField('nisaMonthly', 'NISAの積立（1か月）', '万円', { optional: true, hint: '60歳まで毎月積み立てる計算です（1年で' + man(toNum(d.nisaMonthly) * 12) + '万円）。しなければ0' }) +
         wzFold('くわしい設定（ふつうはそのままでOK）',
           wzField('rate', 'NISA・iDeCoが1年で増える割合（見込み）', '％', { width: 80, hint: 'わからなければ3％のままでOK。積み立てる額は、あとで入力画面の「投資」で入れられます' }));
     } else if (s === 3) {
@@ -3501,7 +3508,8 @@
       body = wzMoney('sal1', n1 + 'の手取り', { hint: '給与明細の「差引支給額」が目安です。わからなければ目安のままでOK' }) +
         wzField('retire1', '何歳まで働くか', '歳まで', { width: 80 }) +
         (d.has2 ? wzMoney('sal2', n2 + 'の手取り', { optional: true, hint: 'パートなら毎月の振込額だけでOK。働いていなければ0' }) + wzField('retire2', '何歳まで働くか', '歳まで', { width: 80, optional: true }) : '') +
-        wzField('retireLump', '退職金（わかれば）', '万円', { optional: true, hint: 'わからなければ0のまま（あとで入れられます）。会社員なら、会社の規程でわかります' }) +
+        wzField('retireLump', '退職金', '万円', { optional: true, hint: '会社員の目安として、60歳で1,500万円を入れています。会社の規程でわかれば書き換え、なければ0にします' }) +
+        (toNum(d.retireLump) > 0 ? wzField('retireLumpAge', '退職金を受け取る年齢（' + n1 + '）', '歳', { width: 80 }) : '') +
         wzFold('くわしい設定（ふつうはそのままでOK）',
           wzField('growth', '給料が毎年上がる割合', '％', { width: 80, optional: true, hint: 'わからなければ1％のままでOK' }));
     } else if (s === 4) {
@@ -3533,6 +3541,9 @@
       body = wzMoney('living', '生活費', { hint: '食費・日用品・電気ガス水道・スマホ・おこづかいなど。家賃・教育費・保険料・車の費用は入れません' }) +
         wzMoney('housing', hl[0], { hint: hl[1] }) +
         wzMoney('insurance', '保険料', { optional: true, hint: '生命保険・医療保険など。なければ0' }) +
+        '<button class="check' + (d.car ? ' on' : '') + '" role="switch" aria-checked="' + !!d.car + '" onclick="A.wz(\'car\',' + !d.car + ')" style="margin-top:14px"><span class="box"></span>車を持っている（持つ予定）</button>' +
+        (d.car ? wzField('carCost', '車の維持費（1年）', '万円', { optional: true, hint: '税金・保険・車検・駐車場・ガソリンなど' }) +
+          wzField('carPrice', '車の買い替え（1回）', '万円', { optional: true, hint: '3年後から10年ごとに買い替える計算です（' + n1 + 'が75歳まで）' }) : '') +
         wzFold('くわしい設定（ふつうはそのままでOK）',
           wzField('inflation', '物価が1年で上がる割合', '％', { width: 80, hint: 'わからなければ1％のままでOK' }));
     }
@@ -3552,7 +3563,8 @@
         (s > 0 ? '<button class="btn ghost" onclick="A.wzBack()">戻る</button>' : '') +
         '<button class="btn" style="margin-left:auto" onclick="A.wzNext()">' + (last ? 'この内容で計算する' : '次へ') + '</button>' +
       '</div>' +
-      '<div class="hint" style="text-align:center">細かい項目（住宅ローン、車、一時的な支出など）は、あとで入力画面で足せます</div>' +
+      (s >= 2 && !last ? '<div class="wzskip"><button class="linkbtn" onclick="A.wzSkip()">残りは目安のままで、結果を見る</button></div>' : '') +
+      '<div class="hint" style="text-align:center">細かい項目（住宅ローン、子供の結婚の援助など一時的な支出）は、あとで入力画面で足せます</div>' +
     '</div>';
   }
 
@@ -3573,7 +3585,7 @@
   A.wizStay = function () { ui.wz.closeAsk = false; commit(); };
   A.wz = function (key, v, el) {
     var d = ui.wz.d;
-    if (key === 'has2') d.has2 = !!v;
+    if (key === 'has2' || key === 'car') d[key] = !!v;
     else if (key.indexOf('birth') === 0) d[key] = normBirth(v);
     else if (key === 'name1' || key === 'name2') d[key] = v;
     else d[key] = String(v).trim() === '' ? '' : String(toNum(v));
@@ -3606,7 +3618,20 @@
     w.err = wzErrors(w.step, w.d);
     if (Object.keys(w.err).length) { commit(); return; }
     if (w.step < wzSteps().length - 1) { w.step++; commit(); document.getElementById('scroll').scrollTop = 0; return; }
-    // 完成：新しいプランとして加え、そのプランのCF表を開く
+    wzFinish();
+  };
+  // 残りのステップは目安のままで、結果を見る（家族のステップを終えてから）
+  A.wzSkip = function () {
+    var w = ui.wz;
+    for (var k = w.step; k < wzSteps().length; k++) {
+      var e = wzErrors(k, w.d);
+      if (Object.keys(e).length) { w.step = k; w.err = e; commit(); document.getElementById('scroll').scrollTop = 0; return; }
+    }
+    wzFinish();
+  };
+  // 完成：新しいプランとして加え、そのプランのCF表を開く
+  function wzFinish() {
+    var w = ui.wz;
     var st = window.LifePlanSample.applyNeeds(window.LifePlanSample.fromAnswers(w.d), w.needs);
     // 最初から入っている記入例は、書き換えていなければ外す（自分のプランと見知らぬ家族を比べないように。表紙からいつでも開ける）
     var pristine = JSON.stringify(window.LifePlanSample.sample());
@@ -3631,7 +3656,7 @@
     quiet = true;
     commit();
     document.getElementById('scroll').scrollTop = 0;
-  };
+  }
   // ---------- プラン（保存した複数の入力）の切り替えと比較 ----------
 
   function switchTo(id) {

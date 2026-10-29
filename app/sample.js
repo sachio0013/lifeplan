@@ -111,7 +111,8 @@
       family: family,
       edu: edu, eduAmount: {}, eduSpan: {},
       salaries: salaries,
-      lump: n(d.retireLump) > 0 && n(d.retire1) ? [{ id: 1, year: by + n(d.retire1), amount: n(d.retireLump), memo: '退職金' }] : [],
+      // 退職金は受け取る年齢（なければ働き終える年齢）の年に
+      lump: n(d.retireLump) > 0 && (n(d.retireLumpAge) || n(d.retire1)) ? [{ id: 1, year: by + (n(d.retireLumpAge) || n(d.retire1)), amount: n(d.retireLump), memo: '退職金' }] : [],
       corpPension: [],
       privPension: [],
       // 公的年金は、額を入れていなければ自動で見込む（給与から）
@@ -123,12 +124,14 @@
       housing: [{ id: 1, year: sy, amount: n(d.housing), memo: '' }],
       housingLump: [],
       insurance: [{ id: 1, year: sy, amount: n(d.insurance), memo: '' }],
-      carCost: [],
-      carBuy: { fromYear: '', every: 10, amount: 0, untilAge: 75 },
+      // 車：維持費は毎年、買い替えは3年後から10年ごと（75歳まで）
+      carCost: d.car ? [{ id: 1, year: sy, amount: n(d.carCost), memo: '' }] : [],
+      carBuy: d.car && n(d.carPrice) > 0 ? { fromYear: sy + 3, every: 10, amount: n(d.carPrice), untilAge: 75 } : { fromYear: '', every: 10, amount: 0, untilAge: 75 },
       carBuyOverride: {},
       otherFlow: [],
       otherLump: [],
-      invest: { 2: { add: [], out: [] }, 3: { add: [], out: [] } },
+      // NISAの積立：毎月の額×12を、60歳の年まで
+      invest: { 2: { add: n(d.nisaMonthly) > 0 && by + 60 >= sy ? [{ id: 1, year: sy, toYear: by + 60, amount: n(d.nisaMonthly) * 12, memo: '' }] : [], out: [] }, 3: { add: [], out: [] } },
       calc: { income: 600, spouse: 'なし', kids: 0 },
       nextId: 500
     };
@@ -184,7 +187,8 @@
       startYear: startYear, endAge: 95, name1: '', birth1: '',
       has2: f.adults > 1, name2: '', birth2: '', kids: [],
       deposit: REF.deposit[fi], nisa: 0, ideco: 0, rate: 3,
-      sal1: REF.sal1[fi], retire1: 65, growth: 1, sal2: f.adults > 1 ? REF.sal2[fi] : '', retire2: 65, retireLump: 0,
+      sal1: REF.sal1[fi], retire1: 65, growth: 1, sal2: f.adults > 1 ? REF.sal2[fi] : '', retire2: 65, retireLump: 1500, retireLumpAge: 60,
+      nisaMonthly: 5, car: true, carCost: 15, carPrice: 300,
       pension: '', pensionAge: 65,     // 公的年金は給与から自動で見込む
       living: REF.living[fi], housing: REF[home][fi], insurance: REF.insurance[fi], inflation: 1,
       home: home, _ref: {},
@@ -192,7 +196,7 @@
       housePrice: 4000, houseDown: 0, houseYear: startYear + 2, houseYears: 35, houseRate1: 1, houseRate2: 2, houseCosts: '', houseUpkeep: 40
     };
     for (var k = 0; k < f.kids; k++) d.kids.push({ name: '', birth: '' });
-    ['deposit', 'sal1', 'sal2', 'pension', 'living', 'housing', 'insurance', 'housePrice'].forEach(function (key) { if (d[key] !== '') d._ref[key] = true; });
+    ['deposit', 'sal1', 'sal2', 'pension', 'living', 'housing', 'insurance', 'housePrice', 'retireLump', 'nisaMonthly'].forEach(function (key) { if (d[key] !== '') d._ref[key] = true; });
     return d;
   }
 
@@ -200,8 +204,9 @@
   function applyNeeds(state, needs) {
     var sy = state.startYear;
     var by = parseInt(String((state.family[0] || {}).birth || '').slice(0, 4), 10) || sy - 35;
-    if (needs.indexOf('invest') >= 0) {
-      state.invest[2].add = [{ id: 1, year: sy, toYear: Math.max(sy, by + 59), amount: 36, memo: '参考値：月3万円' }];
+    // 積立投資を試したい人で、積立が入っていなければ月3万円を例として入れる（かんたん入力で0にしていれば、比べるために）
+    if (needs.indexOf('invest') >= 0 && !state.invest[2].add.length) {
+      state.invest[2].add = [{ id: 1, year: sy, toYear: Math.max(sy, by + 60), amount: 36, memo: '例：月3万円' }];
     }
     // 家を買うかは、家を買ったプラン（画面の「家を買ったプランと比べる」で作る）で試す。今の住まいのプランは変えない
     return state;

@@ -364,7 +364,7 @@ await wp.fill('#w-deposit', '400'); await wp.press('#w-deposit', 'Tab');
 await wp.waitForTimeout(100);
 const refAfter = await wp.$$eval('.wz .refchip', (els) => els.length);
 check('表紙の選択がかんたん入力に反映され、参考値の印は書き換えると消える',
-  famPreset[0] && famPreset[1] === 1 && refBefore === 1 && depRef === '350' && refAfter === 0, `家族２=${famPreset[0]} 子供=${famPreset[1]} 参考値 ${depRef} 印 ${refBefore}→${refAfter}`);
+  famPreset[0] && famPreset[1] === 1 && refBefore === 2 && depRef === '350' && refAfter === 1, `家族２=${famPreset[0]} 子供=${famPreset[1]} 参考値 ${depRef} 印 ${refBefore}→${refAfter}`);
 await next();
 // 給与は「毎月の手取り＋ボーナス」で聞き、年額にする。円で入れてしまったら知らせる
 await wp.fill('#w-sal1-m', '300000'); await wp.press('#w-sal1-m', 'Tab');
@@ -1044,6 +1044,30 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
   await hp.waitForSelector('.cmpsay');
   await hp.locator('.cmpsay .btn', { hasText: 'わが家（家を買う）の中身' }).tap(); await hp.waitForTimeout(400);
   check('比較から家を買ったプランを開くと、住宅ローンの欄（3,800万円）が出る', (await hp.locator('#f-loan-price').isVisible()) && (await hp.inputValue('#f-loan-price')) === '3800', await hp.textContent('#planname'));
+  await c.close();
+}
+
+// かんたん入力：家族まで入れたら「残りは目安のままで、結果を見る」で終われる。車・退職金・NISAの目安が入る
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
+  const kp = await c.newPage();
+  kp.on('pageerror', (e) => errors.push(e.message));
+  await kp.goto(url);
+  await kp.waitForSelector('.cover');
+  await kp.locator('.cover .opt', { hasText: 'ふたり暮らし' }).tap();
+  await kp.locator('.cvcta .btn').tap();
+  await kp.waitForSelector('.wz');
+  const skip0 = await kp.locator('.wzskip').count();
+  await kp.fill('#w-birth1', '19900505'); await kp.locator('#w-birth1').blur(); await kp.waitForTimeout(120);
+  await kp.locator('.wznav .btn', { hasText: '次へ' }).tap(); await kp.waitForTimeout(150);
+  await kp.fill('#w-birth2', '19920707'); await kp.locator('#w-birth2').blur(); await kp.waitForTimeout(120);
+  await kp.locator('.wznav .btn', { hasText: '次へ' }).tap(); await kp.waitForTimeout(150);
+  await kp.locator('.wzskip .linkbtn').tap();
+  await kp.waitForSelector('#chart');
+  const st = await kp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return s.plans.find((p) => p.id === s.activeId).state; });
+  check('かんたん入力：家族を入れたあとは「残りは目安のままで、結果を見る」で結果が出る（最初のステップには無い）',
+    skip0 === 0 && st.lump[0].amount === 1500 && st.lump[0].year === 2050 && st.carCost[0].amount === 15 && st.carBuy.fromYear === 2029 && st.invest[2].add[0].amount === 60 && st.invest[2].add[0].toYear === 2050,
+    JSON.stringify([skip0, st.lump, st.carCost, st.carBuy, st.invest[2].add]));
   await c.close();
 }
 

@@ -333,7 +333,12 @@ test('表紙で選んだ家族のかたちの参考値から、確認箇所な�
       assert.equal(s.family.length, f.adults + f.kids);
       const r = E.compute(s);
       assert.equal(r.years.at(-1).age, 95);
-      assert.equal(r.years[0].expense.contributions[0], 36);   // 積立投資：NISAに年36万円
+      assert.equal(r.years[0].expense.contributions[0], 60);   // 積立投資：NISAに年60万円（月5万円）を60歳まで
+      const by = 1990;
+      assert.equal(s.invest[2].add[0].toYear, by + 60);
+      assert.deepEqual(s.lump.map((l) => [l.year, l.amount]), [[by + 60, 1500]]);   // 退職金：60歳で1,500万円
+      assert.equal(s.carCost[0].amount, 15);                                        // 車：維持費年15万円
+      assert.deepEqual([s.carBuy.fromYear, s.carBuy.every, s.carBuy.amount], [2029, 10, 300]);   // 3年後から10年ごとに300万円
       assert.equal(s.loanCalc, undefined);                      // 住宅購入は、家を買ったプランを別に作って試す（今の住まいのプランは変えない）
       s.family.filter((m) => m.relation.startsWith('子供')).forEach((c) => {
         const at = (i) => E.eduPlan(s, c).find((x) => x.index === i);
@@ -690,4 +695,14 @@ test('もしもの場合：いつものプランでも足りない分（baseNeed
   };
   assert.ok(minTotal(rk.baseNeed) >= -0.01);
   assert.ok(minTotal(rk.baseNeed - 2) < 0);
+});
+
+test('かんたん入力：車なし・積立0・退職金0にすると、その行は入らない（積立を試したい人には月3万円の例）', () => {
+  const S = require('../app/sample.js');
+  const d = S.templateAnswers('couple', 'rent', 2026);
+  d.birth1 = '1990/05/05'; d.birth2 = '1991/06/06';
+  Object.assign(d, { car: false, nisaMonthly: 0, retireLump: 0 });
+  const s = S.fromAnswers(d);
+  assert.deepEqual([s.carCost.length, s.carBuy.amount, s.invest[2].add.length, s.lump.length], [0, 0, 0, 0]);
+  assert.equal(S.applyNeeds(S.fromAnswers(d), ['invest']).invest[2].add[0].amount, 36);
 });
