@@ -187,10 +187,12 @@
       sal1: REF.sal1[fi], retire1: 65, growth: 1, sal2: f.adults > 1 ? REF.sal2[fi] : '', retire2: 65, retireLump: 0,
       pension: '', pensionAge: 65,     // 公的年金は給与から自動で見込む
       living: REF.living[fi], housing: REF[home][fi], insurance: REF.insurance[fi], inflation: 1,
-      home: home, _ref: {}
+      home: home, _ref: {},
+      // 家を買うなら（表紙で「家を買うか考えたい」を選んだときだけ聞く）
+      housePrice: 4000, houseDown: 0, houseYear: startYear + 2, houseYears: 35, houseRate1: 1, houseRate2: 2, houseCosts: '', houseUpkeep: 40
     };
     for (var k = 0; k < f.kids; k++) d.kids.push({ name: '', birth: '' });
-    ['deposit', 'sal1', 'sal2', 'pension', 'living', 'housing', 'insurance'].forEach(function (key) { if (d[key] !== '') d._ref[key] = true; });
+    ['deposit', 'sal1', 'sal2', 'pension', 'living', 'housing', 'insurance', 'housePrice'].forEach(function (key) { if (d[key] !== '') d._ref[key] = true; });
     return d;
   }
 

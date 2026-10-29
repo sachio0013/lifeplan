@@ -677,3 +677,33 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 .calcrow .u small { display: block; font-size: 11.5px; color: var(--text-faint); white-space: normal; }
 .cmpsay .h3 { margin: 0 0 4px; font-size: 14.5px; font-weight: 900; }
 .hint.inlead { padding: 10px 2px 2px; font-size: 13px; line-height: 1.7; }
+.loanamt { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; margin: 0 4px 0 6px; }
+
+/* 住宅購入チェック */
+.hcheck .h3 { margin: 0 0 4px; font-size: 14.5px; font-weight: 900; }
+.hcheck .h3 small { margin-left: 6px; font-size: 12.5px; font-weight: 700; color: var(--text-muted); }
+.hc { display: flex; gap: 10px; align-items: flex-start; padding: 12px 0; border-top: 1px dashed var(--line); }
+.hc:first-of-type { border-top: none; }
+.hc .ic { flex-shrink: 0; margin-top: 3px; }
+.hc.ok .ic { color: var(--sage); }
+.hc.mid .ic { color: #c98500; }
+.hc.ng .ic { color: var(--neg); }
+.hc .t { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 14px; font-weight: 700; }
+.hc .t b { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.hc.ng .t b { color: var(--neg); }
+.hc p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.75; color: var(--text); }
+.hcheck .row { margin-top: 6px; }
+
+/* 家計簿：プランの予定とくらべる */
+.pvhead { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 900; color: var(--accent-ink); margin-bottom: 8px; }
+.pvline { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; line-height: 1.7; }
+.pvline .ic { flex-shrink: 0; margin-top: 3px; }
+.pvline.ok .ic { color: var(--sage); }
+.pvline.ng .ic { color: #c98500; }
+.pvline b { display: block; font-size: 15px; font-weight: 900; }
+.pvbar { margin-top: 12px; }
+.pvk { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; font-size: 13px; color: var(--text-muted); font-weight: 700; }
+.pvk b { color: var(--text); font-size: 14px; }
+.pvtrack { position: relative; height: 12px; margin-top: 6px; border-radius: 999px; background: var(--fill-opt); overflow: visible; }
+.pvtrack span { display: block; height: 100%; border-radius: 999px; background: var(--sage); }
+.pvtrack i { position: absolute; top: -3px; width: 2px; height: 18px; background: var(--text-muted); border-radius: 1px; }

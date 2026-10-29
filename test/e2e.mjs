@@ -323,7 +323,7 @@ wp.on('pageerror', (e) => errors.push(e.message));
 await wp.goto(url);
 await wp.waitForSelector('.cover');
 await wp.locator('.opt', { hasText: '3人家族' }).tap();
-for (const n of ['家を買う', 'NISA', '節約']) { await wp.locator('.need', { hasText: n }).tap(); await wp.waitForTimeout(120); }
+for (const n of ['教育費', 'NISA', '節約']) { await wp.locator('.need', { hasText: n }).tap(); await wp.waitForTimeout(120); }
 const coverPicked = await wp.$$eval('.need.on, .opt.on', (els) => els.map((e) => e.textContent.trim()));
 const coverOverflow = await wp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 await wp.locator('.cvcta .btn').scrollIntoViewIfNeeded();
@@ -399,7 +399,7 @@ const wzHero = await wp.textContent('.hero');
 check('かんたん入力を終えると、そのプランのCF表が開く（2026〜1986+95年）', wzCols === 2081 - 2026 + 1 && /2081年/.test(wzHero) && wzOverflow <= 0, `${wzCols}列 ${wzHero.slice(0, 30)}`);
 const guideItems = await wp.$$eval('#cf .guide:not(.fix) .gi .gt', (els) => els.map((e) => e.textContent));
 await wp.screenshot({ path: join(shots, '10b-guide.png') });
-check('CF表の上に、選んだ気になることに合わせた「次の一歩」が出る', JSON.stringify(guideItems) === '["家を買った場合と比べる","積立投資の効果を見る","節約の効果を見る"]', guideItems.join(' / '));
+check('CF表の上に、選んだ気になることに合わせた「次の一歩」が出る', JSON.stringify(guideItems) === '["教育費を確かめる","積立投資の効果を見る","節約の効果を見る"]', guideItems.join(' / '));
 await wp.reload();
 await wp.waitForSelector('#seg-input');
 await go(wp, '#seg-input');
@@ -450,6 +450,7 @@ const lines = await wp.$$eval('#cmpchart path', (els) => els.length);
 const heads = await wp.$$eval('table.cmpt thead th', (els) => els.map((e) => e.textContent).filter(Boolean));
 const diffs = await wp.$$eval('table.cmpt .df.up, table.cmpt .df.down', (els) => els.length);
 const cmpOverflow = await wp.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+await wp.locator('#cmpchart').scrollIntoViewIfNeeded();
 const cbox = await wp.locator('#cmpchart').boundingBox();
 await wp.touchscreen.tap(cbox.x + cbox.width * 0.6, cbox.y + cbox.height * 0.5);
 await wp.waitForTimeout(100);
@@ -498,7 +499,7 @@ const pwned = await wp.evaluate(() => !!document.getElementById('pwn1') || !!doc
 const shownName = await wp.textContent('#planname');
 check('細工されたファイルでも要素が入り込まない', !pwned && shownName === '<img src=x id=pwn1>', `pwned=${pwned} name=${shownName}`);
 
-// 次の一歩：ボタン1つで「積立なし」「家を買う」のプランを作って比較画面で並べる
+// 次の一歩：ボタン1つで「積立なし」「1割節約」のプランを作って比較画面で並べる
 await go(wp, '#seg-cf');
 await wp.waitForSelector('#cf .guide');
 await wp.locator('#cf .guide .btn', { hasText: '積立なしと比べる' }).tap();
@@ -507,7 +508,7 @@ const g1 = await wp.$$eval('table.cmpt thead th', (els) => els.map((e) => e.text
 const g1End = await wp.$$eval('table.cmpt tbody tr:first-child td b', (els) => els.map((e) => e.textContent));
 await go(wp, '#seg-cf');
 await wp.waitForSelector('#cf .guide');
-await wp.locator('#cf .guide .btn', { hasText: '家を買ったプランと比べる' }).tap();
+await wp.locator('#cf .guide .btn', { hasText: '1割節約したプランと比べる' }).tap();
 await wp.waitForSelector('#cmpchart');
 const g2 = await wp.$$eval('table.cmpt thead th', (els) => els.map((e) => e.textContent).filter(Boolean));
 await wp.screenshot({ path: join(shots, '10c-guide-compare.png') });
@@ -515,7 +516,7 @@ await go(wp, '#seg-cf');
 const doneMarks = await wp.$$eval('#cf .guide .gi.done', (els) => els.length);
 check('次の一歩のボタンで、比べるプランができて比較画面に並ぶ',
   JSON.stringify(g1) === '["うちの家計","うちの家計（積立なし）"]' && g1End[0] !== g1End[1] &&
-  JSON.stringify(g2) === '["うちの家計","うちの家計（家を買う）"]' && doneMarks === 2,
+  JSON.stringify(g2) === '["うちの家計","うちの家計（1割節約）"]' && doneMarks === 2,
   `${g1} ${g1End} / ${g2} / 済み${doneMarks}`);
 await fresh.close();
 
@@ -621,6 +622,8 @@ await fresh.close();
   check('家計簿：はじめ方の案内から始め、月の金額を入れると収支が出る（全角・カンマも可）',
     /データは端末の外に送りません/.test(emptyText) && /＋248,000/.test(sumText) && foodShown === '52,000', `${sumText.slice(0, 40)} / 食費=${foodShown}`);
   await page.screenshot({ path: join(shots, '20-book-month.png') });
+  const pv = await page.textContent('.pvcard').catch(() => '');
+  check('家計簿：月の収支を、表示中のプランの予定（1か月あたり・今年の進み具合）とくらべる', /「記入例」の予定とくらべると/.test(pv) && /予定より[\d,]+円(多く|少なめ)/.test(pv) && /今年の予定/.test(pv), pv.replace(/\s+/g, ' ').slice(0, 100));
 
   // 口座残高を入れると、記録との差額が0なら「一致」
   // 前年末の残高を編集で入れる（100万円）→ 今月末の残高に、前年末＋今月の収支を入れる
@@ -995,32 +998,52 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
   await hp.waitForSelector('.wz');
   const births = { 0: ['#w-birth1'], 1: ['#w-birth2', '#w-kid-0', '#w-kid-1'] };
   const vals = { '#w-birth1': '19920610', '#w-birth2': '19940305', '#w-kid-0': '20210415', '#w-kid-1': '20240901' };
-  for (let st = 0; st < 6; st++) {
+  for (let st = 0; st < 7; st++) {
     for (const id of births[st] || []) { await hp.fill(id, vals[id]); await hp.locator(id).blur(); await hp.waitForTimeout(120); }
+    if (st === 6) {
+      // 家を買うなら：値段・頭金・買う年。借りる額と月の返済がその場で出る
+      await hp.fill('#w-housePrice', '4500'); await hp.press('#w-housePrice', 'Tab'); await hp.waitForTimeout(120);
+      await hp.fill('#w-houseDown', '500'); await hp.press('#w-houseDown', 'Tab'); await hp.waitForTimeout(120);
+      const wzHouse = (await hp.textContent('.wz .wzsum')).replace(/\s+/g, '');
+      check('かんたん入力：家を買うかを選んだ人には「家を買うなら」を聞き、借りる額と月の返済を出す', /7 \/ 7/.test(await hp.textContent('.wzhead')) && /借りる額4,000万円/.test(wzHouse) && /返済は月11.3万円/.test(wzHouse), wzHouse);
+    }
     await hp.locator('.wznav .btn', { hasText: /次へ|この内容で計算する/ }).tap(); await hp.waitForTimeout(150);
   }
+  // 終わると、今の住まいのままと家を買った場合を並べた比較が開き、住宅購入チェックが出る
+  await hp.waitForSelector('.cmpsay');
+  const say = await hp.textContent('.cmpsay');
+  const hcItems = await hp.$$eval('.hcheck .hc .t', (els) => els.map((e) => e.textContent));
+  const st0 = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return s.plans.map((p) => ({ name: p.name, loan: p.state.loanCalc || null, lump: p.state.housingLump })); });
+  await hp.locator('.hcheck').scrollIntoViewIfNeeded();
+  await hp.screenshot({ path: join(shots, '28-house-check.png') });
+  check('かんたん入力を終えると、「今の住まいのまま」と「家を買った場合」の比較が開く（頭金と諸費用は買う年に）',
+    /「わが家（家を買う）」/.test(say) && (await hp.locator('.cmpsay .btn').count()) === 2 && st0.length === 2 && st0[0].loan === null &&
+    st0[1].loan.amount === 4000 && st0[1].loan.costs === 270 && st0[1].lump.some((r) => r.amount === 770 && r.year === 2028), JSON.stringify(st0.map((p) => [p.name, p.loan && p.loan.amount, p.lump])));
+  check('住宅購入チェック：返済の割合・返し終わるとき・返済中に貯金がいちばん少ない年・団信', hcItems.length === 4 && /返済の割合\d+%/.test(hcItems[0]) && /返し終わるとき2062年/.test(hcItems[1]) && /団信/.test(hcItems[3]), hcItems.join(' / '));
+  // 結果をひとことで・教育費は大学まで（今の住まいのプラン）
+  await go(hp, '#seg-cf');
   await hp.waitForSelector('#chart');
   const verdict = await hp.textContent('.verdict');
   check('未来の表のいちばん上に、結果がひとことで出る（だれが何歳のときか）', /このままだと|足りる見込み/.test(verdict) && /家族１が\d+歳/.test(verdict), verdict.trim().slice(0, 60));
   const eduStage = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); const p = s.plans.find((x) => x.id === s.activeId).state; return p.edu[10]; });
   check('かんたん入力の教育費は大学まで（大学院は「進学しない」）', eduStage[5] === '大学（私文）' && eduStage[6] === '進学しない', `${eduStage}`);
+  // 家の値段を変える：家を買ったプランのローン欄で、値段と頭金から借入額を出し、反映すると比較に戻れる
   await hp.locator('#cf .guide .btn', { hasText: '家の値段・ローンを変える' }).tap(); await hp.waitForTimeout(400);
-  const st1 = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return { names: s.plans.map((p) => p.name), active: s.plans.find((p) => p.id === s.activeId).name, baseLoan: s.plans[0].state.loanCalc || null }; });
-  const loanVisible = await hp.locator('#f-loan-amount').isVisible();
+  const st1 = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return { active: s.plans.find((p) => p.id === s.activeId).name, baseLoan: s.plans[0].state.loanCalc || null }; });
   check('「家の値段・ローンを変える」で、家を買ったプランの住宅ローンの欄が開く（今の住まいのプランにはローンを入れない）',
-    st1.active === 'わが家（家を買う）' && st1.baseLoan === null && loanVisible && (await hp.inputValue('#f-loan-amount')) === '4000', JSON.stringify(st1));
-  await hp.fill('#f-loan-amount', '3000'); await hp.press('#f-loan-amount', 'Tab'); await hp.waitForTimeout(150);
+    st1.active === 'わが家（家を買う）' && st1.baseLoan === null && (await hp.locator('#f-loan-price').isVisible()) && (await hp.inputValue('#f-loan-price')) === '4500', JSON.stringify(st1));
+  await hp.fill('#f-loan-price', '3800'); await hp.press('#f-loan-price', 'Tab'); await hp.waitForTimeout(150);
+  const amt = await hp.textContent('#f-loan-amount-v');
   await hp.locator('#loanbox .btn', { hasText: '住宅費に反映する' }).tap(); await hp.waitForTimeout(150);
-  const placed = await hp.locator('.plconfirm .btn', { hasText: '置き換える' }).count();
-  if (placed) { await hp.locator('.plconfirm .btn', { hasText: '置き換える' }).tap(); await hp.waitForTimeout(150); }
+  if (await hp.locator('.plconfirm .btn', { hasText: '置き換える' }).count()) { await hp.locator('.plconfirm .btn', { hasText: '置き換える' }).tap(); await hp.waitForTimeout(150); }
   const toastMsg = await hp.textContent('#toast');
+  const lump = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return s.plans.find((p) => p.id === s.activeId).state.housingLump; });
+  check('ローン欄：家の値段−頭金で借入額を出し、反映すると頭金・諸費用の一時金は1行のまま置き換わり、比較へ案内する',
+    amt === '3,300' && lump.filter((r) => /頭金・諸費用/.test(r.memo)).length === 1 && /比較/.test(toastMsg), `${amt} / ${JSON.stringify(lump)}`);
   await go(hp, '#seg-cmp');
   await hp.waitForSelector('.cmpsay');
-  const say = await hp.textContent('.cmpsay');
-  check('比較のいちばん上に「くらべると」が文で出て、それぞれのプランを開くボタンがある（反映したら比較へ案内）',
-    /「わが家（家を買う）」/.test(say) && /万円/.test(say) && (await hp.locator('.cmpsay .btn').count()) === 2 && /比較/.test(toastMsg), say.replace(/\s+/g, ' ').slice(0, 120));
   await hp.locator('.cmpsay .btn', { hasText: 'わが家（家を買う）の中身' }).tap(); await hp.waitForTimeout(400);
-  check('比較から家を買ったプランを開くと、住宅ローンの欄（3,000万円）が出る', (await hp.locator('#f-loan-amount').isVisible()) && (await hp.inputValue('#f-loan-amount')) === '3000', await hp.textContent('#planname'));
+  check('比較から家を買ったプランを開くと、住宅ローンの欄（3,800万円）が出る', (await hp.locator('#f-loan-price').isVisible()) && (await hp.inputValue('#f-loan-price')) === '3800', await hp.textContent('#planname'));
   await c.close();
 }
 

@@ -1758,6 +1758,7 @@
     if (!open) return '<div class="divide">' + head + '</div>';
     var lc = loanData(), by = baseBirth();
     var sch = E.loanSchedule(lc);
+    var priced = toNum(lc.price) > 0;
     var bg = ';background:var(--surface)';
     var nPh = lc.phases.length;
     var usedBeforeLast = lc.phases.slice(0, -1).reduce(function (s, p) { return s + toNum(p.years); }, 0);
@@ -1804,12 +1805,24 @@
       : '';
     return '<div class="divide" id="loanbox">' + head +
       '<div class="calcbox">' +
-        '<div class="calcrow"><span class="u" style="width:58px">借入開始<small>家を買う年</small></span>' +
+        '<div class="calcrow"><span class="u" style="width:72px">借入開始<small>家を買う年</small></span>' +
           numInput('f-loan-start', 'op', 76, yv(lc.start, by), "A.loan('start'," + yin(by) + ')', bg) + '<span class="u">' + suf('from') + '</span></div>' +
-        '<div class="calcrow"><span class="u" style="width:58px">借入額</span>' +
-          numInput('f-loan-amount', 'op', 84, lc.amount, "A.loan('amount',this.value)", bg) + '<span class="u">万円</span>' +
-          numInput('f-loan-years', 'op', 52, lc.years, "A.loan('years',this.value)", ';margin-left:auto' + bg) + '<span class="u">年返済</span></div>' +
-        '<div class="hint" style="padding:0 0 4px">借入額は、家の値段から頭金を引いた、借りる金額です</div>' +
+        '<div class="calcrow"><span class="u" style="width:72px">家の値段</span>' +
+          numInput('f-loan-price', 'op', 84, lc.price === undefined ? '' : lc.price, "A.loan('price',this.value)", bg) + '<span class="u">万円</span></div>' +
+        '<div class="calcrow"><span class="u" style="width:72px">頭金</span>' +
+          numInput('f-loan-down', 'op', 84, lc.down === undefined ? '' : lc.down, "A.loan('down',this.value)", bg) + '<span class="u">万円</span></div>' +
+        '<div class="calcrow"><span class="u" style="width:72px">諸費用</span>' +
+          numInput('f-loan-costs', 'op', 84, lc.costs === undefined ? '' : lc.costs, "A.loan('costs',this.value)", bg) + '<span class="u">万円</span></div>' +
+        (priced
+          ? '<div class="calcrow"><span class="u" style="width:72px">借入額</span><b class="loanamt" id="f-loan-amount-v">' + man(toNum(lc.amount)) + '</b><span class="u">万円<small>家の値段 − 頭金</small></span></div>'
+          : '<div class="calcrow"><span class="u" style="width:72px">借入額</span>' +
+            numInput('f-loan-amount', 'op', 84, lc.amount, "A.loan('amount',this.value)", bg) + '<span class="u">万円</span></div>') +
+        '<div class="calcrow"><span class="u" style="width:72px">返す年数</span>' +
+          numInput('f-loan-years', 'op', 64, lc.years, "A.loan('years',this.value)", bg) + '<span class="u">年</span></div>' +
+        '<div class="hint" style="padding:0 0 4px">' + (priced
+          ? '借りる額は、家の値段から頭金を引いて計算します。'
+          : '家の値段を入れると、頭金を引いた借入額を自動で出します（借入額を直接入れてもかまいません）。') +
+          '諸費用は、登記・仲介手数料・ローンの手数料など（家の値段の5〜10%が目安' + (toNum(lc.price) > 0 ? '：' + man(lc.price * 0.05) + '〜' + man(lc.price * 0.1) + '万円' : '') + '）。頭金と諸費用は、買う年に貯金から払う計算です。</div>' +
         phases +
         (over ? '<div class="vmsg error">' + ic('warn', 15) + '<span>金利の期間の合計が返済期間を超えています</span></div>' : '') +
         (nPh < 3 ? '<button class="btn ghost" style="margin-top:9px;background:var(--surface)" onclick="A.loanPhAdd()">＋ 金利が変わる時期を追加</button>' : '') +
@@ -1817,7 +1830,7 @@
           numInput('f-loan-upkeep', 'op', 64, lc.upkeep, "A.loan('upkeep',this.value)", ';margin-left:auto' + bg) + '<span class="u">万円</span></div>' +
         res +
         (sch.yearly.length && toNum(lc.amount) > 0 ? '<button class="toggle" onclick="A.loanTableToggle()"><span class="lbl">年ごとの返済表</span><span class="chev">' + chevron(ui.loanTable) + '</span></button>' + table : '') +
-        '<div class="hint" style="padding:8px 0 0">元利均等返済で計算します。金利が変わったあとは、その時点の残高を残りの期間で返す額になります。頭金は「住宅費一時金」に入れます。' +
+        '<div class="hint" style="padding:8px 0 0">元利均等返済で計算します。金利が変わったあとは、その時点の残高を残りの期間で返す額になります。反映すると、頭金と諸費用は「住宅費一時金」に入ります。' +
           '<a href="https://www.excelcf.net/hayamihyo/" target="_blank" rel="noopener">返済額早見表</a>・' +
           '<a href="https://www.excelcf.net/hiritsu/" target="_blank" rel="noopener">安全な返済比率</a></div>' +
         (toNum(lc.amount) > 0 && sch.phases.length ? (confirm || '<div class="hint" style="padding:12px 0 6px;font-weight:700">数字を変えたら、このボタンを押すと計算（未来の表・比較）に入ります</div><button class="btn block" onclick="A.loanApply(false)">住宅費に反映する</button>') : '') +
@@ -1827,7 +1840,13 @@
 
   A.loanToggle = function () { ui.loanOpen = !ui.loanOpen; ui.loanConfirm = false; commit(); };
   A.loanTableToggle = function () { ui.loanTable = !ui.loanTable; commit(); };
-  A.loan = function (field, v) { loanData(true)[field] = String(v).trim() === '' ? '' : toNum(v); ui.loanConfirm = false; commit(); };
+  A.loan = function (field, v) {
+    var lc = loanData(true);
+    lc[field] = String(v).trim() === '' ? '' : toNum(v);
+    // 家の値段があれば、借入額＝家の値段−頭金
+    if ((field === 'price' || field === 'down') && toNum(lc.price) > 0) lc.amount = Math.max(0, r1(toNum(lc.price) - toNum(lc.down)));
+    ui.loanConfirm = false; commit();
+  };
   A.loanPh = function (k, field, v) {
     var ph = loanData(true).phases[k]; if (!ph) return;
     ph[field] = String(v).trim() === '' ? '' : toNum(v);
@@ -1883,7 +1902,12 @@
       if (r.dansin) { row.dansin = true; row.loan = r.loan; }
       return row;
     }));
+    // 頭金と諸費用は、買う年の住宅費一時金に（前に反映した行は置き換える）
+    var cash = r1(toNum(lc.down) + toNum(lc.costs));
+    state.housingLump = (state.housingLump || []).filter(function (r) { return r.memo !== LOAN_CASH; });
+    if (cash > 0 && start >= sy) state.housingLump.push({ id: nid(), year: Math.max(start, sy), amount: cash, memo: LOAN_CASH });
   }
+  var LOAN_CASH = '頭金・諸費用（住宅購入）';
 
   // ---------- 「？」で開くFPのひとこと ----------
 
@@ -2057,7 +2081,7 @@
   // store.guide = { planId, needs, done: [], hidden }。比べるためのプランは、guide.planId のプランを複製して作る。
 
   var GUIDE = {
-    house: { t: '家を買った場合と比べる', p: '2年後に4,000万円の家を35年ローンで買うプランを作って、今の住まいのままと並べてみましょう。家の値段や金利は、あとで変えられます。',
+    house: { t: '家を買った場合と比べる', p: '2年後に4,000万円の家を35年ローンで買うプラン（頭金0円・諸費用240万円）を作って、今の住まいのままと並べてみましょう。家の値段や金利は、あとで変えられます。',
       a: [['家を買ったプランと比べる', 'house'], ['家の値段・ローンを変える', 'loan']] },
     edu: { t: '教育費を確かめる', p: '子供の生年月日から、在学年と金額が自動で入っています。公立・私立など進路を選ぶと金額が変わります。教育費が重なる時期の貯金の減り方も、未来の表で見てみましょう。',
       a: [['教育費を見る', 'edu']] },
@@ -2106,10 +2130,11 @@
     return { base: base, copy: p };
   }
   // 家を買ったプラン（2年後に4,000万円・35年ローン）。今の住まいのプランを複製して作り、guide.house に覚えておく
-  function houseCopy() {
+  function houseCopy(lc) {
     var pair = guideCopy('家を買う', function (st) {
       var keep = state; state = st;
-      if (!st.loanCalc) st.loanCalc = { start: st.startYear + 2, amount: 4000, years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: '' }], upkeep: 40 };
+      if (lc) st.loanCalc = lc;
+      if (!st.loanCalc) st.loanCalc = { start: st.startYear + 2, price: 4000, down: 0, costs: 240, amount: 4000, years: 35, phases: [{ rate: 1, years: 10 }, { rate: 2, years: '' }], upkeep: 40 };
       applyLoan(st.loanCalc);
       state = keep;
     });
@@ -2484,6 +2509,37 @@
       '<text x="35" y="39" text-anchor="middle">' + p + '%</text></svg>';
   }
 
+  // プランの予定（表示中のプランのその年の年間収支）と、家計簿の実績をくらべる。
+  // ボーナスの月は多くなるので、月の比較は目安。今年の記録した月の合計で進み具合を見る。
+  function planVsHTML(s, i) {
+    var m = s.months[i];
+    if (!m.recorded) return '';
+    var py = result.years.filter(function (y) { return y.year === ui.book.year; })[0];
+    if (!py) return '';
+    var yen1 = function (v) { return Math.round(v); };
+    var planYear = py.balance * 10000, planMonth = planYear / 12;
+    var done = s.months.filter(function (x, k) { return k <= i && x.recorded; });
+    var actual = done.reduce(function (a, x) { return a + x.balance; }, 0);
+    var planSoFar = planMonth * done.length;
+    var gap = m.balance - planMonth, gapAll = actual - planSoFar;
+    var good = gap >= 0, goodAll = gapAll >= 0;
+    var nm = '「' + esc(plan().name) + '」';
+    var head = '<div class="pvhead">' + ic('chart', 18) + '<span>' + nm + 'の予定とくらべると</span></div>';
+    var month = '<div class="pvline ' + (good ? 'ok' : 'ng') + '">' + ic(good ? 'check' : 'warn', 16) + '<span>' +
+      (good ? '<b>' + MONTHS[i] + 'は予定より' + yen(yen1(gap)) + '円多く貯められました！</b>' : '<b>' + MONTHS[i] + 'は予定より' + yen(yen1(-gap)) + '円少なめでした。</b>') +
+      '予定は1か月あたり' + (planMonth >= 0 ? '＋' : '') + yen(yen1(planMonth)) + '円（ボーナスの月は多めに、ふだんの月は少なめになります）。</span></div>';
+    var bar = '';
+    if (planYear > 0) {
+      var pct = Math.max(0, Math.min(100, Math.round(actual / planYear * 100)));
+      bar = '<div class="pvbar"><div class="pvk"><span>今年の予定 ' + yen(yen1(planYear)) + '円のうち</span><b>' + (actual >= 0 ? '' : '−') + yen(Math.abs(yen1(actual))) + '円（' + pct + '%）</b></div>' +
+        '<div class="pvtrack" role="img" aria-label="今年の予定に対する進み具合 ' + pct + '％"><span style="width:' + pct + '%"></span><i style="left:' + Math.min(100, done.length / 12 * 100).toFixed(1) + '%"></i></div>' +
+        '<div class="hint" style="padding:4px 0 0">' + done.length + 'か月分の記録で、予定の' + (goodAll ? '<b>ペースより' + yen(yen1(gapAll)) + '円多い</b>' : 'ペースより' + yen(yen1(-gapAll)) + '円少ない') + 'です（縦の線は、今月までに貯まっている予定の位置）。</div></div>';
+    } else {
+      bar = '<div class="hint" style="padding:6px 0 0">' + nm + 'では、今年は' + yen(yen1(-planYear)) + '円の赤字の予定です。記録した' + done.length + 'か月の収支は合計' + (actual >= 0 ? '＋' : '−') + yen(Math.abs(yen1(actual))) + '円です。</div>';
+    }
+    return '<div class="card pvcard">' + head + month + bar + '</div>';
+  }
+
   function bookMonthHTML(y) {
     var i = ui.book.month, s = BK.summarize(y), m = s.months[i];
     var edit = ui.book.edit;
@@ -2552,7 +2608,7 @@
     '</div>';
 
     return (y.sample ? '<div class="vbanner notice sample">' + ic('book', 18) + '<span>これは記入例（Excelのサンプル）です。自分の家計簿にするときは消してから始めます。</span><button class="btn" onclick="A.bkClear()">記入例を消す</button></div>' : '') +
-      summary + review + copy +
+      summary + planVsHTML(s, i) + review + copy +
       '<div class="bkedit"><button class="btn ghost" aria-pressed="' + edit + '" onclick="A.bkEdit()">' + ic(edit ? 'check' : 'tune', 18) + (edit ? '項目の編集を終える' : '項目・口座を編集する') + '</button></div>' +
       groups + incomes + accounts;
   }
@@ -3279,6 +3335,16 @@
   // ---------- かんたん入力（必須の項目だけを順に聞く） ----------
 
   var WZ_STEPS = ['家計の中心の人', 'いっしょに暮らす家族', '前年末の貯金', '収入', '年金', '毎月の支出'];
+  // 表紙で「家を買うか考えたい」を選んだ人には、家の質問を足す（終わったら、今の住まいのままと並べて見せる）
+  function wzHouse() { return !!(ui.wz && ui.wz.needs.indexOf('house') >= 0); }
+  function wzSteps() { return WZ_STEPS.concat(wzHouse() ? ['家を買うなら'] : []); }
+  // かんたん入力の家の答え → 住宅ローンの試算（諸費用は空なら家の値段の6%）
+  function wzLoan(d) {
+    var price = toNum(d.housePrice), down = toNum(d.houseDown);
+    var costs = String(d.houseCosts === undefined ? '' : d.houseCosts).trim() === '' ? Math.round(price * 0.06) : toNum(d.houseCosts);
+    return { start: toNum(d.houseYear), price: price, down: down, costs: costs, amount: Math.max(0, price - down), years: toNum(d.houseYears) || 35,
+      phases: [{ rate: toNum(d.houseRate1), years: 10 }, { rate: toNum(d.houseRate2), years: '' }], upkeep: toNum(d.houseUpkeep) };
+  }
 
   function wzDraft() {
     return {
@@ -3315,6 +3381,13 @@
     if (step === 3) {
       need('sal1', '手取り');
       ['sal1', 'sal2'].forEach(function (k) { if (wzMonthOf(k) >= 300 || wzBonusOf(k) >= 3000) e[k] = MAN; });
+    }
+    if (step === 6) {
+      if (!(toNum(d.housePrice) > 0)) e.housePrice = '家の値段を入れてください';
+      huge('housePrice', 100000, '金額は「万円」で入れます（4,000万円なら「4000」）'); huge('houseDown', 100000, '金額は「万円」で入れます（400万円なら「400」）');
+      if (!e.houseDown && toNum(d.houseDown) > toNum(d.housePrice)) e.houseDown = '頭金が家の値段より多くなっています';
+      var hy = toNum(d.houseYear);
+      if (!(hy >= toNum(d.startYear) && hy <= toNum(d.startYear) + 50)) e.houseYear = toNum(d.startYear) + '年から' + (toNum(d.startYear) + 50) + '年の間で入れてください';
     }
     if (step === 5) {
       need('living', '生活費'); need('housing', '住まいの費用');
@@ -3438,6 +3511,21 @@
           wzField('pension', '公的年金（年額・家族の合計）', '万円', { optional: true, hint: '空欄なら、上の自動の計算を使います。ねんきん定期便の見込額（年額）を足して、その9割ほどが手取りの目安です' }) +
           (String(d.pension).trim() !== '' ? wzField('pensionAge', '受け取りを始める年齢（' + n1 + '）', '歳から', { width: 80 }) : ''),
           String(d.pension).trim() !== '');
+    } else if (s === 6) {
+      var lc = wzLoan(d), cash = lc.down + lc.costs, sch = E.loanSchedule(lc);
+      lead = '買うとしたら、の数字です。だいたいでOK。終わったら「今の住まいのまま」と「家を買った場合」を並べて見せます。';
+      body = wzField('housePrice', '家の値段', '万円', { width: 110 }) +
+        wzField('houseDown', '頭金', '万円', { optional: true, hint: '貯金から出す分。0でもOK' }) +
+        wzField('houseYear', '買う年', '年', { width: 96, hint: '例：2年後なら' + (toNum(d.startYear) + 2) }) +
+        (lc.amount > 0 && sch.phases.length ? '<div class="wzsum">借りる額 <b>' + man(lc.amount) + '</b> 万円 ・ 返済は月 <b>' + f1(sch.phases[0].monthly) + '</b> 万円（はじめの10年）</div>' : '') +
+        (cash > toNum(d.deposit) ? '<div class="vmsg warn">' + ic('warn', 15) + '<span>頭金と諸費用（約' + man(cash) + '万円）が、前年末の貯金（' + man(toNum(d.deposit)) + '万円）より多くなっています。買う年までに貯める計算になります。</span></div>' : '') +
+        wzFold('くわしい設定（ふつうはそのままでOK）',
+          wzField('houseYears', 'ローンの年数', '年', { width: 80 }) +
+          wzField('houseRate1', 'はじめの10年の金利', '％', { width: 80 }) +
+          wzField('houseRate2', '11年目からの金利', '％', { width: 80, hint: '金利が上がることも見込んでおくと安心です' }) +
+          wzField('houseCosts', '諸費用（登記・仲介手数料など）', '万円', { optional: true, hint: '空欄なら家の値段の6%（' + man(toNum(d.housePrice) * 0.06) + '万円）。目安は5〜10%' }) +
+          wzField('houseUpkeep', '修繕・管理費、固定資産税（年）', '万円', { width: 80 }),
+          false);
     } else {
       var hl = d.home === 'rent' ? ['家賃', '管理費・駐車場代も入れます'] : d.home === 'loan' ? ['住宅ローンの返済など', 'ローン返済に、管理費・修繕積立金・固定資産税（月にならした額）を足します'] :
         d.home === 'owned' ? ['家の維持費', '管理費・修繕積立金・固定資産税など（月にならした額）'] : d.home === 'parents' ? ['住まいの費用', '実家に入れているお金・社宅の家賃など'] : ['住まいの費用', '家賃やローン返済、管理費・固定資産税など'];
@@ -3448,16 +3536,16 @@
         wzFold('くわしい設定（ふつうはそのままでOK）',
           wzField('inflation', '物価が1年で上がる割合', '％', { width: 80, hint: 'わからなければ1％のままでOK' }));
     }
-    var last = s === WZ_STEPS.length - 1;
+    var steps = wzSteps(), last = s === steps.length - 1;
     return '<div class="wz">' +
       '<div class="wzhead">' +
         '<button class="del" style="margin:0" aria-label="かんたん入力を閉じる" onclick="A.wizClose(false)">' + ic('close', 22) + '</button>' +
-        '<div class="dots" aria-hidden="true">' + WZ_STEPS.map(function (x, i) { return '<i class="' + (i < s ? 'done' : i === s ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
-        '<span class="u">' + (s + 1) + ' / ' + WZ_STEPS.length + '</span>' +
+        '<div class="dots" aria-hidden="true">' + steps.map(function (x, i) { return '<i class="' + (i < s ? 'done' : i === s ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
+        '<span class="u">' + (s + 1) + ' / ' + steps.length + '</span>' +
       '</div>' +
       (w.closeAsk ? '<div class="plconfirm" style="margin-top:10px"><span>ここまでの答えは保存されません。閉じますか？</span>' +
         '<button class="btn danger" onclick="A.wizClose(true)">閉じる</button><button class="btn ghost" onclick="A.wizStay()">続ける</button></div>' : '') +
-      '<h2 class="wzt">' + WZ_STEPS[s] + '</h2>' +
+      '<h2 class="wzt">' + steps[s] + '</h2>' +
       '<p class="wzlead">' + lead + '</p>' +
       '<div class="card">' + body + '</div>' +
       '<div class="wznav">' +
@@ -3517,7 +3605,7 @@
     var w = ui.wz;
     w.err = wzErrors(w.step, w.d);
     if (Object.keys(w.err).length) { commit(); return; }
-    if (w.step < WZ_STEPS.length - 1) { w.step++; commit(); document.getElementById('scroll').scrollTop = 0; return; }
+    if (w.step < wzSteps().length - 1) { w.step++; commit(); document.getElementById('scroll').scrollTop = 0; return; }
     // 完成：新しいプランとして加え、そのプランのCF表を開く
     var st = window.LifePlanSample.applyNeeds(window.LifePlanSample.fromAnswers(w.d), w.needs);
     // 最初から入っている記入例は、書き換えていなければ外す（自分のプランと見知らぬ家族を比べないように。表紙からいつでも開ける）
@@ -3526,6 +3614,16 @@
     var p = { id: store.nextPlanId++, name: uniqueName(w.d._ref ? 'わが家' : 'プラン' + (store.plans.length + 1)), state: st };
     store.plans.push(p);
     if (w.needs.length) store.guide = { planId: p.id, needs: w.needs.slice(), done: [], hidden: false };
+    // 家の質問に答えたら、家を買ったプランも作って、比較で並べて見せる
+    if (wzHouse() && toNum(w.d.housePrice) > 0) {
+      var pair = houseCopy(wzLoan(w.d));
+      store.guide.done.push('house');
+      store.prefs.welcomed = true;
+      ui.wz = null; ui.active = 'basic'; ui.inputScroll = 0; ui.openMember = 0; ui.openCalc = 0;
+      quiet = true;
+      compareNow(pair);
+      return;
+    }
     store.prefs.welcomed = true;
     store.activeId = p.id;
     state = p.state;
@@ -3608,7 +3706,7 @@
   // 比較から、そのプランの入力へ（家を買ったプランなら住宅ローンの欄へ）
   A.cmpEdit = function (id) {
     switchTo(id);
-    if (store.guide && store.guide.house === id) { ui.loanOpen = true; jumpTo('loanbox'); commit(); return; }
+    if ((store.guide && store.guide.house === id) || houseLoanOf(state)) { ui.loanOpen = true; jumpTo('loanbox'); commit(); return; }
     ui.view = 'input'; commit();
     document.getElementById('scroll').scrollTop = 0;
   };
@@ -3871,6 +3969,85 @@
     return { r: r, end: r.endTotal, endAge: r.endAge, endYear: r.years.length ? r.years[r.years.length - 1].year : null, shortfall: r.shortfall, minDep: r.years.length ? minDep : 0, inc: inc, exp: exp };
   }
 
+  // ---------- 住宅購入チェック（比較で、住宅ローンを反映したプランについて） ----------
+  //
+  // 返済の割合（手取りに対して）、完済の年齢、買ったあとに貯金がいちばん少なくなる年（教育費との重なり）、
+  // 団信で万一のときの必要保障額がどれだけ減るか。計算が重いので、プランの中身ごとに覚えておく。
+  var hcMemo = {};
+  function houseLoanOf(st) {
+    var lc = st.loanCalc;
+    if (!lc || !(toNum(lc.amount) > 0)) return null;
+    // 試算を住宅費の行に反映してあるプランだけ（行の備考が「住宅ローン」で始まる）
+    return st.housing.some(function (r) { return /^住宅ローン/.test(r.memo || ''); }) ? lc : null;
+  }
+  function houseCheck(p) {
+    var st = p.state, lc = houseLoanOf(st);
+    if (!lc) return null;
+    var key = JSON.stringify(st);
+    if (hcMemo[p.id] && hcMemo[p.id].key === key) return hcMemo[p.id].v;
+    var r = E.compute(st), sch = E.loanSchedule(lc), start = toNum(lc.start);
+    var at = function (yr) { return r.years.filter(function (y) { return y.year === yr; })[0]; };
+    var take = function (y) { return y ? y.income.salaries.reduce(function (a, b) { return a + b; }, 0) : 0; };
+    var v = { lc: lc, sch: sch, start: start, phases: [] };
+    sch.phases.slice(0, 2).forEach(function (ph) {
+      var y = at(start + ph.from), inc = take(y);
+      if (inc > 0) v.phases.push({ year: start + ph.from, rate: ph.rate, annual: ph.annual, monthly: ph.monthly, inc: inc, ratio: ph.annual / inc * 100 });
+    });
+    var by = E.baseBirthYear(st), endYear = start + sch.years - 1;
+    var s1 = st.salaries.filter(function (x) { return x.memberId === (st.family[0] || {}).id; })[0];
+    v.payoff = { year: endYear, age: endYear - by, retire: s1 ? toNum(s1.retireAge) : 0 };
+    // 買ってから、返し終わるか働き終えるまで（老後の取り崩しは「未来の表」で見る）
+    var until = Math.min(endYear, v.payoff.retire ? by + v.payoff.retire : endYear);
+    var after = r.years.filter(function (y) { return y.year >= start && y.year <= until; });
+    if (after.length) {
+      var low = after.reduce(function (a, y) { return y.assets.deposit < a.assets.deposit ? y : a; }, after[0]);
+      v.low = { year: low.year, age: low.age, deposit: low.assets.deposit, edu: low.expense.education, living: low.expense.living };
+    }
+    // 団信：買った年に家族１が亡くなったとき、団信の印がある場合とない場合の必要保障額
+    var dead = st.family[0], spouse = st.family.filter(function (m) { return m.relation === '家族２'; })[0];
+    if (dead && (spouse || E.children(st).length) && st.housing.some(function (x) { return x.dansin; })) {
+      var noD = JSON.parse(JSON.stringify(st));
+      noD.housing.forEach(function (x) { delete x.dansin; });
+      var withD = E.riskShortfall(st, { memberId: dead.id, year: Math.max(start, st.startYear) }).need;
+      var without = E.riskShortfall(noD, { memberId: dead.id, year: Math.max(start, st.startYear) }).need;
+      v.dansin = { year: Math.max(start, st.startYear), with: withD, without: without };
+    }
+    hcMemo[p.id] = { key: key, v: v };
+    return v;
+  }
+  function houseCheckHTML(p) {
+    var v = houseCheck(p);
+    if (!v) return '';
+    var who = esc((p.state.family[0] && (p.state.family[0].name || p.state.family[0].relation)) || '家族１');
+    var item = function (lv, t, val, txt) {
+      return '<div class="hc ' + lv + '">' + ic(lv === 'ok' ? 'check' : 'warn', 17) + '<div><div class="t">' + t + (val ? '<b>' + val + '</b>' : '') + '</div><p>' + txt + '</p></div></div>';
+    };
+    var h = '';
+    if (v.phases.length) {
+      var f = v.phases[0], worst = v.phases.reduce(function (a, x) { return x.ratio > a.ratio ? x : a; }, f);
+      var lv = worst.ratio <= 20 ? 'ok' : worst.ratio <= 25 ? 'mid' : 'ng';
+      h += item(lv, '手取りに対する返済の割合', Math.round(f.ratio) + '%',
+        '返済は年' + f1(f.annual) + '万円（月' + f1(f.monthly) + '万円）で、' + f.year + '年の手取り' + man(f.inc) + '万円の' + Math.round(f.ratio) + '%です。' +
+        (v.phases[1] ? '金利が' + v.phases[1].rate + '%に上がる' + v.phases[1].year + '年からは' + Math.round(v.phases[1].ratio) + '%。' : '') +
+        '手取りの20%までなら安心、25%を超えると家計が苦しくなりやすい目安です。<a href="https://www.excelcf.net/hiritsu/" target="_blank" rel="noopener">安全な返済比率</a>');
+    }
+    var po = v.payoff;
+    h += item(po.retire && po.age > po.retire ? 'mid' : 'ok', '返し終わるとき', po.year + '年（' + who + ' ' + po.age + '歳）',
+      po.retire && po.age > po.retire ? '働き終える' + po.retire + '歳のあとも、' + (po.age - po.retire) + '年返済が続きます。退職金で繰り上げて返すか、年金から払えるかを未来の表で確かめましょう。' : '働いているうちに返し終わる計画です。');
+    if (v.low) {
+      var lw = v.low, half = lw.living / 2;
+      h += item(lw.deposit < 0 ? 'ng' : lw.deposit < half ? 'mid' : 'ok', '返済中（働いている間）に貯金がいちばん少ない年', lw.year + '年（' + who + ' ' + lw.age + '歳）',
+        '貯金（普通預金等）は約' + man(lw.deposit) + '万円です。' + (lw.edu > 0 ? 'この年は教育費が' + man(lw.edu) + '万円かかり、ローンと重なります。' : '') +
+        (lw.deposit < 0 ? 'お金が足りなくなります。家の値段・頭金・買う年を見直しましょう。' : lw.deposit < half ? '生活費の半年分（約' + man(half) + '万円）より少なく、急な出費に弱い時期です。' : '生活費の半年分より多く残る見込みです。'));
+    }
+    if (v.dansin && v.dansin.without > v.dansin.with) {
+      h += item('ok', '団信（団体信用生命保険）の安心', '約' + man(v.dansin.without - v.dansin.with) + '万円',
+        v.dansin.year + '年に' + who + 'に万一のことがあったとき、団信でローンがなくなるので、必要保障額が' + man(v.dansin.without) + '万円から' + man(v.dansin.with) + '万円に減ります。その分、生命保険を減らせることがあります（くわしくは「保障」で）。');
+    }
+    return '<div class="card hcheck"><h2 class="h3">住宅購入チェック<small>「' + esc(p.name) + '」</small></h2>' + h +
+      '<div class="row"><button class="btn ghost" onclick="A.cmpEdit(' + p.id + ')">家の値段・ローンを変える</button></div></div>';
+  }
+
   var cmpGeom = null;
   function cmpChartSVG(width, series) {
     var W = Math.max(280, width), H = 220, L = 54, R = 10, T = 10, B = 24;
@@ -4001,7 +4178,7 @@
       t += !sa && !sx ? 'どちらも、お金は最後まで足りる見込みです。'
         : !sa ? nm(x) + 'は、' + p1 + 'が' + sx.age + '歳の' + sx.year + '年に、お金が足りなくなります。'
         : !sx ? nm(x) + 'なら、お金は最後まで足りる見込みです。'
-        : 'お金が足りなくなるのは、' + nm(a) + 'が' + p1 + 'の' + sa.age + '歳、' + nm(x) + 'が' + sx.age + '歳です。';
+        : 'お金が足りなくなるのは、' + nm(a) + 'が' + sa.age + '歳、' + nm(x) + 'が' + sx.age + '歳のときです（' + p1 + 'の年齢）。';
       return '<p>' + t + '</p>';
     }).join('');
     var edits = series.map(function (x) {
@@ -4010,6 +4187,7 @@
     return '<div class="hero"><div class="k">プランの比較</div><div class="note">比べるプランを3つまで選べます（下のボタンを押して選ぶ）</div></div>' +
       '<div class="chips">' + chips + '</div>' +
       '<div class="card cmpsay"><h2 class="h3">くらべると</h2>' + says + '<div class="row">' + edits + '</div></div>' +
+      series.map(function (x) { return houseCheckHTML(byId(store.plans, x.id)); }).join('') +
       '<div class="card chartcard"><h2 class="h3">お金の増え方・減り方</h2>' +
         '<div class="keys">' + series.map(function (s) { return '<span><i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>'; }).join('') + '</div>' +
         cmpChartSVG(width, series) + '<div class="tip" id="cmptip" hidden></div>' +
