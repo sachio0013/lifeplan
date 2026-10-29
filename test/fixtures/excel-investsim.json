@@ -1,0 +1,369 @@
+{
+"input": {
+"start": 100,
+"until": 65,
+"age": 35,
+"rate": 5,
+"contrib": 36,
+"cost": 0.2
+},
+"rows": [
+{
+"age": 35,
+"contrib": 36,
+"cumulative": 136,
+"value": 142.528,
+"ret": 0.048
+},
+{
+"age": 36,
+"contrib": 36,
+"cumulative": 172,
+"value": 185.369344,
+"ret": 0.07772874
+},
+{
+"age": 37,
+"contrib": 36,
+"cumulative": 208,
+"value": 230.267073,
+"ret": 0.10705323
+},
+{
+"age": 38,
+"contrib": 36,
+"cumulative": 244,
+"value": 277.319892,
+"ret": 0.13655693
+},
+{
+"age": 39,
+"contrib": 36,
+"cumulative": 280,
+"value": 326.631247,
+"ret": 0.16654017
+},
+{
+"age": 40,
+"contrib": 36,
+"cumulative": 316,
+"value": 378.309547,
+"ret": 0.19718211
+},
+{
+"age": 41,
+"contrib": 36,
+"cumulative": 352,
+"value": 432.468405,
+"ret": 0.22860342
+},
+{
+"age": 42,
+"contrib": 36,
+"cumulative": 388,
+"value": 489.226888,
+"ret": 0.26089404
+},
+{
+"age": 43,
+"contrib": 36,
+"cumulative": 424,
+"value": 548.709779,
+"ret": 0.29412684
+},
+{
+"age": 44,
+"contrib": 36,
+"cumulative": 460,
+"value": 611.047848,
+"ret": 0.32836489
+},
+{
+"age": 45,
+"contrib": 36,
+"cumulative": 496,
+"value": 676.378145,
+"ret": 0.36366562
+},
+{
+"age": 46,
+"contrib": 36,
+"cumulative": 532,
+"value": 744.844296,
+"ret": 0.40008326
+},
+{
+"age": 47,
+"contrib": 36,
+"cumulative": 568,
+"value": 816.596822,
+"ret": 0.43767046
+},
+{
+"age": 48,
+"contrib": 36,
+"cumulative": 604,
+"value": 891.79347,
+"ret": 0.47647925
+},
+{
+"age": 49,
+"contrib": 36,
+"cumulative": 640,
+"value": 970.599556,
+"ret": 0.51656181
+},
+{
+"age": 50,
+"contrib": 36,
+"cumulative": 676,
+"value": 1053.188335,
+"ret": 0.55797091
+},
+{
+"age": 51,
+"contrib": 36,
+"cumulative": 712,
+"value": 1139.741375,
+"ret": 0.60076036
+},
+{
+"age": 52,
+"contrib": 36,
+"cumulative": 748,
+"value": 1230.448961,
+"ret": 0.64498524
+},
+{
+"age": 53,
+"contrib": 36,
+"cumulative": 784,
+"value": 1325.510511,
+"ret": 0.69070218
+},
+{
+"age": 54,
+"contrib": 36,
+"cumulative": 820,
+"value": 1425.135016,
+"ret": 0.73796953
+},
+{
+"age": 55,
+"contrib": 36,
+"cumulative": 856,
+"value": 1529.541496,
+"ret": 0.78684754
+},
+{
+"age": 56,
+"contrib": 36,
+"cumulative": 892,
+"value": 1638.959488,
+"ret": 0.83739853
+},
+{
+"age": 57,
+"contrib": 36,
+"cumulative": 928,
+"value": 1753.629544,
+"ret": 0.88968701
+},
+{
+"age": 58,
+"contrib": 36,
+"cumulative": 964,
+"value": 1873.803762,
+"ret": 0.94377984
+},
+{
+"age": 59,
+"contrib": 36,
+"cumulative": 1000,
+"value": 1999.746342,
+"ret": 0.99974634
+},
+{
+"age": 60,
+"contrib": 36,
+"cumulative": 1036,
+"value": 2131.734167,
+"ret": 1.05765846
+},
+{
+"age": 61,
+"contrib": 36,
+"cumulative": 1072,
+"value": 2270.057407,
+"ret": 1.11759086
+},
+{
+"age": 62,
+"contrib": 36,
+"cumulative": 1108,
+"value": 2415.020162,
+"ret": 1.17962109
+},
+{
+"age": 63,
+"contrib": 36,
+"cumulative": 1144,
+"value": 2566.94113,
+"ret": 1.24382966
+},
+{
+"age": 64,
+"contrib": 36,
+"cumulative": 1180,
+"value": 2726.154304,
+"ret": 1.31030026
+},
+{
+"age": 65,
+"contrib": 36,
+"cumulative": 1216,
+"value": 2893.009711,
+"ret": 1.37911983
+},
+{
+"age": 66,
+"contrib": 0,
+"cumulative": 1216,
+"value": 3031.874177,
+"ret": 1.49331758
+},
+{
+"age": 67,
+"contrib": 0,
+"cumulative": 1216,
+"value": 3177.404138,
+"ret": 1.61299682
+},
+{
+"age": 68,
+"contrib": 0,
+"cumulative": 1216,
+"value": 3329.919536,
+"ret": 1.73842067
+},
+{
+"age": 69,
+"contrib": 0,
+"cumulative": 1216,
+"value": 3489.755674,
+"ret": 1.86986486
+},
+{
+"age": 70,
+"contrib": 0,
+"cumulative": 1216,
+"value": 3657.263946,
+"ret": 2.00761838
+},
+{
+"age": 71,
+"contrib": 0,
+"cumulative": 1216,
+"value": 3832.812616,
+"ret": 2.15198406
+},
+{
+"age": 72,
+"contrib": 0,
+"cumulative": 1216,
+"value": 4016.787621,
+"ret": 2.30327929
+},
+{
+"age": 73,
+"contrib": 0,
+"cumulative": 1216,
+"value": 4209.593427,
+"ret": 2.4618367
+},
+{
+"age": 74,
+"contrib": 0,
+"cumulative": 1216,
+"value": 4411.653912,
+"ret": 2.62800486
+},
+{
+"age": 75,
+"contrib": 0,
+"cumulative": 1216,
+"value": 4623.413299,
+"ret": 2.80214909
+},
+{
+"age": 76,
+"contrib": 0,
+"cumulative": 1216,
+"value": 4845.337138,
+"ret": 2.98465225
+},
+{
+"age": 77,
+"contrib": 0,
+"cumulative": 1216,
+"value": 5077.91332,
+"ret": 3.17591556
+},
+{
+"age": 78,
+"contrib": 0,
+"cumulative": 1216,
+"value": 5321.65316,
+"ret": 3.37635951
+},
+{
+"age": 79,
+"contrib": 0,
+"cumulative": 1216,
+"value": 5577.092511,
+"ret": 3.58642476
+},
+{
+"age": 80,
+"contrib": 0,
+"cumulative": 1216,
+"value": 5844.792952,
+"ret": 3.80657315
+},
+{
+"age": 81,
+"contrib": 0,
+"cumulative": 1216,
+"value": 6125.343014,
+"ret": 4.03728866
+},
+{
+"age": 82,
+"contrib": 0,
+"cumulative": 1216,
+"value": 6419.359478,
+"ret": 4.27907852
+},
+{
+"age": 83,
+"contrib": 0,
+"cumulative": 1216,
+"value": 6727.488733,
+"ret": 4.53247429
+},
+{
+"age": 84,
+"contrib": 0,
+"cumulative": 1216,
+"value": 7050.408193,
+"ret": 4.79803305
+},
+{
+"age": 85,
+"contrib": 0,
+"cumulative": 1216,
+"value": 7388.827786,
+"ret": 5.07633864
+}
+]
+}

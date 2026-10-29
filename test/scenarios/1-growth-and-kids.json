@@ -1,0 +1,387 @@
+{
+ "version": 1,
+ "calc": {
+  "income": 600,
+  "spouse": "なし",
+  "kids": 0
+ },
+ "nextId": 900,
+ "eduAmount": {
+  "4": {
+   "5": 80
+  }
+ },
+ "eduSpan": {
+  "3": {
+   "6": {
+    "from": 2038,
+    "to": 2038
+   }
+  }
+ },
+ "edu": {
+  "3": [
+   "保育園0～3歳",
+   "幼稚園（私）",
+   "小学校（私）",
+   "中学校（私）",
+   "高校（公）",
+   "大学（理）",
+   "大学院"
+  ],
+  "4": [
+   "保育園0～3歳",
+   "幼稚園（公）",
+   "小学校（公）",
+   "中学校（公）",
+   "高校（私）",
+   "大学（国公）",
+   "大学院"
+  ]
+ },
+ "carBuyOverride": {
+  "2036": 180
+ },
+ "startYear": 2026,
+ "endAge": 90,
+ "depositRate": 0.5,
+ "assets": [
+  {
+   "id": 1,
+   "name": "普通預金等",
+   "fixed": true,
+   "amount": 300
+  },
+  {
+   "id": 2,
+   "name": "NISA",
+   "fixed": false,
+   "amount": 100,
+   "rate": 4,
+   "tax": "0%"
+  },
+  {
+   "id": 3,
+   "name": "特定口座",
+   "fixed": false,
+   "amount": 50,
+   "rate": 2.5,
+   "tax": "20%"
+  }
+ ],
+ "family": [
+  {
+   "id": 1,
+   "name": "A",
+   "gender": "男性",
+   "relation": "家族１",
+   "birth": "1980/07/15",
+   "job": "会社員等"
+  },
+  {
+   "id": 2,
+   "name": "B",
+   "gender": "男性",
+   "relation": "家族２",
+   "birth": "1982/03/10",
+   "job": "会社員等"
+  },
+  {
+   "id": 3,
+   "name": "C",
+   "gender": "男性",
+   "relation": "子供１",
+   "birth": "2015/09/01",
+   "job": "会社員等"
+  },
+  {
+   "id": 4,
+   "name": "D",
+   "gender": "男性",
+   "relation": "子供２",
+   "birth": "2019/02/14",
+   "job": "会社員等"
+  }
+ ],
+ "salaries": [
+  {
+   "id": 1,
+   "who": "",
+   "memberId": 1,
+   "retireAge": 65,
+   "rows": [
+    {
+     "id": 100,
+     "year": 2026,
+     "amount": 520,
+     "growth": 2.0
+    },
+    {
+     "id": 101,
+     "year": 2031,
+     "amount": 650,
+     "growth": 1.0
+    },
+    {
+     "id": 102,
+     "year": 2040,
+     "amount": 700,
+     "growth": 0.5
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "who": "",
+   "memberId": 2,
+   "retireAge": 60,
+   "rows": [
+    {
+     "id": 200,
+     "year": 2026,
+     "amount": 0,
+     "growth": 0
+    },
+    {
+     "id": 201,
+     "year": 2030,
+     "amount": 250,
+     "growth": 1.5
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "who": "",
+   "memberId": 0,
+   "retireAge": 0,
+   "rows": [
+    {
+     "id": 300,
+     "year": 2026,
+     "amount": 30,
+     "growth": 0
+    }
+   ]
+  }
+ ],
+ "lump": [
+  {
+   "id": 1,
+   "year": 2045,
+   "amount": 1800,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2050,
+   "amount": 300,
+   "memo": ""
+  }
+ ],
+ "corpPension": [
+  {
+   "id": 1,
+   "year": 2045,
+   "toYear": 2054,
+   "amount": 80,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2055,
+   "toYear": 2064,
+   "amount": 40,
+   "memo": ""
+  }
+ ],
+ "privPension": [
+  {
+   "id": 1,
+   "year": 2050,
+   "toYear": 2059,
+   "amount": 36,
+   "memo": ""
+  }
+ ],
+ "pubPension": [
+  {
+   "id": 1,
+   "year": 2046,
+   "amount": 180,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2047,
+   "amount": 260,
+   "memo": ""
+  }
+ ],
+ "living": [
+  {
+   "id": 1,
+   "year": 2026,
+   "amount": 330,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2042,
+   "amount": 290,
+   "memo": ""
+  },
+  {
+   "id": 3,
+   "year": 2050,
+   "amount": 260,
+   "memo": ""
+  }
+ ],
+ "inflation": 1.0,
+ "housing": [
+  {
+   "id": 1,
+   "year": 2026,
+   "amount": 150,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2035,
+   "amount": 120,
+   "memo": ""
+  },
+  {
+   "id": 3,
+   "year": 2052,
+   "amount": 40,
+   "memo": ""
+  }
+ ],
+ "housingLump": [
+  {
+   "id": 1,
+   "year": 2035,
+   "amount": 300,
+   "memo": ""
+  }
+ ],
+ "insurance": [
+  {
+   "id": 1,
+   "year": 2026,
+   "amount": 35,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2040,
+   "amount": 20,
+   "memo": ""
+  },
+  {
+   "id": 3,
+   "year": 2055,
+   "amount": 10,
+   "memo": ""
+  }
+ ],
+ "carCost": [
+  {
+   "id": 1,
+   "year": 2026,
+   "amount": 25,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2040,
+   "amount": 18,
+   "memo": ""
+  }
+ ],
+ "carBuy": {
+  "fromYear": 2028,
+  "every": 8,
+  "amount": 250,
+  "untilAge": 72
+ },
+ "otherFlow": [
+  {
+   "id": 1,
+   "year": 2026,
+   "amount": 12,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2045,
+   "amount": 30,
+   "memo": ""
+  }
+ ],
+ "otherLump": [
+  {
+   "id": 1,
+   "year": 2041,
+   "amount": 150,
+   "memo": ""
+  },
+  {
+   "id": 2,
+   "year": 2047,
+   "amount": 80,
+   "memo": ""
+  }
+ ],
+ "invest": {
+  "2": {
+   "add": [
+    {
+     "id": 10,
+     "year": 2026,
+     "toYear": 2044,
+     "amount": 72,
+     "memo": ""
+    },
+    {
+     "id": 11,
+     "year": 2045,
+     "toYear": 2049,
+     "amount": 36,
+     "memo": ""
+    }
+   ],
+   "out": [
+    {
+     "id": 20,
+     "year": 2056,
+     "toYear": 2070,
+     "amount": 120,
+     "memo": ""
+    }
+   ]
+  },
+  "3": {
+   "add": [
+    {
+     "id": 30,
+     "year": 2026,
+     "toYear": 2040,
+     "amount": 24,
+     "memo": ""
+    }
+   ],
+   "out": [
+    {
+     "id": 40,
+     "year": 2046,
+     "toYear": 2055,
+     "amount": 40,
+     "memo": ""
+    }
+   ]
+  }
+ }
+}

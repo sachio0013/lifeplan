@@ -1,0 +1,4 @@
+node_modules/
+dist/
+life-plan-input.html
+*.xlsx

@@ -1,0 +1,266 @@
+// 家計簿（年間収支）のテスト。node --test で実行する。
+// 期待値は Excel「ライフプラン表」家計簿（年間収支）シートの記入例と、Excelが保存した計算済みの値（test/fixtures/excel-kakeibo.json）。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+
+const require = createRequire(import.meta.url);
+const B = require('../app/book.js');
+const fx = JSON.parse(readFileSync(new URL('./fixtures/excel-kakeibo.json', import.meta.url), 'utf8'));
+
+const book = { nextId: 1 };
+const y = B.sampleYear(book);
+const s = B.summarize(y);
+const col = (f) => s.months.map(f);
+
+test('記入例の入力がExcelのシートと同じ', () => {
+  assert.equal(y.items.length, fx.items.length);
+  y.items.forEach((it, k) => {
+    assert.equal(it.name, fx.items[k].name);
+    assert.equal(it.cat, fx.items[k].cat);
+    assert.deepEqual(it.m.map(B.num), fx.items[k].m, it.name);
+  });
+  y.incomes.forEach((r, k) => assert.deepEqual(r.m.map(B.num), fx.incomes[k].m, r.name));
+});
+
+test('支出・収入・収支の月ごとと年間の合計がExcelと一致する（31行・62行・66行）', () => {
+  assert.deepEqual([...col((m) => m.expense), s.expense], fx.expected.expenseTotal);
+  assert.deepEqual([...col((m) => m.income), s.income], fx.expected.incomeTotal);
+  assert.deepEqual([...col((m) => m.balance), s.balance], fx.expected.balance);
+});
+
+test('区分別の合計がExcelと一致する（45〜50行）', () => {
+  for (const c of B.CATS) assert.deepEqual([...col((m) => m.cats[c.no]), s.catTotals[c.no]], fx.expected.byCat[c.no], c.label);
+});
+
+test('決済手段別の合計がExcelと一致する（34〜40行）', () => {
+  for (const [pay, vals] of Object.entries(fx.expected.byPay)) {
+    const mine = s.byPay[pay] || Array(12).fill(0);
+    assert.deepEqual([...mine, mine.reduce((a, b) => a + b, 0)], vals, pay);
+  }
+});
+
+test('残高（前年末の口座残高＋収支の累計）がExcelと一致する（67行）', () => {
+  assert.equal(s.startTotal, fx.expected.startTotal);
+  assert.deepEqual(col((m) => m.running), fx.expected.running);
+});
+
+test('口座残高を入れると記録との差額が出て、一致した月を数える', () => {
+  const yy = B.sampleYear({ nextId: 1 });
+  // 1月：記録どおりの残高（前年末4,100,000＋1月の収支）に合わせる
+  const jan = B.summarize(yy).months[0].running;
+  yy.accounts.forEach((a, k) => { a.m[0] = k === 0 ? jan - 2100000 : B.num(a.start); });
+  yy.accounts.forEach((a, k) => { a.m[1] = k === 0 ? B.num(a.m[0]) : B.num(a.start); });  // 2月：動きを入れ忘れ
+  const t = B.summarize(yy);
+  assert.equal(t.months[0].diff, 0);
+  assert.equal(t.months[1].diff, t.months[1].balance);
+  assert.equal(t.matched, 1);
+});
+
+test('ライフプランへの金額：12か月そろえば合計、足りなければ月平均×12（万円）', () => {
+  const p = B.toPlan(y);
+  assert.equal(p.months, 12);
+  assert.equal(p.living, 299.7);
+  assert.equal(p.housing, 140);
+  assert.equal(p.insurance, 12);
+  assert.equal(p.car, 8.5);
+  assert.equal(p.invest, 36);
+  assert.equal(p.sal1, 416);     // 給与316万＋ボーナス100万（手取り）
+  assert.equal(p.sal2, 240);
+  assert.equal(p.cash, 410);
+  // 3か月だけ記録 → 平均×12
+  const q = B.sampleYear({ nextId: 1 });
+  [...q.items, ...q.incomes].forEach((r) => { for (let i = 3; i < 12; i++) r.m[i] = ''; });
+  const p3 = B.toPlan(q);
+  assert.equal(p3.months, 3);
+  assert.equal(p3.housing, Math.round((75000 + 100000 + 75000) * 4 / 1000) / 10);
+  assert.equal(B.reliability(p3.months, 0).label, 'まずまず');
+  assert.equal(B.reliability(12, 2).label, 'とても高い');
+  assert.equal(B.toPlan(B.newYear({ nextId: 1 })), null);
+});
+
+test('新しい年は、項目と口座の名前を引き継ぎ、前の年の年末の残高から始まる', () => {
+  const bk = { nextId: 1 };
+  const prev = B.sampleYear(bk);
+  prev.accounts[0].m[11] = 2345678;
+  prev.accounts.slice(1).forEach((a) => { a.m[11] = ''; });
+  const next = B.newYear(bk, prev);
+  assert.deepEqual(next.items.map((i) => i.name), prev.items.map((i) => i.name));
+  assert.ok(next.items.every((i) => i.m.every((v) => v === '')));
+  assert.equal(next.accounts[0].start, 2345678);
+  assert.equal(next.accounts[1].start, 200000);   // 年末を入れていない口座は前の年の前年末のまま
+  assert.equal(next.invests[0].start, 600000);    // 投資は前の年の「今年末（予想）」から
+});
+
+test('ふりかえり：いつもとの違い・貯蓄に回せた割合・続けた月数', () => {
+  const yy = B.sampleYear({ nextId: 1 });
+  const out = B.insights(yy, 5, null).map((x) => x.text);   // 6月：住宅ローンのボーナス払い、通勤定期
+  assert.ok(out.some((t) => /住宅ローンが、いつもより＋200,000円/.test(t)), out.join(' / '));
+  assert.ok(out.some((t) => /収入の\d+％を、貯蓄や投資に回せました/.test(t)));
+  assert.ok(out.some((t) => /6か月続けて記録しています/.test(t)));
+});
+
+test('給与天引きの支出は、収入（振込額）にも足して、手取り＝振込額＋任意の天引きにそろえる', () => {
+  const bk = { nextId: 1 };
+  const yr = B.newYear(bk);
+  yr.items.forEach((it) => { it.m = it.m.map(() => ''); });
+  yr.incomes.forEach((r) => { r.m = r.m.map(() => ''); });
+  yr.accounts.forEach((a) => { a.start = 1000000; a.m = a.m.map(() => ''); });
+  yr.items[0].m[0] = 100000;                                            // 口座から払う支出
+  yr.items.push({ id: 99, name: '財形貯蓄', cat: 6, pay: B.DEDUCTED, day: '', m: [20000, '', '', '', '', '', '', '', '', '', '', ''] });
+  yr.incomes[0].m[0] = 300000;                                          // 振込額
+  const sm = B.summarize(yr), m = sm.months[0];
+  assert.equal(m.deducted, 20000);
+  assert.equal(m.income, 320000);                                       // 振込額＋天引き
+  assert.equal(m.expense, 120000);
+  assert.equal(m.running - sm.startTotal, 200000);                      // 口座の増え方は 振込額−口座から払った支出 のまま
+  const p = B.toPlan(yr);
+  assert.equal(p.sal1, Math.round(320000 * 12 / 1000) / 10);
+});
+
+// ---- 給与明細（Excel ver.1.80「給与シート」） ----
+const sx = JSON.parse(readFileSync(new URL('./fixtures/excel-salary.json', import.meta.url), 'utf8'));
+
+test('給与明細：記入例がExcelの給与シートと同じで、1枚ごとの合計・振込額も一致', () => {
+  [1, 2].forEach((k) => {
+    const p = B.samplePay(k), fx = sx['p' + k];
+    p.rows.forEach((r, i) => {
+      assert.deepEqual(B.PAY_ITEMS.map((f) => B.num(r[f.key])), fx.rows[i].pay, `家族${k} ${B.SLIP_LABELS[i]} 支給`);
+      assert.deepEqual(B.DEDUCT_ITEMS.map((f) => B.num(r[f.key])), fx.rows[i].deduct, `家族${k} ${B.SLIP_LABELS[i]} 控除`);
+      const t = B.slipTotals(r);
+      assert.equal(t.pay, fx.rows[i].payTotal);
+      assert.equal(t.deduct, fx.rows[i].deductTotal);
+      assert.equal(t.transfer, fx.rows[i].transfer);
+    });
+  });
+});
+
+test('給与明細：1年の集計がExcelと一致（任意の天引きが無ければ、手取り＝振込額）', () => {
+  [1, 2].forEach((k) => {
+    const s = B.paySummary(B.samplePay(k)), e = sx['p' + k].summary;
+    assert.equal(s.months, 12); assert.equal(s.bonuses, 2); assert.ok(s.full);
+    assert.equal(s.total.pay, e.payTotal);
+    assert.equal(s.total.commute, e.commute);
+    assert.equal(s.total.gross, e.gross);
+    assert.equal(s.total.social, e.social);
+    assert.equal(s.total.tax, e.tax);
+    assert.equal(s.total.transfer, e.takeHomeTransfer);
+    assert.equal(s.total.takeHome, e.takeHomeTransfer);
+    assert.equal(s.ratio, Math.round(e.ratio * 1000) / 10);
+    assert.equal(Math.round(s.total.takeHome / 10000), e.planMan);              // Excelの★（万円・整数）
+    assert.equal(s.planMan, Math.round(e.takeHomeTransfer / 1000) / 10);        // アプリは0.1万円まで
+  });
+});
+
+test('給与明細：財形・DC等（任意の天引き）は手取りに含め、記録が途中なら平均×12＋賞与で1年分を見積もる', () => {
+  const p = B.samplePay(1);
+  p.rows.forEach((r, i) => { if (i < 12) r.voluntary = 10000; });
+  const s = B.paySummary(p);
+  assert.equal(s.total.transfer, 4327480 - 120000);
+  assert.equal(s.total.takeHome, 4327480);
+  const half = B.newPay();
+  for (let i = 0; i < 6; i++) Object.assign(half.rows[i], B.samplePay(1).rows[i]);
+  Object.assign(half.rows[12], B.samplePay(1).rows[12]);
+  const h = B.paySummary(half);
+  assert.equal(h.months, 6); assert.ok(!h.full);
+  assert.equal(h.estimate.takeHome, 280290 * 12 + 482000);
+});
+
+test('給与明細のふりかえり：6月の住民税、9月の社会保険料、介護保険料のはじまり、残業代の増減を説明する', () => {
+  const p = B.samplePay(1);
+  p.rows[5].resident = 16000;
+  p.rows[8].health = 18000;
+  p.rows[9].overtime = 40000;
+  const jun = B.payInsights(p, 5).map((t) => t.text).join('\n');
+  assert.match(jun, /住民税が 14,500円 → 16,000円/);
+  assert.match(jun, /6月に切り替わります/);
+  assert.match(B.payInsights(p, 8).map((t) => t.text).join('\n'), /標準報酬月額/);
+  assert.match(B.payInsights(p, 9).map((t) => t.text).join('\n'), /残業手当は9月より ＋15,000円/);
+  const q = B.samplePay(1); q.rows[3].care = 2500;
+  assert.match(B.payInsights(q, 3).map((t) => t.text).join('\n'), /介護保険料が引かれはじめました/);
+  // 1月は前年の12月と比べる
+  const prev = B.samplePay(1), cur = B.samplePay(1); cur.rows[0].overtime = 30000;
+  assert.match(B.payInsights(cur, 0, prev).map((t) => t.text).join('\n'), /去年の12月より ＋5,000円/);
+  assert.match(B.payInsights(p, 12).map((t) => t.text).join('\n'), /住民税は賞与からは引かれません/);
+});
+
+test('予算：プランの金額から1年の予算を作る（区分の合計がプランと合い、基本生活費は家計調査の割合で項目に分かれる）', () => {
+  const book = { years: {}, nextId: 1 };
+  const y = B.newYear(book);
+  assert.deepEqual(y.accounts.map((a) => a.name), ['●●銀行①', '●●銀行②', '●●証券']);   // 口座ははじめから3つ
+  const missed = B.budgetFromPlan(y, { living: 330, housing: 144, housingLoan: 0, edu: 30, insurance: 24, car: 315, carBuy: 300, invest: 60, sal1: 448, sal2: 180 });
+  assert.deepEqual(missed, []);
+  const tot = (cat) => y.items.filter((it) => it.cat === cat).reduce((t, it) => t + it.b.reduce((a, v) => a + B.num(v), 0), 0);
+  assert.ok(Math.abs(tot(1) - 3300000) <= 8 * 12 * 50, tot(1));           // 100円単位に丸めた分だけずれる
+  assert.equal(tot(2), 1440000);
+  assert.equal(tot(5), 150000 + 3000000);                                 // 維持費は12等分、買い替えは4月に
+  assert.equal(y.items.find((it) => it.cat === 5).b[3], 12500 + 3000000);
+  const food = y.items.find((it) => /食費/.test(it.name)), other = y.items.find((it) => it.name === 'その他');
+  assert.ok(food.b[0] > other.b[0] && other.b[0] > 0);
+  const sal1 = y.incomes.find((r) => r.kind === 'sal1'), bonus1 = y.incomes.find((r) => r.kind === 'bonus1');
+  assert.equal(sal1.b[0], 320000);                                        // 448万円 ÷ 14
+  assert.deepEqual([bonus1.b[5], bonus1.b[11], bonus1.b[0]], [320000, 320000, '']);
+  assert.equal(y.incomes.find((r) => r.kind === 'sal2').b[0], 150000);
+  const s = B.summarize(y);
+  assert.ok(s.hasBudget && Math.abs(s.bIncome - 6280000) < 1000 && s.bBalance === s.bIncome - s.bExpense, JSON.stringify([s.bIncome, s.bExpense]));
+});
+
+test('予算：1つの月の金額をほかの月にも入れる・見込みは記録した月が実績でほかは予算・確定のひとこと', () => {
+  const book = { years: {}, nextId: 1 };
+  const y = B.newYear(book);
+  const food = y.items[0], sal = y.incomes[0];
+  food.b[6] = 50000; B.copyBudget(food, 6);
+  assert.deepEqual(food.b, Array(12).fill(50000));
+  sal.b = Array(12).fill(300000);
+  // 1月は実績：食費 62,000（予算より12,000多い）、給与 300,000
+  food.m[0] = 62000; sal.m[0] = 300000;
+  const s = B.summarize(y);
+  assert.equal(s.months[0].fBalance, 300000 - 62000);
+  assert.equal(s.months[1].fBalance, 300000 - 50000);
+  assert.equal(s.fBalance, 238000 + 11 * 250000);
+  const r = B.monthReview(y, 0);
+  assert.equal(r.balance, -12000);
+  assert.deepEqual([r.over.name, r.over.d], [food.name, 12000]);
+  // 確定
+  y.closed = Array(12).fill(false); y.closed[0] = true;
+  assert.equal(B.summarize(y).closed, 1);
+  // 前の年の予算は次の年に引き継ぐ
+  const y2 = B.newYear(book, y);
+  assert.deepEqual(y2.items[0].b, Array(12).fill(50000));
+  assert.deepEqual(y2.items[0].m, Array(12).fill(''));
+});
+
+test('家計調査（2025年、excelcf.netの記事と同じ作り方）：世帯主の年齢と人数、世帯年収から基本生活費の平均', () => {
+  assert.deepEqual(B.refByAge(38, 4), { label: '世帯主35〜44歳・4人の世帯', basic: 323, housing: 18, edu: 24, insurance: 34, car: 37 });
+  assert.equal(B.refByAge(30, 3).basic, 256);
+  assert.equal(B.refByAge(70, 6).basic, 354);         // 5人以上
+  assert.equal(B.refByAge(40, 1), null);              // ひとり暮らしの表はない
+  assert.equal(B.refByIncome(620).basic, 290);
+  assert.equal(B.refByIncome(620).label, '世帯年収600〜650万円の世帯');
+  assert.equal(B.refByIncome(1600).basic, 540);
+  // 年収が上がるほど基本生活費も上がる（年平均なので月ごとのぶれが少ない）
+  const inc = B.KAKEI.byIncome.map((r) => r[2][0]);
+  assert.ok(inc.every((v, k) => k === 0 || v >= inc[k - 1]), inc.join(','));
+  // 割合の合計は1
+  assert.ok(Math.abs(B.BASIC_SHARES.reduce((t, x) => t + x[1], 0) - 1) < 0.002);
+  // 基本生活費の予算を平均（年339万円）にする
+  const y = B.newYear({ years: {}, nextId: 1 });
+  B.setBasicBudget(y, 339);
+  const t = y.items.filter((it) => it.cat === 1).reduce((a, it) => a + it.b.reduce((x, v) => x + B.num(v), 0), 0);
+  assert.ok(Math.abs(t - 3390000) <= 8 * 12 * 50, t);
+});
+
+test('記録と口座残高の差額を、使途不明金・不明収入として入れて0にする', () => {
+  const book = { years: {}, nextId: 1 };
+  const y = B.newYear(book);
+  const id = () => book.nextId++;
+  y.accounts.forEach((a, k) => { a.start = k ? 0 : 1000000; a.m[0] = k ? 0 : 1290000; });
+  y.incomes[0].m[0] = 300000;      // 記録の残高は 1,300,000、実際は 1,290,000 → 10,000円の使途不明金
+  assert.equal(B.summarize(y).months[0].diff, 10000);
+  assert.deepEqual(B.settleDiff(y, 0, id), { kind: 'item', name: '使途不明金', amount: 10000 });
+  assert.equal(B.summarize(y).months[0].diff, 0);
+  y.accounts[0].m[0] = 1300500;    // 記録は 1,290,000、実際の方が10,500円多い → 不明収入
+  assert.deepEqual(B.settleDiff(y, 0, id), { kind: 'income', name: '不明収入', amount: 10500 });
+  assert.equal(B.summarize(y).months[0].diff, 0);
+});

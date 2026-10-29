@@ -1,0 +1,10 @@
+{
+  "name": "lifeplan",
+  "private": true,
+  "description": "ライフプラン（家計・資産シミュレーション）アプリ",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build": "node tools/build.mjs",
+    "e2e": "node test/e2e.mjs"
+  }
+}
