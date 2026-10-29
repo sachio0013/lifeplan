@@ -2659,7 +2659,7 @@
         : '<div class="row bkbbtns">' + (py ? '<button class="btn' + (s.hasBudget ? ' ghost' : '') + '" onclick="A.bkBPlan(false)">プラン「' + esc(plan().name) + '」の金額から予算を入れる</button>' : '') +
           (prevOk ? '<button class="btn ghost" onclick="A.bkBPrev(false)">' + (ui.book.year - 1) + '年の実績から入れる</button>' : '') + '</div>') +
       '<div class="hint" style="padding:8px 0 0">予算は、収入を気持ち少なめに、支出をやや多めにしておくのがおすすめです。実績が予算よりよくなると、続ける励みになります。</div>' +
-      '<div class="hint" style="padding:6px 0 0">プランの金額から入れると、基本生活費は家計調査（2024年）の費目の割合をもとに項目へ分け、' + esc(famLabel('家族１')) + 'の給与は毎月の手取りとボーナス（6月・12月）に分けます。どれも目安なので、自分の家計に合わせて直してください。</div>' +
+      '<div class="hint" style="padding:6px 0 0">プランの金額から入れると、基本生活費は家計調査（2025年）の費目の割合をもとに項目へ分け、' + esc(famLabel('家族１')) + 'の給与は毎月の手取りとボーナス（6月・12月）に分けます。どれも目安なので、自分の家計に合わせて直してください。</div>' +
     '</div>';
     var groups = BK.CATS.map(function (cc) {
       var rows = y.items.filter(function (it) { return it.cat === cc.no; });
