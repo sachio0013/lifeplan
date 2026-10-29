@@ -1166,6 +1166,7 @@
         '<div class="tip" id="tip" hidden></div>' +
         '<div class="hint" style="padding:6px 4px 0">1本の棒が1年分で、その年の終わりに残るお金です。' + (sf ? '0より下の年は、お金が足りないことを表します。' : '') + 'タップすると、その年の金額が出ます。</div>' +
       '</div>' +
+      houseCheckHTML(plan()) +
       guideHTML() +
       (sf ? fixHTML() : '') +
       '<div class="card tablecard"><h2 class="h3">年ごとの表（キャッシュフロー表）</h2><div class="sub">1年ごとの収入・支出と、年の終わりに残るお金です。単位は万円。横にスクロールできます。</div>' +
@@ -2104,6 +2105,13 @@
       var it = GUIDE[k], done = g.done.indexOf(k) >= 0;
       var text = it.p;
       if (k === 'edu' && !E.children(byId(store.plans, g.planId).state).length) text = '子供の欄を足して生年月日を入れると、在学年と教育費が自動で入ります。';
+      var acts = it.a, title = it.t;
+      var hst = k === 'house' && houseLoanOf(byId(store.plans, g.planId).state);
+      if (hst) {
+        title = '家を買わなかった場合と比べる';
+        text = '「' + byId(store.plans, g.planId).name + '」は、' + hst.start + '年に' + (toNum(hst.price) > 0 ? man(hst.price) + '万円の家を' : '家を') + '買うプランです。今の住まいのまま（買わなかった場合）と並べると、家を買うことでお金の流れがどう変わるかがわかります。';
+        acts = [['今の住まいのままと比べる', 'rent'], ['家の値段・ローンを変える', 'loan']];
+      }
       if (k === 'invest') {
         var gs = byId(store.plans, g.planId).state, adds = [];
         Object.keys(gs.invest || {}).forEach(function (a) { (gs.invest[a].add || []).forEach(function (r) { if (toNum(r.amount) > 0) adds.push(r); }); });
@@ -2115,9 +2123,9 @@
         if (toNum(lv)) text += '（今の基本生活費 年' + man(lv) + '万円 → 1割で年' + (Math.round(toNum(lv) / 10 * 10) / 10) + '万円、月' + (Math.round(toNum(lv) / 120 * 10) / 10) + '万円）';
       }
       return '<div class="gi' + (done ? ' done' : '') + '">' +
-        '<div class="gt">' + (done ? '<span class="ok">' + ic('check', 14) + '</span>' : '<span class="dot"></span>') + it.t + '</div>' +
+        '<div class="gt">' + (done ? '<span class="ok">' + ic('check', 14) + '</span>' : '<span class="dot"></span>') + title + '</div>' +
         '<p>' + esc(text) + '</p>' +
-        '<div class="row">' + it.a.map(function (a, i) {
+        '<div class="row">' + acts.map(function (a, i) {
           return '<button class="btn' + (i ? ' ghost' : '') + '" onclick="A.guideAct(\'' + k + '\',\'' + a[1] + '\')">' + a[0] + '</button>';
         }).join('') + '</div>' +
       '</div>';
@@ -2168,7 +2176,15 @@
     var g = store.guide; if (!g) return;
     if (g.done.indexOf(need) < 0) g.done.push(need);
     if (byId(store.plans, g.planId) && store.activeId !== g.planId && /^(edu|pension|cf|investCard)$/.test(act)) switchTo(g.planId);
-    if (act === 'house') {
+    if (act === 'rent') {
+      // 家を買うプランから、買わなかった場合（今の住まいのまま）のプランを作って並べる
+      compareNow(guideCopy('家を買わない', function (st) {
+        var lc = st.loanCalc, start = lc ? toNum(lc.start) : Infinity;
+        st.housing = st.housing.filter(function (r, i) { return i === 0 || toNum(r.year) < start; });
+        st.housingLump = (st.housingLump || []).filter(function (r) { return r.memo !== LOAN_CASH; });
+        delete st.loanCalc;
+      }));
+    } else if (act === 'house') {
       var hp = byId(store.plans, g.house);
       compareNow(hp ? { base: byId(store.plans, g.planId) || plan(), copy: hp } : houseCopy());
     } else if (act === 'invest') {
@@ -3921,15 +3937,13 @@
     var p = { id: store.nextPlanId++, name: uniqueName(w.d._ref ? 'わが家' : 'プラン' + (store.plans.length + 1)), state: st };
     store.plans.push(p);
     if (w.needs.length) store.guide = { planId: p.id, needs: w.needs.slice(), done: [], hidden: false };
-    // 家の質問に答えたら、家を買ったプランも作って、比較で並べて見せる
+    // 家の質問に答えたら、そのプランを「家を買うプラン」にする（プランは1つだけ。買わなかった場合とは、あとで比べられる）
     if (wzHouse() && toNum(w.d.housePrice) > 0) {
-      var pair = houseCopy(wzLoan(w.d));
-      store.guide.done.push('house');
-      store.prefs.welcomed = true;
-      ui.wz = null; ui.active = 'basic'; ui.inputScroll = 0; ui.openMember = 0; ui.openCalc = 0;
-      quiet = true;
-      compareNow(pair);
-      return;
+      var keep = state; state = st;
+      st.loanCalc = wzLoan(w.d);
+      applyLoan(st.loanCalc);
+      state = keep;
+      store.guide.house = p.id;
     }
     store.prefs.welcomed = true;
     store.activeId = p.id;

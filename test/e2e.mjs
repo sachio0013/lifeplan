@@ -988,7 +988,7 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
   await c.close();
 }
 
-// 家を買うか考えている人の流れ：結果がひとことで出て、家を買ったプランと比べ、家の値段は家を買ったプランで変える（今の住まいのプランは変えない）
+// 家を買うか考えている人の流れ：家の値段を入れたら家を買うプラン1つ。結果がひとことで出て、住宅購入チェック、買わなかった場合とはあとで比べる
 {
   const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
   const hp = await c.newPage();
@@ -1012,29 +1012,34 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
     }
     await hp.locator('.wznav .btn', { hasText: /次へ|この内容で計算する/ }).tap(); await hp.waitForTimeout(150);
   }
-  // 終わると、今の住まいのままと家を買った場合を並べた比較が開き、住宅購入チェックが出る
-  await hp.waitForSelector('.cmpsay');
-  const say = await hp.textContent('.cmpsay');
-  const hcItems = await hp.$$eval('.hcheck .hc .t', (els) => els.map((e) => e.textContent));
-  const st0 = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return s.plans.map((p) => ({ name: p.name, loan: p.state.loanCalc || null, lump: p.state.housingLump })); });
-  await hp.locator('.hcheck').scrollIntoViewIfNeeded();
-  await hp.screenshot({ path: join(shots, '28-house-check.png') });
-  check('かんたん入力を終えると、「今の住まいのまま」と「家を買った場合」の比較が開く（頭金と諸費用は買う年に）',
-    /「わが家（家を買う）」/.test(say) && (await hp.locator('.cmpsay .btn').count()) === 2 && st0.length === 2 && st0[0].loan === null &&
-    st0[1].loan.amount === 4000 && st0[1].loan.costs === 270 && st0[1].lump.some((r) => r.amount === 770 && r.year === 2028), JSON.stringify(st0.map((p) => [p.name, p.loan && p.loan.amount, p.lump])));
-  check('住宅購入チェック：返済の割合・返し終わるとき・返済中に貯金がいちばん少ない年・団信', hcItems.length === 4 && /返済の割合\d+%/.test(hcItems[0]) && /返し終わるとき2062年/.test(hcItems[1]) && /団信/.test(hcItems[3]), hcItems.join(' / '));
-  // 結果をひとことで・教育費は大学まで（今の住まいのプラン）
-  await go(hp, '#seg-cf');
+  // 終わると、家を買うプラン1つの未来の表が開き、住宅購入チェックが出る（プランは1つだけ）
   await hp.waitForSelector('#chart');
+  const hcItems = await hp.$$eval('#cf .hcheck .hc .t', (els) => els.map((e) => e.textContent));
+  const st0 = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return s.plans.map((p) => ({ name: p.name, loan: p.state.loanCalc || null, lump: p.state.housingLump })); });
+  await hp.locator('#cf .hcheck').scrollIntoViewIfNeeded();
+  await hp.screenshot({ path: join(shots, '28-house-check.png') });
+  check('家の値段を入れてかんたん入力を終えると、家を買うプラン1つだけができて未来の表が開く（頭金と諸費用は買う年に）',
+    st0.length === 1 && st0[0].name === 'わが家' && st0[0].loan.amount === 4000 && st0[0].loan.costs === 270 && st0[0].lump.some((r) => r.amount === 770 && r.year === 2028), JSON.stringify(st0.map((p) => [p.name, p.loan && p.loan.amount, p.lump])));
+  check('住宅購入チェック（未来の表）：返済の割合・返し終わるとき・返済中に貯金がいちばん少ない年・団信', hcItems.length === 4 && /返済の割合\d+%/.test(hcItems[0]) && /返し終わるとき2062年/.test(hcItems[1]) && /団信/.test(hcItems[3]), hcItems.join(' / '));
   const verdict = await hp.textContent('.verdict');
   check('未来の表のいちばん上に、結果がひとことで出る（だれが何歳のときか）', /このままだと|足りる見込み/.test(verdict) && /家族１が\d+歳/.test(verdict), verdict.trim().slice(0, 60));
   const eduStage = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); const p = s.plans.find((x) => x.id === s.activeId).state; return p.edu[10]; });
   check('かんたん入力の教育費は大学まで（大学院は「進学しない」）', eduStage[5] === '大学（私文）' && eduStage[6] === '進学しない', `${eduStage}`);
-  // 家の値段を変える：家を買ったプランのローン欄で、値段と頭金から借入額を出し、反映すると比較に戻れる
+  // 買わなかった場合と比べる：次の一歩から、今の住まいのままのプランを作って並べる
+  const gtitle = await hp.$$eval('#cf .guide:not(.fix) .gi .gt', (els) => els.map((e) => e.textContent));
+  await hp.locator('#cf .guide .btn', { hasText: '今の住まいのままと比べる' }).tap();
+  await hp.waitForSelector('.cmpsay');
+  const say = await hp.textContent('.cmpsay');
+  const st1 = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return s.plans.map((p) => [p.name, !!p.state.loanCalc, p.state.housing.length]); });
+  check('次の一歩「家を買わなかった場合と比べる」で、今の住まいのままのプランを作り、比較で並べる（住宅購入チェックも出る）',
+    gtitle[0] === '家を買わなかった場合と比べる' && /「わが家（家を買わない）」/.test(say) && JSON.stringify(st1) === '[["わが家",true,4],["わが家（家を買わない）",false,1]]' && (await hp.locator('#cmp .hcheck, .hcheck').count()) >= 1,
+    `${gtitle[0]} / ${JSON.stringify(st1)} / ${say.replace(/\s+/g, ' ').slice(0, 80)}`);
+  // 家の値段を変える：家を買うプランのローン欄で、値段と頭金から借入額を出し、反映すると比較へ案内する
+  await go(hp, '#seg-cf');
+  await hp.waitForSelector('#cf .guide');
   await hp.locator('#cf .guide .btn', { hasText: '家の値段・ローンを変える' }).tap(); await hp.waitForTimeout(400);
-  const st1 = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return { active: s.plans.find((p) => p.id === s.activeId).name, baseLoan: s.plans[0].state.loanCalc || null }; });
-  check('「家の値段・ローンを変える」で、家を買ったプランの住宅ローンの欄が開く（今の住まいのプランにはローンを入れない）',
-    st1.active === 'わが家（家を買う）' && st1.baseLoan === null && (await hp.locator('#f-loan-price').isVisible()) && (await hp.inputValue('#f-loan-price')) === '4500', JSON.stringify(st1));
+  const act = await hp.evaluate(() => { const s = JSON.parse(localStorage.getItem('lifeplan.v2')); return s.plans.find((p) => p.id === s.activeId).name; });
+  check('「家の値段・ローンを変える」で、家を買うプランの住宅ローンの欄が開く', act === 'わが家' && (await hp.locator('#f-loan-price').isVisible()) && (await hp.inputValue('#f-loan-price')) === '4500', act);
   await hp.fill('#f-loan-price', '3800'); await hp.press('#f-loan-price', 'Tab'); await hp.waitForTimeout(150);
   const amt = await hp.textContent('#f-loan-amount-v');
   await hp.locator('#loanbox .btn', { hasText: '住宅費に反映する' }).tap(); await hp.waitForTimeout(150);
@@ -1045,8 +1050,8 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
     amt === '3,300' && lump.filter((r) => /頭金・諸費用/.test(r.memo)).length === 1 && /比較/.test(toastMsg), `${amt} / ${JSON.stringify(lump)}`);
   await go(hp, '#seg-cmp');
   await hp.waitForSelector('.cmpsay');
-  await hp.locator('.cmpsay .btn', { hasText: 'わが家（家を買う）の中身' }).tap(); await hp.waitForTimeout(400);
-  check('比較から家を買ったプランを開くと、住宅ローンの欄（3,800万円）が出る', (await hp.locator('#f-loan-price').isVisible()) && (await hp.inputValue('#f-loan-price')) === '3800', await hp.textContent('#planname'));
+  await hp.locator('.cmpsay .btn', { hasText: /^わが家の中身/ }).tap(); await hp.waitForTimeout(400);
+  check('比較から家を買うプランを開くと、住宅ローンの欄（3,800万円）が出る', (await hp.locator('#f-loan-price').isVisible()) && (await hp.inputValue('#f-loan-price')) === '3800', await hp.textContent('#planname'));
   await c.close();
 }
 
