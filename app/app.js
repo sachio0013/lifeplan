@@ -3278,7 +3278,7 @@
 
   // ---------- かんたん入力（必須の項目だけを順に聞く） ----------
 
-  var WZ_STEPS = ['家計の中心の人', 'いっしょに暮らす家族', '今の貯金', '収入', '年金', '毎月の支出'];
+  var WZ_STEPS = ['家計の中心の人', 'いっしょに暮らす家族', '前年末の貯金', '収入', '年金', '毎月の支出'];
 
   function wzDraft() {
     return {
@@ -3417,7 +3417,7 @@
         (d.kids.length < 4 ? '<div style="margin-top:8px"><button class="btn ghost" onclick="A.wzKidAdd()">＋ 子供を追加</button></div>' : '') +
         (d.kids.length ? '' : '<div class="hint" style="padding:6px 0 0">子供がいなければ、そのまま「次へ」</div>');
     } else if (s === 2) {
-      lead = '去年の年末ごろの残高です。だいたいでOKです。';
+      lead = '前の年の12月末ごろの残高です。だいたいでOKです。';
       body = wzField('deposit', '貯金（現金・普通預金・定期預金）', '万円') +
         wzField('nisa', 'NISA', '万円', { optional: true, hint: 'やっていなければ0のまま' }) +
         wzField('ideco', 'iDeCo', '万円', { optional: true, hint: 'やっていなければ0のまま' }) +
