@@ -759,3 +759,27 @@ input.yen[readonly] { background: var(--surface-2); color: var(--text-muted); }
 .wzref { margin-top: 6px; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); line-height: 1.7; }
 .wzref .linkbtn { display: block; padding: 2px 0; }
 .cvqnote { margin: -4px 2px 10px; font-size: 13.5px; font-weight: 500; line-height: 1.7; color: var(--text-muted); }
+
+/* FPの講評 */
+.rvbtn { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 4px 0 14px; }
+.rvbtn .btn { display: inline-flex; align-items: center; gap: 8px; width: 100%; justify-content: center; }
+.rvbtn .btn .fp, .rvbtn .btn svg { flex-shrink: 0; }
+.rvbtn span { font-size: 12.5px; color: var(--text-muted); text-align: center; }
+.review { border: 2px solid var(--accent-soft); }
+.rvhead { display: flex; align-items: center; gap: 10px; }
+.rvhead .k { font-size: 13px; font-weight: 700; color: var(--text-muted); }
+.rvhead .g { font-size: 22px; font-weight: 900; }
+.rvhead .g.ok { color: var(--sage); }
+.rvhead .g.mid { color: #c98500; }
+.rvhead .g.ng { color: var(--neg); }
+.rvhead .del { margin-left: auto; align-self: flex-start; }
+.rvsum { margin: 8px 0 4px; font-size: 14.5px; font-weight: 700; line-height: 1.8; }
+.rvi { padding: 12px 0; border-top: 1px dashed var(--line); }
+.rvi .t { display: flex; align-items: center; gap: 6px; font-size: 14.5px; }
+.rvi.ok .t .ic { color: var(--sage); }
+.rvi.mid .t .ic { color: #c98500; }
+.rvi.ng .t .ic { color: var(--neg); }
+.rvi p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.8; }
+.rvtodo { margin-top: 8px; padding: 12px 14px; border-radius: 14px; background: var(--accent-soft); }
+.rvtodo .k { font-size: 14px; font-weight: 900; color: var(--accent-ink); }
+.rvtodo ol { margin: 6px 0 0; padding-left: 1.4em; font-size: 13.5px; line-height: 1.8; font-weight: 700; }

@@ -944,7 +944,7 @@
       h += investCard(a, 'out', a.name + 'の現金化', false);
     });
 
-    h += '<footer class="done">入力はここまでです。おつかれさまでした。<div class="row"><button class="btn" onclick="A.view(\'cf\')">未来の表を見る</button><button class="btn ghost" onclick="A.view(\'risk\')">もしもの保障を見る</button></div></footer>';
+    h += '<footer class="done">入力はここまでです。おつかれさまでした。<div class="row"><button class="btn" onclick="A.view(\'cf\')">未来の表を見る</button><button class="btn ghost" onclick="A.view(\'risk\')">もしもの保障を見る</button><button class="btn ghost" onclick="A.review(true)">FPの講評を見る</button></div></footer>';
     return h;
   }
 
@@ -1156,7 +1156,7 @@
     var basis = state.bookBasis;
     var basisRel = basis ? window.LifePlanBook.reliability(basis.months, basis.matched) : null;
     return (basis ? '<button class="basis lv' + basisRel.level + '" onclick="A.view(\'book\')">' + ic('book', 18) + '<span>家計簿（' + basis.year + '年・' + basis.months + 'か月分）の実績にもとづくプラン<b>信頼度：' + basisRel.label + '</b></span></button>' : '') +
-      remindHTML() + verdictHTML(last, sf) +
+      remindHTML() + verdictHTML(last, sf) + reviewHTML() +
       '<div class="hero"><div class="k">' + who + 'が' + last.age + '歳（' + last.year + '年）のときに残るお金</div>' +
         '<div class="v">' + man(result.endTotal) + '<small> 万円</small></div>' +
         '<div class="note">貯金と投資の合計（うち普通預金等 ' + man(last.assets.deposit) + '万円・投資資産 ' + man(last.assets.investTotal) + '万円）</div></div>' +
@@ -1176,6 +1176,135 @@
       '<div style="text-align:center;margin-top:6px"><button class="btn ghost" onclick="A.view(\'input\')">入力に戻る</button></div>' +
       DISCLAIMER;
   }
+
+  // ---------- FPの講評（プラン全体を見て、安心できる点・気をつける点・改善の優先順） ----------
+  //
+  // その場の計算だけで出す（通信しない）。重い計算（保障）を含むので、開いたときだけ、プランの中身ごとに覚えておく。
+  var rvMemo = { key: '', v: null };
+  function reviewData() {
+    var key = JSON.stringify(state);
+    if (rvMemo.key === key) return rvMemo.v;
+    var ys = result.years, last = ys[ys.length - 1], sf = result.shortfall, by = baseBirth();
+    var p1 = state.family[0];
+    var s1 = state.salaries.filter(function (x) { return x.memberId === (p1 || {}).id; })[0];
+    var retire = s1 && toNum(s1.retireAge) ? toNum(s1.retireAge) : 65;
+    var at = function (yr) { return ys.filter(function (y) { return y.year === yr; })[0]; };
+    var rRow = at(by + retire) || last;
+    var minY = ys.reduce(function (a, y) { return y.assets.deposit < a.assets.deposit ? y : a; }, ys[0]);
+    var spend0 = ys[0].expense.total - ys[0].expense.contributions.reduce(function (a, b) { return a + b; }, 0);
+    // 老後（家族１が働き終えた翌年から）：毎年の不足（支出−収入。投資の現金化は収入に入れない）
+    var old = ys.filter(function (y) { return y.year > by + retire; });
+    var gap = old.length ? old.reduce(function (t, y) { return t + (y.expense.total - (y.income.total - y.income.withdrawals.reduce(function (a, b) { return a + b; }, 0))); }, 0) / old.length : 0;
+    var living = toNum((state.living[0] || {}).amount);
+    var ref = BK.refByAge(state.startYear - by, state.family.length);
+    var hc = houseLoanOf(state) ? houseCheck(plan()) : null;
+    var eduPeak = ys.reduce(function (a, y) { return y.expense.education > a.expense.education ? y : a; }, ys[0]);
+    var kids = E.children(state).length, spouse = state.family.filter(function (m) { return m.relation === '家族２'; })[0];
+    var risk = null;
+    if (p1 && (spouse || kids)) {
+      var rk = riskOf();
+      var rr = E.riskShortfall(state, { memberId: p1.id, year: state.startYear });
+      risk = { need: rr.need, base: rr.baseNeed || 0, insurance: toNum(rk.insurance) };
+    }
+    var adds = 0;
+    Object.keys(state.invest || {}).forEach(function (a) { (state.invest[a].add || []).forEach(function (r) { if (toNum(r.amount) > 0 && toNum(r.year) <= state.startYear && toNum(r.toYear || r.year) >= state.startYear) adds += toNum(r.amount); }); });
+    var sfRow = sf ? at(sf.year) : null;
+    var yr = new Date().getFullYear(), bk = store.book.years[yr];
+    var bs = bk ? BK.summarize(bk) : null;
+    var v = { last: last, sf: sf, by: by, retire: retire, rRow: rRow, minY: minY, spend0: spend0, gap: gap, old: old.length, living: living, ref: ref, hc: hc,
+      eduPeak: eduPeak, kids: kids, risk: risk, adds: adds, sfInvest: sfRow ? sfRow.assets.investTotal : 0, book: bs, fix: sf ? fixOptions() : null };
+    rvMemo = { key: key, v: v };
+    return v;
+  }
+  function reviewHTML() {
+    if (!ui.review) return '<div class="rvbtn"><button class="btn big" onclick="A.review(true)">' + fpFace(28) + 'FPの講評を見る</button><span>プラン全体を見て、安心できる点・気をつける点・改善の順番をまとめます</span></div>';
+    var d = reviewData(), who = p1Name(), lv = [], todo = [];
+    var item = function (level, title, text) { lv.push(level); return '<div class="rvi ' + level + '"><div class="t">' + ic(level === 'ok' ? 'check' : 'warn', 16) + '<b>' + title + '</b></div><p>' + text + '</p></div>'; };
+    var h = '';
+    var endAge = d.last.age, end = d.last.assets.total;
+    // 1 老後のお金
+    if (d.sf) {
+      h += item(d.sf.age < 80 ? 'ng' : 'mid', d.sf.age <= d.retire ? 'これからのお金' : '老後のお金', who + 'が' + d.sf.age + '歳の' + d.sf.year + '年に貯金が足りなくなります。' +
+        (d.old ? '働き終えたあとは、年金などの収入では毎年約' + man(Math.max(0, d.gap)) + '万円足りず、貯金や投資を取り崩す計算です。' : '') +
+        (d.sf.age <= d.retire ? '働いているうちに足りなくなるので、早めの見直しが必要です。' : d.sf.age < 80 ? '老後の早い時期なので、今のうちに見直しておくのが安心です。' : '長生きに備える部分なので、すぐに大きく変えなくても、少しずつ手を打てば間に合います。'));
+    } else {
+      var rich = end >= Math.max(3000, d.spend0 * 8);
+      h += item('ok', '老後のお金', who + 'が' + endAge + '歳になるまで、貯金は足りる見込みです。' + endAge + '歳のときに残るお金は約' + man(end) + '万円。' +
+        (d.old ? '働き終えたあとは毎年約' + man(Math.max(0, d.gap)) + '万円を、貯金や投資から取り崩す計算です。' : '') +
+        (rich ? 'かなり余裕があるので、節約を頑張りすぎなくても大丈夫です。旅行や子供のことなど、大切なことにお金を使う余地があります。' : ''));
+    }
+    // 2 貯金がいちばん少ない時期
+    var half = d.minY.expense.living / 2;
+    if (!d.sf && d.minY.assets.deposit < half) {
+      h += item('mid', '貯金が少なくなる時期', d.minY.year + '年（' + who + ' ' + d.minY.age + '歳）に貯金が約' + man(d.minY.assets.deposit) + '万円まで減ります。生活費の半年分（約' + man(half) + '万円）より少なく、急な出費に弱い時期です。この前後の大きな出費（車・家・教育）の時期をずらせないか見てみましょう。');
+      todo.push('貯金が少なくなる' + d.minY.year + '年ごろの大きな出費の時期を見直す');
+    }
+    // 3 生活費
+    if (d.ref && d.living) {
+      var diff = Math.round((d.living - d.ref.basic) / d.ref.basic * 100);
+      var lvl = diff > 15 ? (d.sf ? 'ng' : 'mid') : 'ok';
+      h += item(lvl, '生活費（基本生活費）', '今の基本生活費は年' + man(d.living) + '万円（月' + (Math.round(d.living / 12 * 10) / 10) + '万円）。' + d.ref.label + 'の平均は年' + d.ref.basic + '万円なので、' +
+        (Math.abs(diff) <= 10 ? '平均的です。' : diff > 0 ? '平均より' + diff + '%高めです。' : '平均より' + (-diff) + '%低めで、上手にやりくりできています。') +
+        (diff > 15 && d.sf ? '足りなくなるプランなので、まずは生活費の見直しが効きます。食費・通信・保険・サブスクなど、毎月かかるものから見直すと続けやすいです。' : diff > 15 ? '今は足りる見込みですが、平均より多い分は将来の余裕を減らしています。' : '') +
+        '（' + BK.KAKEI.source + '）');
+      if (diff > 15 && d.sf) todo.push('基本生活費を見直す（平均より' + diff + '%高め' + (d.fix && d.fix.cut ? '。月' + penFmt(d.fix.cut.monthly) + '万円減らすと、最後まで足りる計算' : '') + '）');
+      else if (d.fix && d.fix.cut) todo.push('基本生活費を月' + penFmt(d.fix.cut.monthly) + '万円減らす（最後まで足りる計算）');
+    }
+    // 4 住まい
+    if (d.hc && d.hc.phases.length) {
+      var f = d.hc.phases[0], worst = d.hc.phases.reduce(function (a, x) { return x.ratio > a.ratio ? x : a; }, f);
+      var hl = worst.ratio <= 20 ? 'ok' : worst.ratio <= 25 ? 'mid' : 'ng';
+      h += item(hl, '住宅ローン', '手取りに対する返済の割合は' + Math.round(f.ratio) + '%' + (d.hc.phases[1] ? '（金利が上がると' + Math.round(d.hc.phases[1].ratio) + '%）' : '') + '。' +
+        (hl === 'ok' ? '一般的な範囲で、無理のない返済です。' : hl === 'mid' ? '一般的な目安（20%まで）より少し高めです。金利が上がったときや、収入が減ったときにも払えるかを確かめておきましょう。' : '25%を超えていて、家計が苦しくなりやすい水準です。家の値段や頭金、借りる年数を見直しましょう。') +
+        (d.hc.payoff.retire && d.hc.payoff.age > d.hc.payoff.retire ? '返し終わるのは' + d.hc.payoff.age + '歳で、働き終えたあとも返済が続きます。退職金での繰り上げ返済も考えておきましょう。' : '返し終わるのは' + d.hc.payoff.age + '歳です。'));
+      if (hl === 'ng') todo.push('家の値段・頭金・借りる年数を見直す（返済の割合' + Math.round(worst.ratio) + '%）');
+    } else if (!houseLoanOf(state) && d.last.expense.housing > 0) {
+      h += item('ok', '住まい', '今の住まいの費用は、' + endAge + '歳まで続く計算です（' + endAge + '歳のとき年' + man(d.last.expense.housing) + '万円）。賃貸なら老後も家賃が続くので、その分を老後のお金に見込んでおきましょう。');
+    }
+    // 5 教育費
+    if (d.kids && d.eduPeak.expense.education > 0) {
+      h += item(d.eduPeak.assets.deposit < 0 ? 'ng' : 'ok', '教育費', '教育費がいちばん多いのは' + d.eduPeak.year + '年（年' + man(d.eduPeak.expense.education) + '万円）。その年の貯金は約' + man(d.eduPeak.assets.deposit) + '万円です。' +
+        (d.eduPeak.assets.deposit < 0 ? '教育費の山で貯金が足りなくなります。進路（公立・私立）や、それまでの積み立てを見直しましょう。' : '教育費の山も乗り切れる見込みです。'));
+    }
+    // 6 万一の備え
+    if (d.risk) {
+      var need = Math.max(0, d.risk.need - d.risk.base), ins = d.risk.insurance;
+      h += item(ins >= need ? 'ok' : 'mid', '万一の備え（生命保険）', who + 'に今万一のことがあったとき、遺された家族に必要なお金（必要保障額）は約' + man(need) + '万円です' + (d.risk.base ? '（万一がなくても足りない分は除く）' : '') + '。' +
+        (ins ? '加入中の死亡保険金' + man(ins) + '万円で' + (ins >= need ? '足りています。' : 'は約' + man(need - ins) + '万円足りません。') : '加入中の保険を「保障」に入れると、足りるかがわかります。') +
+        '子供が大きくなるにつれて必要な額は減っていくので、保険も見直しどきがあります。');
+      if (ins && ins < need) todo.push('生命保険で、あと約' + man(need - ins) + '万円の備えを考える');
+    }
+    // 7 投資
+    if (d.sf && d.sfInvest >= 1) {
+      h += item('mid', '投資', d.sf.age + '歳のときに投資資産が約' + man(d.sfInvest) + '万円残っているのに、貯金が足りなくなります。投資から現金化する予定を入れると、足りるかもしれません（未来の表の「足りなくならないためには」）。');
+      todo.unshift('投資から現金化する（' + d.sf.age + '歳のとき投資資産が約' + man(d.sfInvest) + '万円）');
+    } else if (d.adds > 0) {
+      h += item('ok', '投資', '年' + man(d.adds) + '万円（月' + (Math.round(d.adds / 12 * 10) / 10) + '万円）を積み立てる計画です。長く続けるほど増える力が大きくなります。値下がりの年があっても、続けることが大切です。');
+    }
+    // 8 これから
+    var bkText = d.book && d.book.recorded
+      ? '家計簿は今年' + d.book.recorded + 'か月分の記録があります' + (d.book.closed ? '（確定' + d.book.closed + 'か月）' : '') + '。この調子で続けて、1年分そろったら実績からプランを作り直しましょう。'
+      : '家計簿を月に1回つけると、実際のお金の流れでプランを確かめられます。';
+    h += item('ok', 'これから続けること', bkText + 'プランは、年に1回（年末や誕生日など）と、転職・出産・住宅購入など大きな出来事のときに見直すと、ずっと役に立ちます。');
+    // 総合評価
+    var ng = lv.filter(function (x) { return x === 'ng'; }).length, mid = lv.filter(function (x) { return x === 'mid'; }).length;
+    var grade = d.sf && d.sf.age < 80 ? ['ng', '要見直し', 'このままでは途中でお金が足りなくなります。でも、早く気づけたのはよいことです。下の「改善するなら」から、できることを1つずつ試してみましょう。']
+      : d.sf || ng ? ['mid', '注意', '大きな問題はありませんが、気をつけたい点があります。下の内容を確かめて、早めに手を打っておくと安心です。']
+      : mid ? ['ok', 'おおむね安心', '全体としてバランスのよいプランです。気をつけたい点を確かめておけば、さらに安心です。']
+      : ['ok', '安心', '収入・支出・貯金のバランスがとれた、安心できるプランです。今の暮らしを続けながら、年に1回見直していきましょう。'];
+    return '<div class="card review" id="review">' +
+      '<div class="rvhead">' + fpFace(44) + '<div><div class="k">FPの講評</div><div class="g ' + grade[0] + '">' + grade[1] + '</div></div>' +
+        '<button class="del" aria-label="講評を閉じる" onclick="A.review(false)">' + ic('close', 20) + '</button></div>' +
+      '<p class="rvsum">' + grade[2] + '</p>' + h +
+      (todo.length ? '<div class="rvtodo"><div class="k">改善するなら（効きそうな順）</div><ol>' + todo.slice(0, 4).map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ol></div>' : '') +
+      '<div class="hint" style="padding:8px 0 0">この講評は、入力した数字から自動でまとめた目安です。大切な判断の前には、専門家にもご相談ください。</div>' +
+    '</div>';
+  }
+  A.review = function (on) {
+    ui.review = !!on;
+    if (on) { ui.view = 'cf'; render(); var el = document.getElementById('review'), sc = document.getElementById('scroll'); if (el && sc) sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 8; }
+    commit();
+  };
 
   // 結果をひとことで（未来の表のいちばん上）
   function verdictHTML(last, sf) {

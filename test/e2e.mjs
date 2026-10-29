@@ -942,7 +942,7 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
   // 入力の最後から、未来の表・保障へ進める
   await go(fp, '#seg-input');
   const endBtns = await fp.$$eval('footer.done .btn', (els) => els.map((e) => e.textContent));
-  check('入力画面の最後に「未来の表を見る」「もしもの保障を見る」がある', JSON.stringify(endBtns) === '["未来の表を見る","もしもの保障を見る"]', `${endBtns}`);
+  check('入力画面の最後に「未来の表を見る」「もしもの保障を見る」「FPの講評を見る」がある', JSON.stringify(endBtns) === '["未来の表を見る","もしもの保障を見る","FPの講評を見る"]', `${endBtns}`);
   // 保障：いつものプランでも足りない分を分けて示す（基本生活費を年60万円ずつ増やしたプラン）
   await fp.evaluate(() => {
     const st = window.LifePlanSample.sample(); st.living.forEach((r) => { r.amount += 60; });
@@ -1137,6 +1137,39 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
   await bp.locator('.vbanner.remind button.del').tap(); await bp.waitForTimeout(150);
   check('毎月の記録の案内：先月が確定していなければ未来の表の上で知らせ、家計簿のその月へ行ける。閉じられる',
     new RegExp(pm + '月の家計簿がまだ確定していません').test(remind) && onMonth.startsWith(pm + '月') && (await bp.locator('.vbanner.remind').count()) === 0, `${remind} / ${onMonth}`);
+  await c.close();
+}
+
+// FPの講評：未来の表のボタンで開き、評価・項目・改善の順番が出る
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
+  const rp = await c.newPage();
+  rp.on('pageerror', (e) => errors.push(e.message));
+  await rp.goto(url);
+  const put = (add) => rp.evaluate((add) => {
+    const st = window.LifePlanSample.sample();
+    st.living.forEach((r) => { r.amount += add; });
+    localStorage.setItem('lifeplan.v2', JSON.stringify({ version: 2, activeId: 1, nextPlanId: 2, plans: [{ id: 1, name: 'プラン1', state: st }], prefs: { yearMode: 'year', welcomed: true }, book: { years: {}, nextId: 1 } }));
+  }, add);
+  await put(0); await rp.reload();
+  await go(rp, '#seg-cf'); await rp.waitForSelector('.rvbtn');
+  await rp.locator('.rvbtn .btn').tap(); await rp.waitForSelector('#review');
+  const g1 = await rp.textContent('#review .rvhead .g');
+  const t1 = await rp.$$eval('#review .rvi .t b', (els) => els.map((e) => e.textContent));
+  const r1 = (await rp.textContent('#review')).replace(/\s+/g, '');
+  await rp.screenshot({ path: `${shots}/review-ok.png` });
+  check('FPの講評：足りるプランは「安心」系の評価で、老後・生活費（平均との比較）・住宅ローン・これから続けることが出る',
+    /安心/.test(g1) && ['老後のお金', '生活費（基本生活費）', '住宅ローン', 'これから続けること'].every((x) => t1.includes(x)) && /家計調査/.test(r1) && /返済の割合/.test(r1) && (await rp.locator('#review .rvtodo').count()) === 0, `${g1} / ${t1}`);
+  await rp.locator('#review button.del').tap(); await rp.waitForTimeout(150);
+  check('講評は閉じるとボタンに戻る', (await rp.locator('#review').count()) === 0 && (await rp.locator('.rvbtn').count()) === 1);
+  await put(80); await rp.reload();
+  await go(rp, '#seg-cf'); await rp.waitForSelector('.rvbtn');
+  await rp.locator('.rvbtn .btn').tap(); await rp.waitForSelector('#review');
+  const g2 = await rp.textContent('#review .rvhead .g');
+  const todo = await rp.$$eval('#review .rvtodo li', (els) => els.map((e) => e.textContent));
+  await rp.screenshot({ path: `${shots}/review-ng.png` });
+  check('足りなくなるプランは「要見直し」で、改善するなら（投資の現金化・生活費の見直し）が出る',
+    g2.trim() === '要見直し' && todo.length >= 2 && /現金化/.test(todo[0]) && todo.some((t) => /基本生活費を見直す.*最後まで足りる/.test(t)), `${g2} / ${todo.join(' | ')}`);
   await c.close();
 }
 
