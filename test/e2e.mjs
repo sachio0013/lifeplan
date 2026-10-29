@@ -1095,8 +1095,8 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
   const budTotals = (await bp.textContent('.bkbud .yeartotals')).replace(/\s+/g, '');
   await bp.locator('.bkref .btn').tap(); await bp.waitForTimeout(200);
   const ref = (await bp.textContent('.bkref')).replace(/\s+/g, '');
-  check('予算：家計調査（2024年12月）の基本生活費の平均（世帯主の年齢・人数、世帯年収）を示し、ボタンで基本生活費の予算をその平均にできる',
-    /世帯主35〜44歳・4人の世帯年339万円/.test(ref) && /世帯年収[\d,〜]+万円の世帯/.test(ref) && /この予算の基本生活費年339万円/.test(ref), ref.slice(0, 160));
+  check('予算：家計調査（2025年）の基本生活費の平均（世帯主の年齢・人数、世帯年収）を示し、ボタンで基本生活費の予算をその平均にできる',
+    /世帯主35〜44歳・4人の世帯年323万円/.test(ref) && /世帯年収[\d,〜]+万円の世帯/.test(ref) && /この予算の基本生活費年323万円/.test(ref), ref.slice(0, 160));
   const firstIn = await bp.inputValue('#bkg-1 .bkbrow input');
   await bp.locator('#bkg-1 .bkbrow .linkbtn').first().tap(); await bp.waitForTimeout(150);
   const cellId = await bp.$eval('#bkg-1 .bkbgrid input[id$="-6"]', (e) => e.id);

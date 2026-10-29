@@ -231,14 +231,19 @@ test('予算：1つの月の金額をほかの月にも入れる・見込みは�
   assert.deepEqual(y2.items[0].m, Array(12).fill(''));
 });
 
-test('家計調査（2024年12月、excelcf.netの表）：世帯主の年齢と人数、世帯年収から基本生活費の平均', () => {
-  assert.deepEqual(B.refByAge(38, 4), { label: '世帯主35〜44歳・4人の世帯', basic: 339, housing: 12, edu: 16, insurance: 34, car: 25 });
-  assert.equal(B.refByAge(30, 3).basic, 283);
-  assert.equal(B.refByAge(70, 6).basic, 488);         // 5人以上
+test('家計調査（2025年、excelcf.netの記事と同じ作り方）：世帯主の年齢と人数、世帯年収から基本生活費の平均', () => {
+  assert.deepEqual(B.refByAge(38, 4), { label: '世帯主35〜44歳・4人の世帯', basic: 323, housing: 18, edu: 24, insurance: 34, car: 37 });
+  assert.equal(B.refByAge(30, 3).basic, 256);
+  assert.equal(B.refByAge(70, 6).basic, 354);         // 5人以上
   assert.equal(B.refByAge(40, 1), null);              // ひとり暮らしの表はない
-  assert.equal(B.refByIncome(620).basic, 346);
+  assert.equal(B.refByIncome(620).basic, 290);
   assert.equal(B.refByIncome(620).label, '世帯年収600〜650万円の世帯');
-  assert.equal(B.refByIncome(1600).basic, 624);
+  assert.equal(B.refByIncome(1600).basic, 540);
+  // 年収が上がるほど基本生活費も上がる（年平均なので月ごとのぶれが少ない）
+  const inc = B.KAKEI.byIncome.map((r) => r[2][0]);
+  assert.ok(inc.every((v, k) => k === 0 || v >= inc[k - 1]), inc.join(','));
+  // 割合の合計は1
+  assert.ok(Math.abs(B.BASIC_SHARES.reduce((t, x) => t + x[1], 0) - 1) < 0.002);
   // 基本生活費の予算を平均（年339万円）にする
   const y = B.newYear({ years: {}, nextId: 1 });
   B.setBasicBudget(y, 339);
