@@ -60,8 +60,9 @@
     var id = function () { return book.nextId++; };
     if (prev) {
       return {
-        items: prev.items.map(function (it) { return { id: id(), name: it.name, cat: it.cat, pay: it.pay, day: it.day, m: blank12() }; }),
-        incomes: prev.incomes.map(function (r) { return { id: id(), name: r.name, kind: r.kind, m: blank12() }; }),
+        // 予算は前の年の予算を引き継ぐ（なければ空）
+        items: prev.items.map(function (it) { return { id: id(), name: it.name, cat: it.cat, pay: it.pay, day: it.day, m: blank12(), b: it.b ? it.b.slice() : blank12() }; }),
+        incomes: prev.incomes.map(function (r) { return { id: id(), name: r.name, kind: r.kind, m: blank12(), b: r.b ? r.b.slice() : blank12() }; }),
         notes: blank12(),
         accounts: prev.accounts.map(function (a) {
           var last = ''; for (var i = 11; i >= 0; i--) if (filled(a.m[i])) { last = a.m[i]; break; }
@@ -71,10 +72,10 @@
       };
     }
     return {
-      items: STARTER.map(function (s) { return { id: id(), name: s[0], cat: s[1], pay: s[2], day: '', m: blank12() }; }),
-      incomes: STARTER_INCOME.map(function (s) { return { id: id(), name: s[0], kind: s[1], m: blank12() }; }),
+      items: STARTER.map(function (s) { return { id: id(), name: s[0], cat: s[1], pay: s[2], day: '', m: blank12(), b: blank12() }; }),
+      incomes: STARTER_INCOME.map(function (s) { return { id: id(), name: s[0], kind: s[1], m: blank12(), b: blank12() }; }),
       notes: blank12(),
-      accounts: [{ id: id(), name: '普通預金', start: '', m: blank12() }],
+      accounts: [{ id: id(), name: '●●銀行①', start: '', m: blank12() }, { id: id(), name: '●●銀行②', start: '', m: blank12() }, { id: id(), name: '●●証券', start: '', m: blank12() }],
       invests: [{ id: id(), name: 'NISA', start: '', end: '' }, { id: id(), name: 'iDeCo', start: '', end: '' }]
     };
   }
@@ -154,9 +155,15 @@
       // 口座残高がすべて入っている月だけ、記録との差額を出す
       var actual = y.accounts.length && y.accounts.every(function (a) { return filled(a.m[i]); })
         ? y.accounts.reduce(function (s, a) { return s + num(a.m[i]); }, 0) : null;
+      var bExp = bExpenseAt(y, i), bInc = bIncomeAt(y, i), bCats = {};
+      CATS.forEach(function (c) { bCats[c.no] = bCatAt(y, i, c.no); });
+      var rec = recordedAt(y, i), closed = !!(y.closed && y.closed[i]);
       months.push({
         index: i, expense: exp, income: inc, deducted: deductedAt(y, i), balance: bal, running: running, cats: cats,
-        recorded: recordedAt(y, i), actual: actual, diff: actual == null ? null : running - actual
+        recorded: rec, actual: actual, diff: actual == null ? null : running - actual,
+        bExpense: bExp, bIncome: bInc, bBalance: bInc - bExp, bCats: bCats, closed: closed,
+        // 見込み：確定した月か記録のある月は実績、それ以外は予算
+        fBalance: closed || rec ? bal : bInc - bExp
       });
     }
     var byPay = {};
@@ -177,8 +184,117 @@
       byPay: byPay,
       startTotal: startTotal(y),
       recorded: months.filter(function (m) { return m.recorded; }).length,
-      matched: months.filter(function (m) { return m.diff != null && Math.abs(m.diff) < 1; }).length
+      matched: months.filter(function (m) { return m.diff != null && Math.abs(m.diff) < 1; }).length,
+      bExpense: sum(months.map(function (m) { return m.bExpense; })),
+      bIncome: sum(months.map(function (m) { return m.bIncome; })),
+      bBalance: sum(months.map(function (m) { return m.bBalance; })),
+      fBalance: sum(months.map(function (m) { return m.fBalance; })),
+      closed: months.filter(function (m) { return m.closed; }).length,
+      hasBudget: hasBudget(y)
     };
+  }
+
+  // ---- 予算（予算→実績） ----
+  //
+  // 年のはじめに、項目ごとに12か月分の予算（b、円）を入れ、毎月の実績（m）とくらべる。
+  // 月の記録が終わったら確定する（y.closed[月]、会社の月締めと同じ。取り消せる）。
+
+  function bAt(row, i) { return row.b ? num(row.b[i]) : 0; }
+  function bExpenseAt(y, i) { return y.items.reduce(function (s, it) { return s + bAt(it, i); }, 0); }
+  function bDeductedAt(y, i) { return y.items.reduce(function (s, it) { return s + (it.pay === DEDUCTED ? bAt(it, i) : 0); }, 0); }
+  function bIncomeAt(y, i) { return y.incomes.reduce(function (s, r) { return s + bAt(r, i); }, 0) + bDeductedAt(y, i); }
+  function bCatAt(y, i, no) { return y.items.reduce(function (s, it) { return s + (it.cat === no ? bAt(it, i) : 0); }, 0); }
+  function hasBudget(y) {
+    var any = function (r) { return !!r.b && r.b.some(function (v) { return num(v) !== 0; }); };
+    return y.items.some(any) || y.incomes.some(any);
+  }
+
+  // 基本生活費を項目に分ける割合。総務省「家計調査」（2024年・二人以上の世帯）の費目の構成をもとにした目安
+  // （食料と家具・家事用品→食費・日用品、光熱・水道、通信、教養娯楽、被服及び履物、保健医療、こづかい、その他）
+  var BASIC_SHARES = [
+    [/食|日用/, 0.41], [/こづかい|小遣/, 0.06], [/通信|携帯|スマホ|ネット/, 0.05], [/電気|ガス|水道|光熱/, 0.09],
+    [/娯楽|レジャー|趣味|旅行/, 0.12], [/被服|衣|服/, 0.04], [/医療|病院|薬/, 0.06], [/その他/, 0.17]
+  ];
+  var r100 = function (v) { return Math.round(v / 100) * 100; };
+  function setEven(row, yen) { row.b = blank12().map(function () { return r100(yen / 12); }); }
+
+  // ライフプランのその年の金額（万円）から予算を作る。
+  // p = { living, housing, housingLoan, edu, insurance, car, carBuy, invest, sal1, sal2 }
+  // 区分の中の項目には、基本生活費は上の割合で、住宅費は返済と管理費等に、ほかは区分の最初の項目に入れる。
+  // 給与は家族１が月の手取り×12＋ボーナス（6月と12月に1か月分ずつ）＝年の手取り、家族２は12等分。入れられなかった区分を返す
+  function budgetFromPlan(y, p) {
+    var yen = function (man) { return num(man) * 10000; };
+    var missed = [];
+    y.items.forEach(function (it) { it.b = blank12(); });
+    CATS.forEach(function (c) {
+      var rows = y.items.filter(function (it) { return it.cat === c.no; });
+      var total = yen({ 1: p.living, 2: p.housing, 3: p.edu, 4: p.insurance, 5: num(p.car) - num(p.carBuy), 6: p.invest }[c.no]);
+      if (!rows.length) { if (total > 0) missed.push(c.label); return; }
+      if (c.no === 1) {
+        var w = rows.map(function (it) {
+          for (var k = 0; k < BASIC_SHARES.length; k++) if (BASIC_SHARES[k][0].test(it.name)) return { k: k, w: BASIC_SHARES[k][1] };
+          return { k: -1, w: 0.03 };
+        });
+        // 同じ費目に当たる項目が複数あれば（現金とカードなど）、割合を分け合う
+        w.forEach(function (x) { if (x.k >= 0) x.w /= w.filter(function (z) { return z.k === x.k; }).length; });
+        var tw = w.reduce(function (a, x) { return a + x.w; }, 0);
+        rows.forEach(function (it, k) { setEven(it, total * w[k].w / tw); });
+      } else if (c.no === 2) {
+        var up = rows.filter(function (it) { return /管理|固定資産|修繕/.test(it.name); });
+        var main = rows.filter(function (it) { return up.indexOf(it) < 0; });
+        var loan = num(p.housingLoan) > 0 ? yen(p.housingLoan) : total;
+        if (main.length) setEven(main[0], up.length ? loan : total);
+        if (up.length) setEven(up[0], main.length ? Math.max(0, total - loan) : total);
+      } else {
+        setEven(rows[0], total);
+      }
+    });
+    // 車の買い替えは4月にまとめて
+    if (num(p.carBuy) > 0) {
+      var car = y.items.filter(function (it) { return it.cat === 5; })[0];
+      if (car) car.b[3] = num(car.b[3]) + yen(p.carBuy); else missed.push('車の買い替え');
+    }
+    y.incomes.forEach(function (r) { if (r.kind !== 'other') r.b = blank12(); else if (!r.b) r.b = blank12(); });
+    var first = function (kind) { return y.incomes.filter(function (r) { return r.kind === kind; })[0]; };
+    var s1 = yen(p.sal1), s2 = yen(p.sal2);
+    if (s1 > 0) {
+      var b1 = first('bonus1'), m1 = first('sal1');
+      var per = b1 ? s1 / 14 : s1 / 12;
+      if (m1) m1.b = blank12().map(function () { return r100(per); }); else missed.push('家族１の給与');
+      if (b1) { b1.b[5] = r100(per); b1.b[11] = r100(per); }
+    }
+    if (s2 > 0) { var m2 = first('sal2'); if (m2) m2.b = blank12().map(function () { return r100(s2 / 12); }); else missed.push('家族２の給与'); }
+    return missed;
+  }
+
+  // ある月の予算を、ほかの11か月にも入れる
+  function copyBudget(row, from) {
+    if (!row.b) row.b = blank12();
+    var v = row.b[from];
+    row.b = blank12().map(function () { return v; });
+  }
+
+  // 月を確定したときのひとこと：収支・収入・支出の予算との差と、予算をいちばん超えた項目・いちばん下回った項目
+  function monthReview(y, i) {
+    var s = summarize(y), m = s.months[i];
+    var byName = function (f) {
+      var o = {};
+      y.items.forEach(function (it) { if (it.cat !== 6) o[it.name] = (o[it.name] || 0) + f(it); });
+      return o;
+    };
+    var act = byName(function (it) { return num(it.m[i]); }), bud = byName(function (it) { return bAt(it, i); });
+    var d = Object.keys(act).map(function (n) { return { name: n, d: act[n] - (bud[n] || 0) }; });
+    d.sort(function (a, b) { return b.d - a.d; });
+    var over = d[0] && d[0].d >= 1000 ? d[0] : null;
+    var under = d.length && d[d.length - 1].d <= -1000 ? d[d.length - 1] : null;
+    return { balance: m.balance - m.bBalance, income: m.income - m.bIncome, expense: m.expense - m.bExpense, over: over, under: under, hasBudget: s.hasBudget, diff: m.diff };
+  }
+
+  // 総務省「家計調査」2024年（二人以上の世帯）、世帯主の年齢階級別の消費支出（1か月平均・円）
+  var CONSUMPTION_2024 = [[40, '40歳未満', 280451], [50, '40〜49歳', 331134], [60, '50〜59歳', 356946], [70, '60〜69歳', 311392], [999, '70歳以上', 252781]];
+  function consumptionByAge(age) {
+    for (var k = 0; k < CONSUMPTION_2024.length; k++) if (age < CONSUMPTION_2024[k][0]) return { label: CONSUMPTION_2024[k][1], yen: CONSUMPTION_2024[k][2] };
+    return null;
   }
 
   // ---- ライフプランへ ----
@@ -383,6 +499,7 @@
     PAY_ITEMS: PAY_ITEMS, DEDUCT_ITEMS: DEDUCT_ITEMS, SLIP_LABELS: SLIP_LABELS,
     newPay: newPay, blankSlip: blankSlip, slipFilled: slipFilled, slipTotals: slipTotals, paySummary: paySummary, payInsights: payInsights, samplePay: samplePay,
     num: num, filled: filled, newYear: newYear, sampleYear: sampleYear,
-    summarize: summarize, toPlan: toPlan, reliability: reliability, insights: insights
+    summarize: summarize, toPlan: toPlan, reliability: reliability, insights: insights,
+    budgetFromPlan: budgetFromPlan, copyBudget: copyBudget, monthReview: monthReview, hasBudget: hasBudget, consumptionByAge: consumptionByAge, BASIC_SHARES: BASIC_SHARES
   };
 }));

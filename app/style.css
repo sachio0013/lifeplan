@@ -710,3 +710,38 @@ table.cf.bk td.okc { color: var(--good); font-weight: 900; }
 
 .wzskip { text-align: center; margin: 10px 0 2px; }
 .linkbtn { border: none; background: none; padding: 10px 8px; min-height: 44px; color: var(--accent-ink); font: inherit; font-size: 14px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+/* 家計簿：編集ボタン（区分ごと）・予算・月の確定 */
+.grpedit { text-align: center; border-top: 1px solid var(--line); margin-top: 2px; }
+.grpedit .linkbtn { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; text-decoration: none; }
+.linkbtn.sm { font-size: 13px; padding: 4px 0; min-height: 36px; }
+input.yen[readonly] { background: var(--surface-2); color: var(--text-muted); }
+.bkmonths button.closed { font-weight: 900; }
+.bkmonths .ok.cl { background: var(--accent-ink); }
+.bkbud p { margin: 8px 0 10px; font-size: 13.5px; line-height: 1.75; }
+.bkbud .gh { display: flex; align-items: center; gap: 10px; }
+.bkbud .gh .t { font-size: 15.5px; font-weight: 900; color: var(--accent-ink); }
+.bkbbtns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.bkbrow { padding: 4px 0 6px; }
+.bkbrow > .bkrow { border: none; padding-bottom: 0; }
+.bkbrow .u.pre { margin-left: auto; margin-right: 6px; }
+.bkvar { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--text-muted); }
+.bkbgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 8px; }
+.bkbcell { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; font-weight: 700; color: var(--text-muted); }
+.bkbcell input { width: 100%; min-width: 0; }
+.bkbcopy { font-size: 13px; padding: 8px 12px; min-height: 40px; margin-bottom: 4px; }
+.bkclose p { margin: 6px 0 10px; font-size: 13.5px; line-height: 1.75; }
+.bkclose .btn.block { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; }
+.bkclosed .ch { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text-muted); }
+.bkclosed .ch .linkbtn { margin-left: auto; font-size: 13px; min-height: 36px; padding: 4px 0; }
+.bkclosed .t { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.bkclosed .t b { font-size: 17px; font-weight: 900; }
+.bkclosed.ok .t .ic { color: var(--sage); }
+.bkclosed.ng .t .ic { color: #c98500; }
+.bkclosed p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.75; }
+.bkyeardone { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; padding: 12px; border-radius: 14px; background: var(--sage-soft); font-size: 13.5px; line-height: 1.7; }
+.bkyeardone span { flex: 1 1 200px; }
+.bkbudyear .bkrow b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.vbanner.remind .del { margin: 0 0 0 auto; }
+.bkmodes button { white-space: nowrap; padding-left: 2px; padding-right: 2px; font-size: 13px; }
+.bkclose .h3, .bkbudyear .h3 { margin: 0 0 4px; font-size: 15px; font-weight: 900; }

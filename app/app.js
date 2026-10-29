@@ -81,7 +81,7 @@
     help: '',          // 開いている「？」の説明
     thDef: false,      // 手取り計算の「手取りに含めるもの・含めないもの」を開いているか
     thMore: 0,         // 手取り計算の「細かく設定」を開いている給与の id
-    book: { year: new Date().getFullYear(), month: new Date().getMonth(), mode: 'month', edit: false, picks: {}, target: 0,  // 家計簿の表示
+    book: { year: new Date().getFullYear(), month: new Date().getMonth(), mode: 'month', edit: false, picks: {}, target: 0, bOpen: {}, bLast: {}, bAsk: '', closeAsk: -1,  // 家計簿の表示
       slip: new Date().getMonth(), who: '1' },  // 給与明細：表示している明細（0〜11が月、12・13が夏・冬の賞与）と、だれの明細か
     active: 'basic',
     openMember: 0,
@@ -906,7 +906,7 @@
       h += '<div class="vbanner">' + ic('warn', 18) + '<span>確認が必要な入力が ' + issueCount + ' 件あります</span>' +
         '<button class="btn" onclick="A.firstIssue()">見る</button></div>';
     }
-    h += noticeHTML();
+    h += noticeHTML() + remindHTML();
     h += '<div class="hint inlead">ここでは、入れた内容をくわしく直せます。直すとすぐ「未来の表」に反映されます。わからない欄は「？」を押すと説明が出ます。金額は年額・万円です（月の額も横に出ます）。</div>';
     h += guideHTML();
     if (ageMode()) h += '<div class="hint" style="padding:8px 2px 0">年の欄は家族１の年齢で入れます（給与はその人の、教育費はその子の年齢）。保存は西暦です。</div>';
@@ -1154,7 +1154,7 @@
     var basis = state.bookBasis;
     var basisRel = basis ? window.LifePlanBook.reliability(basis.months, basis.matched) : null;
     return (basis ? '<button class="basis lv' + basisRel.level + '" onclick="A.view(\'book\')">' + ic('book', 18) + '<span>家計簿（' + basis.year + '年・' + basis.months + 'か月分）の実績にもとづくプラン<b>信頼度：' + basisRel.label + '</b></span></button>' : '') +
-      verdictHTML(last, sf) +
+      remindHTML() + verdictHTML(last, sf) +
       '<div class="hero"><div class="k">' + who + 'が' + last.age + '歳（' + last.year + '年）のときに残るお金</div>' +
         '<div class="v">' + man(result.endTotal) + '<small> 万円</small></div>' +
         '<div class="note">貯金と投資の合計（うち普通預金等 ' + man(last.assets.deposit) + '万円・投資資産 ' + man(last.assets.investTotal) + '万円）</div></div>' +
@@ -2444,7 +2444,7 @@
 
   function bookHeaderHTML() {
     var y = bookYear(), s = y ? BK.summarize(y) : null;
-    var modes = [['month', '月ごと'], ['pay', '給与明細'], ['year', '1年の表'], ['plan', 'プランへ']];
+    var modes = [['month', '月ごと'], ['budget', '予算'], ['pay', '給与明細'], ['year', '1年の表'], ['plan', 'プランへ']];
     var pay = y && ui.book.mode === 'pay' ? payOf(y) : null;
     return '<div class="bkhead">' +
       '<div class="bkyear">' +
@@ -2457,9 +2457,9 @@
         return '<button role="tab" aria-selected="' + on + '"' + (on ? ' class="on"' : '') + ' onclick="A.bkMode(\'' + m[0] + '\')">' + m[1] + '</button>';
       }).join('') + '</div>' : '') +
       (y && ui.book.mode === 'month' ? '<div class="bkmonths" role="tablist" aria-label="月">' + MONTHS.map(function (label, i) {
-        var on = ui.book.month === i, rec = s.months[i].recorded, ok = s.months[i].diff != null && Math.abs(s.months[i].diff) < 1;
-        return '<button role="tab" id="bkm-' + i + '" aria-selected="' + on + '" class="' + (on ? 'on' : '') + (rec ? ' rec' : '') + '" onclick="A.bkMonth(' + i + ')">' +
-          label + (ok ? '<span class="ok" aria-label="残高と一致">' + ic('check', 11) + '</span>' : rec ? '<span class="dot" aria-label="記録あり"></span>' : '') + '</button>';
+        var on = ui.book.month === i, rec = s.months[i].recorded, ok = s.months[i].diff != null && Math.abs(s.months[i].diff) < 1, cl = s.months[i].closed;
+        return '<button role="tab" id="bkm-' + i + '" aria-selected="' + on + '" class="' + (on ? 'on' : '') + (rec ? ' rec' : '') + (cl ? ' closed' : '') + '" onclick="A.bkMonth(' + i + ')">' +
+          label + (cl ? '<span class="ok cl" aria-label="確定済み">' + ic('lock', 10) + '</span>' : ok ? '<span class="ok" aria-label="残高と一致">' + ic('check', 11) + '</span>' : rec ? '<span class="dot" aria-label="記録あり"></span>' : '') + '</button>';
       }).join('') + '</div>' : '') +
       (y && ui.book.mode === 'pay' ? '<div class="mini thsp bkwho" role="radiogroup" aria-label="だれの給与明細か">' + ['1', '2'].map(function (k) {
         var on = ui.book.who === k;
@@ -2515,31 +2515,182 @@
       '<text x="35" y="39" text-anchor="middle">' + p + '%</text></svg>';
   }
 
+  // 区分のカードの下に置く「編集する」ボタン（押すと、すべての区分が編集の表示になる）
+  function grpEdit(gid, label) {
+    var edit = ui.book.edit;
+    return '<div class="grpedit"><button class="linkbtn" aria-pressed="' + edit + '" onclick="A.bkEdit(\'' + gid + '\')">' + ic(edit ? 'check' : 'tune', 16) + (edit ? '編集を終える' : label) + '</button></div>';
+  }
+  function monthClosed() { var y = bookYear(); return !!(y && y.closed && y.closed[ui.book.month]); }
+
+  // ---- 月の確定（月締め） ----
+  function reviewText(y, i) {
+    var r = BK.monthReview(y, i), m = BK.summarize(y).months[i];
+    var sg = function (v) { return (v >= 0 ? '＋' : '−') + yen(Math.abs(v)); };
+    var lines = [];
+    var head = r.hasBudget
+      ? (Math.abs(r.balance) < 1 ? MONTHS[i] + 'は予算どおりでした！' : r.balance > 0 ? MONTHS[i] + 'は予算より' + sg(r.balance) + '円でした！' : MONTHS[i] + 'は予算より' + sg(r.balance) + '円でした。')
+      : MONTHS[i] + 'の収支は' + sg(m.balance) + '円でした。';
+    if (r.hasBudget) {
+      lines.push('収入は予算より' + sg(r.income) + '円、支出は予算より' + sg(r.expense) + '円。');
+      if (r.over) lines.push('いちばん予算を超えたのは「' + esc(r.over.name) + '」（' + sg(r.over.d) + '円）。');
+      if (r.under) lines.push('いちばん予算より少なかったのは「' + esc(r.under.name) + '」（' + sg(r.under.d) + '円）。');
+    } else lines.push('「予算」で1年の予算を入れると、予算とくらべられます。');
+    if (r.diff != null) lines.push(Math.abs(r.diff) < 1 ? '記録と口座の残高がぴったり一致しています。' : '記録と口座の残高が' + yen(Math.abs(r.diff)) + '円ずれています。');
+    return { head: head, good: !r.hasBudget || r.balance >= 0, lines: lines };
+  }
+  function closedHTML(y, s, i) {
+    if (!s.months[i].closed) return '';
+    var t = reviewText(y, i);
+    return '<div class="card bkclosed ' + (t.good ? 'ok' : 'ng') + '"><div class="ch">' + ic('lock', 16) + '<span>' + MONTHS[i] + 'は確定済みです</span>' +
+        '<button class="linkbtn" onclick="A.bkReopen()">確定を取り消す</button></div>' +
+      '<div class="t">' + ic(t.good ? 'check' : 'warn', 18) + '<b>' + t.head + '</b></div><p>' + t.lines.join('') + '</p>' +
+      (s.closed === 12 ? '<div class="bkyeardone">' + ic('chart', 18) + '<span><b>1年分そろいました！</b>この1年の実績から、ライフプランを作り直しましょう。未来の見通しがぐっと確かになります。</span>' +
+        '<button class="btn" onclick="A.bkMode(\'plan\')">実績をプランへ</button></div>' : '') +
+    '</div>';
+  }
+  function closeCardHTML(y, s, i) {
+    var m = s.months[i];
+    if (m.closed) return '';
+    var off = m.diff != null && Math.abs(m.diff) >= 1;
+    return '<div class="card bkclose"><h2 class="h3">' + MONTHS[i] + 'の締め（確定）</h2>' +
+      '<p>' + MONTHS[i] + 'の記録が終わったら確定します。会社の月締めと同じで、確定すると金額を変えられなくなり（取り消せます）、予算とくらべたひとことが出ます。</p>' +
+      (off ? '<div class="vmsg warn">' + ic('warn', 15) + '<span>記録と口座の残高が' + yen(Math.abs(m.diff)) + '円ずれています。記録の漏れを見つけて、差額を0にしてから確定するのがおすすめです。</span></div>' : '') +
+      (!m.recorded ? '<div class="hint" style="padding:6px 0 0">まだこの月の記録がありません。</div>' : '') +
+      (ui.book.closeAsk === i
+        ? '<div class="plconfirm ok"><span>残高とずれたまま確定しますか？</span><button class="btn" onclick="A.bkClose(true)">確定する</button><button class="btn ghost" onclick="A.bkCloseNo()">やめる</button></div>'
+        : '<button class="btn block" onclick="A.bkClose(false)"' + (m.recorded ? '' : ' disabled') + '>' + ic('lock', 16) + MONTHS[i] + 'を確定する</button>') +
+    '</div>';
+  }
+  // 予算が入っていて実績が空いている欄に、予算の金額を入れる（予算どおりだった項目をまとめて入れられる）
+  function fillBudget(y, s, i) {
+    if (s.months[i].closed || ui.book.edit) return '';
+    var n = y.items.concat(y.incomes).filter(function (r) { return r.b && BK.filled(r.b[i]) && BK.num(r.b[i]) !== 0 && !BK.filled(r.m[i]); }).length;
+    return n ? '<button class="btn ghost bkcopy" onclick="A.bkFillBudget()">' + ic('copy', 18) + '予算の金額を、空いている欄に入れる（' + n + '項目）</button>' : '';
+  }
+
+  // ---- 予算（1年分） ----
+  // 表示中のプランの、家計簿の年の金額（万円）
+  function planYearNums(st, year) {
+    var r = E.compute(st), y = r.years.filter(function (x) { return x.year === year; })[0];
+    if (!y) return null;
+    var who = function (rel) { var m = st.family.filter(function (f) { return f.relation === rel; })[0]; return m ? m.id : -1; };
+    var sal = function (rel) { var t = 0; st.salaries.forEach(function (sl, k) { if (sl.memberId === who(rel)) t += y.income.salaries[k] || 0; }); return t; };
+    var rows = st.housing.filter(function (h) { return toNum(h.year) <= year; }).sort(function (a, b) { return toNum(a.year) - toNum(b.year); });
+    var hr = rows[rows.length - 1];
+    var carBuy = E.carOccurrences(st).filter(function (o) { return o.year === year; }).reduce(function (t, o) { return t + o.amount; }, 0);
+    return {
+      living: y.expense.living, housing: y.expense.housing, housingLoan: hr && hr.dansin && toNum(hr.loan) > 0 ? toNum(hr.loan) : 0,
+      edu: y.expense.education, insurance: y.expense.insurance, car: y.expense.car, carBuy: carBuy,
+      invest: y.expense.contributions.reduce(function (a, b) { return a + b; }, 0),
+      sal1: sal('家族１'), sal2: sal('家族２'), balance: y.balance, age: y.age
+    };
+  }
+  function bookBudgetRow(kind, row, edit) {
+    if (edit) return kind === 'item' ? bookItemRow(row, 0, true) : bookIncomeRow(row, 0, true);
+    var k = kind === 'item' ? 'i' : 'n';
+    var vals = row.b || ['', '', '', '', '', '', '', '', '', '', '', ''];
+    var filledN = vals.filter(BK.filled).length;
+    var same = filledN === 12 && vals.every(function (v) { return BK.num(v) === BK.num(vals[0]); });
+    var total = vals.reduce(function (a, v) { return a + BK.num(v); }, 0);
+    var open = !!ui.book.bOpen[k + row.id];
+    var name = kind === 'item' ? esc(row.name) : esc(famLabel(row.name));
+    var last = ui.book.bLast[k + row.id];
+    if (last == null) { last = 0; for (var q = 0; q < 12; q++) if (BK.filled(vals[q]) && BK.num(vals[q]) !== 0) { last = q; break; } }
+    return '<div class="bkbrow divide">' +
+      '<div class="bkrow"><span class="nm">' + name + '<small>1年 ' + yen(total) + '円</small></span>' +
+        (same || !filledN ? '<span class="u pre">毎月</span>' + bookAmountInput('f-bk-ba-' + k + row.id, same ? vals[0] : '', "A.bkBAll('" + kind + "'," + row.id + ',this.value)', row.name + 'の毎月の予算', 'op')
+          : '<span class="bkvar">月ごとに違う</span>') + '</div>' +
+      '<button class="linkbtn sm" aria-expanded="' + open + '" onclick="A.bkBOpen(\'' + k + row.id + '\')">' + (open ? '月ごとの予算を閉じる' : '月ごとに変える') + '</button>' +
+      (open ? '<div class="bkbgrid">' + MONTHS.map(function (lb, i) {
+          return '<label class="bkbcell"><span>' + lb + '</span><input type="text" inputmode="numeric" autocomplete="off" id="f-bk-b-' + k + row.id + '-' + i + '" class="op num yen" aria-label="' + esc(row.name) + 'の' + lb + 'の予算（円）" value="' + yenIn(vals[i]) + '" onchange="A.bkB(\'' + kind + '\',' + row.id + ',' + i + ',this.value)"></label>';
+        }).join('') + '</div>' +
+        '<button class="btn ghost bkbcopy" onclick="A.bkBCopy(\'' + kind + '\',' + row.id + ')">' + ic('copy', 16) + MONTHS[last] + 'の金額（' + yen(vals[last]) + '円）を、ほかの月にも全部入れる</button>' : '') +
+    '</div>';
+  }
+  function bookBudgetHTML(y) {
+    var s = BK.summarize(y), edit = ui.book.edit;
+    var py = planYearNums(state, ui.book.year);
+    var prev = store.book.years[ui.book.year - 1];
+    var prevOk = prev && BK.summarize(prev).recorded > 0;
+    var c = py && state.family.length >= 2 ? BK.consumptionByAge(py.age) : null;
+    var mine = (s.bExpense - y.items.reduce(function (t, it) { return t + (it.cat === 4 || it.cat === 6 ? (it.b || []).reduce(function (a, v) { return a + BK.num(v); }, 0) : 0); }, 0)) / 12;
+    var ask = ui.book.bAsk;
+    var intro = '<div class="card bkbud">' +
+      '<div class="gh">' + fpFace(36) + '<div class="t">1年の予算（予算→実績）</div></div>' +
+      '<p>年のはじめに1年分の予算を入れ、毎月の実績とくらべます。月の記録が終わったら「月ごと」で確定すると、予算より多かったか少なかったかがわかります。毎月同じでなくてかまいません。固定資産税・車検・ボーナスなどは、その月だけに入れます。</p>' +
+      (s.hasBudget ? '<div class="yeartotals"><div><span>収入の予算</span><b>' + yen(s.bIncome) + '</b></div><div><span>支出の予算</span><b>' + yen(s.bExpense) + '</b></div>' +
+        '<div><span>収支</span><b class="' + (s.bBalance < 0 ? 'neg' : 'pos') + '">' + (s.bBalance > 0 ? '＋' : '') + yen(s.bBalance) + '</b></div></div>' : '') +
+      (py && s.hasBudget ? '<div class="hint" style="padding:6px 0 0">プラン「' + esc(plan().name) + '」の' + ui.book.year + '年の収支は ' + (py.balance >= 0 ? '＋' : '') + man(py.balance) + '万円、この予算の収支は ' + (s.bBalance >= 0 ? '＋' : '') + man(s.bBalance / 10000) + '万円です。</div>' : '') +
+      (c && s.hasBudget ? '<div class="hint" style="padding:6px 0 0">参考：総務省「家計調査」（2024年）で、世帯主が' + c.label + 'の二人以上の世帯の消費支出は月' + yen(c.yen) + '円。この予算は月' + yen(mine) + '円です（保険料と積立投資を除く）。</div>' : '') +
+      (ask ? '<div class="plconfirm ok"><span>今の予算を置き換えます。よいですか？</span><button class="btn" onclick="A.' + (ask === 'plan' ? 'bkBPlan' : 'bkBPrev') + '(true)">置き換える</button><button class="btn ghost" onclick="A.bkBAskNo()">やめる</button></div>'
+        : '<div class="row bkbbtns">' + (py ? '<button class="btn' + (s.hasBudget ? ' ghost' : '') + '" onclick="A.bkBPlan(false)">プラン「' + esc(plan().name) + '」の金額から予算を入れる</button>' : '') +
+          (prevOk ? '<button class="btn ghost" onclick="A.bkBPrev(false)">' + (ui.book.year - 1) + '年の実績から入れる</button>' : '') + '</div>') +
+      '<div class="hint" style="padding:8px 0 0">プランの金額から入れると、基本生活費は家計調査（2024年）の費目の割合をもとに項目へ分け、' + esc(famLabel('家族１')) + 'の給与は毎月の手取りとボーナス（6月・12月）に分けます。どれも目安なので、自分の家計に合わせて直してください。</div>' +
+    '</div>';
+    var groups = BK.CATS.map(function (cc) {
+      var rows = y.items.filter(function (it) { return it.cat === cc.no; });
+      if (!rows.length && !edit) return '';
+      var tot = rows.reduce(function (t, it) { return t + (it.b || []).reduce(function (a, v) { return a + BK.num(v); }, 0); }, 0);
+      return '<div class="card bkgroup" id="bkg-' + cc.no + '"><div class="head"><span class="cdot" style="background:' + catColor(cc.no) + '"></span><span class="ttl">' + cc.label + '</span>' +
+          '<span class="sub">1年 ' + yen(tot) + '円</span></div>' +
+        rows.map(function (it) { return bookBudgetRow('item', it, edit); }).join('') +
+        (edit ? '<div class="addwrap divide"><button class="btn ghost" onclick="A.bkAdd(\'item\',' + cc.no + ')">＋ ' + cc.label + 'の項目を足す</button></div>' : '') +
+        grpEdit('bkg-' + cc.no, '項目を編集する（足す・名前・決済手段）') + '</div>';
+    }).join('');
+    var inc = '<div class="card bkgroup" id="bkg-income"><div class="head"><span class="cdot" style="background:var(--good)"></span><span class="ttl">手取収入</span>' +
+        '<span class="sub">1年 ' + yen(y.incomes.reduce(function (t, r) { return t + (r.b || []).reduce(function (a, v) { return a + BK.num(v); }, 0); }, 0)) + '円</span></div>' +
+      y.incomes.map(function (r) { return bookBudgetRow('income', r, edit); }).join('') +
+      (edit ? '<div class="addwrap divide"><button class="btn ghost" onclick="A.bkAdd(\'income\')">＋ 収入の項目を足す</button></div>' : '') +
+      grpEdit('bkg-income', '収入の項目を編集する') + '</div>';
+    return intro + groups + inc;
+  }
+
+  // ---- 毎月の記録の案内（先月がまだ確定していなければ） ----
+  function bookRemind() {
+    if (!Object.keys(store.book.years).length) return null;
+    var d = new Date(), pm = d.getMonth() - 1, py = d.getFullYear();
+    if (pm < 0) { pm = 11; py--; }
+    var y = store.book.years[py];
+    if (!y || (y.closed && y.closed[pm])) return null;
+    var key = py + '-' + pm;
+    if (store.prefs.remindOff === key) return null;
+    return { year: py, month: pm, key: key };
+  }
+  function remindHTML() {
+    var r = bookRemind();
+    if (!r) return '';
+    return '<div class="vbanner notice remind">' + ic('book', 18) + '<span>' + (r.month + 1) + '月の家計簿がまだ確定していません。月に1回、記録して確定しましょう。</span>' +
+      '<button class="btn" onclick="A.bkGo(' + r.year + ',' + r.month + ')">家計簿へ</button>' +
+      '<button class="del" aria-label="この案内を閉じる" onclick="A.remindOff()">' + ic('close', 18) + '</button></div>';
+  }
+
   // プランの予定（表示中のプランのその年の年間収支）と、家計簿の実績をくらべる。
   // ボーナスの月は多くなるので、月の比較は目安。今年の記録した月の合計で進み具合を見る。
   function planVsHTML(s, i) {
     var m = s.months[i];
     if (!m.recorded) return '';
     var py = result.years.filter(function (y) { return y.year === ui.book.year; })[0];
-    if (!py) return '';
+    var bud = s.hasBudget;
+    if (!py && !bud) return '';
     var yen1 = function (v) { return Math.round(v); };
-    var planYear = py.balance * 10000, planMonth = planYear / 12;
+    // 予算があれば予算と、なければプランの予定（年間収支の1か月分）とくらべる
+    var planYear = bud ? s.bBalance : py.balance * 10000, planMonth = bud ? m.bBalance : planYear / 12;
     var done = s.months.filter(function (x, k) { return k <= i && x.recorded; });
     var actual = done.reduce(function (a, x) { return a + x.balance; }, 0);
-    var planSoFar = planMonth * done.length;
+    var planSoFar = bud ? done.reduce(function (a, x) { return a + x.bBalance; }, 0) : planMonth * done.length;
     var gap = m.balance - planMonth, gapAll = actual - planSoFar;
     var good = gap >= 0, goodAll = gapAll >= 0;
-    var nm = '「' + esc(plan().name) + '」';
-    var head = '<div class="pvhead">' + ic('chart', 18) + '<span>' + nm + 'の予定とくらべると</span></div>';
+    var nm = bud ? '予算' : '「' + esc(plan().name) + '」の予定';
+    var head = '<div class="pvhead">' + ic('chart', 18) + '<span>' + nm + 'とくらべると</span></div>';
     var month = '<div class="pvline ' + (good ? 'ok' : 'ng') + '">' + ic(good ? 'check' : 'warn', 16) + '<span>' +
-      (good ? '<b>' + MONTHS[i] + 'は予定より' + yen(yen1(gap)) + '円多く貯められました！</b>' : '<b>' + MONTHS[i] + 'は予定より' + yen(yen1(-gap)) + '円少なめでした。</b>') +
-      '予定は1か月あたり' + (planMonth >= 0 ? '＋' : '') + yen(yen1(planMonth)) + '円（ボーナスの月は多めに、ふだんの月は少なめになります）。</span></div>';
+      (Math.abs(gap) < 1 ? '<b>' + MONTHS[i] + 'は' + (bud ? '予算' : '予定') + 'どおりでした！</b>' : good ? '<b>' + MONTHS[i] + 'は' + (bud ? '予算' : '予定') + 'より' + yen(yen1(gap)) + '円多く貯められました！</b>' : '<b>' + MONTHS[i] + 'は' + (bud ? '予算' : '予定') + 'より' + yen(yen1(-gap)) + '円少なめでした。</b>') +
+      (bud ? MONTHS[i] + 'の予算の収支は' + (planMonth >= 0 ? '＋' : '') + yen(yen1(planMonth)) + '円です。' : '予定は1か月あたり' + (planMonth >= 0 ? '＋' : '') + yen(yen1(planMonth)) + '円（ボーナスの月は多めに、ふだんの月は少なめになります）。') + '</span></div>';
     var bar = '';
     if (planYear > 0) {
       var pct = Math.max(0, Math.min(100, Math.round(actual / planYear * 100)));
-      bar = '<div class="pvbar"><div class="pvk"><span>今年の予定 ' + yen(yen1(planYear)) + '円のうち</span><b>' + (actual >= 0 ? '' : '−') + yen(Math.abs(yen1(actual))) + '円（' + pct + '%）</b></div>' +
-        '<div class="pvtrack" role="img" aria-label="今年の予定に対する進み具合 ' + pct + '％"><span style="width:' + pct + '%"></span><i style="left:' + Math.min(100, done.length / 12 * 100).toFixed(1) + '%"></i></div>' +
-        '<div class="hint" style="padding:4px 0 0">' + done.length + 'か月分の記録で、予定の' + (goodAll ? '<b>ペースより' + yen(yen1(gapAll)) + '円多い</b>' : 'ペースより' + yen(yen1(-gapAll)) + '円少ない') + 'です（縦の線は、今月までに貯まっている予定の位置）。</div></div>';
+      bar = '<div class="pvbar"><div class="pvk"><span>今年の' + (bud ? '予算の収支' : '予定') + ' ' + yen(yen1(planYear)) + '円のうち</span><b>' + (actual >= 0 ? '' : '−') + yen(Math.abs(yen1(actual))) + '円（' + pct + '%）</b></div>' +
+        '<div class="pvtrack" role="img" aria-label="今年の予定に対する進み具合 ' + pct + '％"><span style="width:' + pct + '%"></span><i style="left:' + Math.max(0, Math.min(100, planSoFar / planYear * 100)).toFixed(1) + '%"></i></div>' +
+        '<div class="hint" style="padding:4px 0 0">' + done.length + 'か月分の記録で、' + (bud ? '予算' : '予定') + 'の' + (goodAll ? '<b>ペースより' + yen(yen1(gapAll)) + '円多い</b>' : 'ペースより' + yen(yen1(-gapAll)) + '円少ない') + 'です（縦の線は、今月までに貯まっている予定の位置）。</div></div>';
     } else {
       bar = '<div class="hint" style="padding:6px 0 0">' + nm + 'では、今年は' + yen(yen1(-planYear)) + '円の赤字の予定です。記録した' + done.length + 'か月の収支は合計' + (actual >= 0 ? '＋' : '−') + yen(Math.abs(yen1(actual))) + '円です。</div>';
     }
@@ -2586,6 +2737,7 @@
           '<span class="map">→ ' + c.plan + '</span><span class="sub">' + yen(sub) + '円</span></div>' +
         rows.map(function (it) { return bookItemRow(it, i, edit); }).join('') +
         (edit ? '<div class="addwrap divide"><button class="btn ghost" onclick="A.bkAdd(\'item\',' + c.no + ')">＋ ' + c.label + 'の項目を足す</button></div>' : '') +
+        grpEdit('bkg-' + c.no, '項目を編集する（足す・名前・決済手段）') +
       '</div>';
     }).join('');
 
@@ -2596,6 +2748,7 @@
       (edit ? '<div class="addwrap divide"><button class="btn ghost" onclick="A.bkAdd(\'income\')">＋ 収入の項目を足す</button></div>' : '') +
       '<div class="rowtop divide" style="padding:10px 0"><span class="u">備考</span>' +
         '<input type="text" id="f-bk-note" class="op" style="flex:1;min-width:0" aria-label="' + MONTHS[i] + 'の備考" placeholder="児童手当、定期代など" value="' + esc(y.notes[i] || '') + '" onchange="A.bkNote(this.value)"></div>' +
+      grpEdit('bkg-income', '収入の項目を編集する') +
     '</div>';
 
     var accounts = '<div class="card bkgroup" id="bkg-accounts"><div class="head"><span class="cdot" style="background:var(--c-deposit)"></span><span class="ttl">' + MONTHS[i] + '末の口座残高</span>' + helpBtn('bookAccounts') + '<span class="sub">任意</span></div>' +
@@ -2608,19 +2761,19 @@
             '<button class="del" aria-label="この口座を外す" onclick="A.bkDel(\'account\',' + a.id + ')">' + ic('del', 20) + '</button></div>';
         }
         return '<div class="bkrow divide"><span class="nm">' + esc(a.name) + '<small>前年末 ' + (BK.filled(a.start) ? yen(a.start) + '円' : '未入力') + '</small></span>' +
-          bookAmountInput('f-bk-ac-' + a.id, a.m[i], "A.bkAmt('account'," + a.id + ',this.value)', a.name + 'の' + MONTHS[i] + '末の残高', 'op') + '</div>';
+          bookAmountInput('f-bk-ac-' + a.id, a.m[i], "A.bkAmt('account'," + a.id + ',this.value)', a.name + 'の' + MONTHS[i] + '末の残高', 'op', monthClosed()) + '</div>';
       }).join('') +
       (edit ? '<div class="addwrap divide"><button class="btn ghost" onclick="A.bkAdd(\'account\')">＋ 口座を足す</button></div>' : '') +
+      grpEdit('bkg-accounts', '口座を編集する（足す・名前・前年末の残高）') +
     '</div>';
 
     return (y.sample ? '<div class="vbanner notice sample">' + ic('book', 18) + '<span>これは記入例（Excelのサンプル）です。自分の家計簿にするときは消してから始めます。</span><button class="btn" onclick="A.bkClear()">記入例を消す</button></div>' : '') +
-      summary + planVsHTML(s, i) + review + copy +
-      '<div class="bkedit"><button class="btn ghost" aria-pressed="' + edit + '" onclick="A.bkEdit()">' + ic(edit ? 'check' : 'tune', 18) + (edit ? '項目の編集を終える' : '項目・口座を編集する') + '</button></div>' +
-      groups + incomes + accounts;
+      closedHTML(y, s, i) + summary + planVsHTML(s, i) + review + copy + fillBudget(y, s, i) +
+      groups + incomes + accounts + closeCardHTML(y, s, i);
   }
 
-  function bookAmountInput(id, v, handler, label, cls) {
-    return '<input type="text" inputmode="numeric" enterkeyhint="next" autocomplete="off" id="' + id + '" class="' + (cls || 'op') + ' num yen" aria-label="' + esc(label) + '（円）" value="' + yenIn(v) + '" onchange="' + handler + '"><span class="u">円</span>';
+  function bookAmountInput(id, v, handler, label, cls, ro) {
+    return '<input type="text" inputmode="numeric" enterkeyhint="next" autocomplete="off" id="' + id + '" class="' + (cls || 'op') + ' num yen" aria-label="' + esc(label) + '（円）" value="' + yenIn(v) + '"' + (ro ? ' readonly' : ' onchange="' + handler + '"') + '><span class="u">円</span>';
   }
 
   function bookItemRow(it, i, edit) {
@@ -2634,9 +2787,10 @@
       '</div>';
     }
     var sub = [it.pay, it.day].filter(Boolean).join('・');
-    var prev = i > 0 && BK.filled(it.m[i - 1]) ? '先月 ' + yen(it.m[i - 1]) : '';
-    return '<div class="bkrow divide"><span class="nm">' + esc(it.name) + (sub || prev ? '<small>' + esc([sub, prev].filter(Boolean).join('　')) + '</small>' : '') + '</span>' +
-      bookAmountInput('f-bk-it-' + it.id, it.m[i], "A.bkAmt('item'," + it.id + ',this.value)', it.name + '（' + MONTHS[i] + '）', 'op') + '</div>';
+    var bud = it.b && BK.filled(it.b[i]) ? '予算 ' + yen(it.b[i]) : '';
+    var prev = !bud && i > 0 && BK.filled(it.m[i - 1]) ? '先月 ' + yen(it.m[i - 1]) : '';
+    return '<div class="bkrow divide"><span class="nm">' + esc(it.name) + (sub || bud || prev ? '<small>' + esc([sub, bud, prev].filter(Boolean).join('　')) + '</small>' : '') + '</span>' +
+      bookAmountInput('f-bk-it-' + it.id, it.m[i], "A.bkAmt('item'," + it.id + ',this.value)', it.name + '（' + MONTHS[i] + '）', 'op', monthClosed()) + '</div>';
   }
 
   function bookIncomeRow(r, i, edit) {
@@ -2646,8 +2800,9 @@
         selectInput('f-bk-ink-' + r.id, 'op', '', BK.INCOME_KINDS.map(function (k) { return { value: k.key, label: famLabel(k.label) }; }), r.kind, "A.bkField('income'," + r.id + ",'kind',this.value)") +
         '<button class="del" aria-label="「' + esc(r.name) + '」を外す" onclick="A.bkDel(\'income\',' + r.id + ')">' + ic('del', 20) + '</button></div>';
     }
-    return '<div class="bkrow divide"><span class="nm">' + esc(famLabel(r.name)) + '</span>' +
-      bookAmountInput('f-bk-in-' + r.id, r.m[i], "A.bkAmt('income'," + r.id + ',this.value)', r.name + '（' + MONTHS[i] + '）', 'op') + '</div>';
+    var bud = r.b && BK.filled(r.b[i]) ? '<small>予算 ' + yen(r.b[i]) + '</small>' : '';
+    return '<div class="bkrow divide"><span class="nm">' + esc(famLabel(r.name)) + bud + '</span>' +
+      bookAmountInput('f-bk-in-' + r.id, r.m[i], "A.bkAmt('income'," + r.id + ',this.value)', r.name + '（' + MONTHS[i] + '）', 'op', monthClosed()) + '</div>';
   }
 
   // ---- 1年の表 ----
@@ -2718,6 +2873,11 @@
       '<div class="yeartotals">' +
         '<div><span>収入</span><b>' + yen(s.income) + '</b></div><div><span>支出</span><b>' + yen(s.expense) + '</b></div>' +
         '<div><span>収支</span><b class="' + (s.balance < 0 ? 'neg' : 'pos') + '">' + (s.balance > 0 ? '＋' : '') + yen(s.balance) + '</b></div></div>' +
+      (s.hasBudget ? '<div class="card bkbudyear"><h2 class="h3">予算と見込み</h2>' +
+        '<div class="bkrow"><span class="nm">予算の収支（1年）</span><b>' + (s.bBalance >= 0 ? '＋' : '') + yen(s.bBalance) + '円</b></div>' +
+        '<div class="bkrow"><span class="nm">見込みの収支（1年）<small>確定・記録した月は実績、ほかの月は予算</small></span><b>' + (s.fBalance >= 0 ? '＋' : '') + yen(s.fBalance) + '円</b></div>' +
+        '<div class="bkrow"><span class="nm">予算との差</span><b class="' + (s.fBalance - s.bBalance < 0 ? 'neg' : 'pos') + '">' + (s.fBalance - s.bBalance >= 0 ? '＋' : '') + yen(s.fBalance - s.bBalance) + '円</b></div>' +
+        '<div class="hint" style="padding:6px 0 0">確定した月：' + s.closed + ' / 12か月</div></div>' : '') +
       '<div class="card tablecard"><h2 class="h3">' + ui.book.year + '年の年間収支</h2><div class="sub">単位：円。Excelの家計簿シートと同じ並びです。横にスクロールできます。</div>' +
         '<div class="tablewrap" tabindex="0" role="region" aria-label="年間収支の表"><table class="cf bk">' + '<thead>' + head + '</thead><tbody>' + h + '</tbody></table></div></div>' +
       '<div class="card bkgroup"><div class="head"><span class="ttl">投資資産の残高（NISA・iDeCo・株など）</span></div>' + inv +
@@ -2992,7 +3152,7 @@
   function bookHTML(width) {
     var y = bookYear();
     var body = !y ? bookEmptyHTML() : ui.book.mode === 'year' ? bookYearHTML(y, width) : ui.book.mode === 'plan' ? bookPlanHTML(y) :
-      ui.book.mode === 'pay' ? payHTML(y) : bookMonthHTML(y);
+      ui.book.mode === 'pay' ? payHTML(y) : ui.book.mode === 'budget' ? bookBudgetHTML(y) : bookMonthHTML(y);
     return bookHeaderHTML() + '<div class="bkbody">' + body + '</div>' +
       '<datalist id="bk-pays"><option value="現金"><option value="カード"><option value="口座振替"><option value="電子マネー"><option value="給与天引き"></datalist>';
   }
@@ -3009,7 +3169,86 @@
   A.bkYear = function (d) { ui.book.year += d; ui.book.edit = false; ui.book.picks = {}; commit(); };
   A.bkMonth = function (i) { ui.book.month = i; commit(); };
   A.bkMode = function (m) { ui.book.mode = m; ui.book.edit = false; commit(); document.getElementById('scroll').scrollTop = 0; };
-  A.bkEdit = function () { ui.book.edit = !ui.book.edit; commit(); };
+  A.bkEdit = function (gid) {
+    var sc = document.getElementById('scroll'), el = gid && document.getElementById(gid);
+    var off = el ? el.getBoundingClientRect().top - sc.getBoundingClientRect().top : 0;
+    ui.book.edit = !ui.book.edit;
+    render();
+    // 押した区分のカードが同じ位置に来るように
+    var el2 = gid && document.getElementById(gid);
+    if (el2) sc.scrollTop += el2.getBoundingClientRect().top - sc.getBoundingClientRect().top - off;
+    save();
+  };
+  A.bkB = function (kind, id, i, v) {
+    var f = bkFind(kind, id); if (!f || !f.row) return;
+    if (!f.row.b) f.row.b = ['', '', '', '', '', '', '', '', '', '', '', ''];
+    f.row.b[i] = yenVal(v);
+    ui.book.bLast[(kind === 'item' ? 'i' : 'n') + id] = i;
+    commit();
+  };
+  A.bkBAll = function (kind, id, v) {
+    var f = bkFind(kind, id); if (!f || !f.row) return;
+    var x = yenVal(v);
+    f.row.b = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(function () { return x; });
+    commit();
+  };
+  A.bkBOpen = function (k) { ui.book.bOpen[k] = !ui.book.bOpen[k]; commit(); };
+  A.bkBCopy = function (kind, id) {
+    var f = bkFind(kind, id); if (!f || !f.row) return;
+    var k = (kind === 'item' ? 'i' : 'n') + id, from = ui.book.bLast[k];
+    if (from == null) { from = 0; for (var q = 0; q < 12; q++) if (f.row.b && BK.filled(f.row.b[q]) && BK.num(f.row.b[q]) !== 0) { from = q; break; } }
+    snapshot(MONTHS[from] + 'の金額を、ほかの月にも入れました');
+    BK.copyBudget(f.row, from);
+    commit();
+  };
+  A.bkBPlan = function (sure) {
+    var y = bookYear(); if (!y) return;
+    if (!sure && BK.hasBudget(y)) { ui.book.bAsk = 'plan'; commit(); return; }
+    var py = planYearNums(state, ui.book.year); if (!py) return;
+    snapshot('プラン「' + plan().name + '」の金額から予算を入れました');
+    var missed = BK.budgetFromPlan(y, py);
+    ui.book.bAsk = '';
+    commit();
+    if (missed.length) snapshotless('項目が無いため入れられなかったもの：' + missed.join('・') + '（項目を足してから、もう一度入れられます）');
+  };
+  A.bkBPrev = function (sure) {
+    var y = bookYear(), prev = store.book.years[ui.book.year - 1]; if (!y || !prev) return;
+    if (!sure && BK.hasBudget(y)) { ui.book.bAsk = 'prev'; commit(); return; }
+    snapshot((ui.book.year - 1) + '年の実績から予算を入れました');
+    var byName = function (list) { var o = {}; list.forEach(function (r) { o[r.name] = o[r.name] || r; }); return o; };
+    var pi = byName(prev.items), pn = byName(prev.incomes);
+    y.items.forEach(function (it) { var p = pi[it.name]; it.b = p ? p.m.map(function (v) { return BK.filled(v) ? Math.round(BK.num(v)) : ''; }) : it.b; });
+    y.incomes.forEach(function (r) { var p = pn[r.name]; r.b = p ? p.m.map(function (v) { return BK.filled(v) ? Math.round(BK.num(v)) : ''; }) : r.b; });
+    ui.book.bAsk = '';
+    commit();
+  };
+  A.bkBAskNo = function () { ui.book.bAsk = ''; commit(); };
+  A.bkFillBudget = function () {
+    var y = bookYear(), i = ui.book.month; if (!y) return;
+    snapshot('予算の金額を、空いている欄に入れました');
+    y.items.concat(y.incomes).forEach(function (r) { if (r.b && BK.filled(r.b[i]) && BK.num(r.b[i]) !== 0 && !BK.filled(r.m[i])) r.m[i] = r.b[i]; });
+    commit();
+  };
+  A.bkClose = function (sure) {
+    var y = bookYear(), i = ui.book.month; if (!y) return;
+    var m = BK.summarize(y).months[i];
+    if (!sure && m.diff != null && Math.abs(m.diff) >= 1) { ui.book.closeAsk = i; commit(); return; }
+    if (!y.closed) y.closed = [false, false, false, false, false, false, false, false, false, false, false, false];
+    y.closed[i] = true;
+    ui.book.closeAsk = -1; ui.book.edit = false;
+    toast(MONTHS[i] + 'を確定しました。' + reviewText(y, i).head, false);
+    commit();
+    document.getElementById('scroll').scrollTop = 0;
+  };
+  A.bkCloseNo = function () { ui.book.closeAsk = -1; commit(); };
+  A.bkReopen = function () {
+    var y = bookYear(), i = ui.book.month; if (!y || !y.closed) return;
+    y.closed[i] = false;
+    snapshotless(MONTHS[i] + 'の確定を取り消しました。金額を直せます');
+    commit();
+  };
+  A.bkGo = function (year, month) { ui.book.year = year; ui.book.month = month; ui.book.mode = 'month'; ui.view = 'book'; commit(); document.getElementById('scroll').scrollTop = 0; };
+  A.remindOff = function () { var r = bookRemind(); if (r) store.prefs.remindOff = r.key; commit(); };
   A.bkCreate = function (sample) {
     var prev = store.book.years[ui.book.year - 1];
     store.book.years[ui.book.year] = sample ? BK.sampleYear(store.book) : BK.newYear(store.book, prev || null);
@@ -4332,6 +4571,11 @@
 
     // 表示中の画面とプランの一覧だけ（隠れている画面の古い入力欄まで調べると遅くなる）
     autoLabel(document.getElementById({ input: 'inputview', cf: 'cfview', cmp: 'cmpview', wizard: 'wizview', cover: 'coverview', book: 'bookview', risk: 'riskview' }[ui.view] || 'inputview'));
+    // 家計簿の月の並びは、選んでいる月が見えるように横に送る
+    if (ui.view === 'book') {
+      var mon = document.querySelector('#bookview .bkmonths button.on');
+      if (mon) { var row = mon.parentNode, l = mon.offsetLeft - row.offsetLeft; if (l < row.scrollLeft || l + mon.offsetWidth > row.scrollLeft + row.clientWidth) row.scrollLeft = l - (row.clientWidth - mon.offsetWidth) / 2; }
+    }
     if (ui.sheet) autoLabel(document.getElementById('sheetwrap'));
     sc.scrollTop = top;
     if (active) {

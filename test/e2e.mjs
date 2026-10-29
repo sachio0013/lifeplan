@@ -627,13 +627,16 @@ await fresh.close();
 
   // 口座残高を入れると、記録との差額が0なら「一致」
   // 前年末の残高を編集で入れる（100万円）→ 今月末の残高に、前年末＋今月の収支を入れる
-  await page.locator('.bkedit .btn').tap(); await page.waitForTimeout(100);
-  const acs = await page.$eval('#bkg-accounts input[id^="f-bk-acs-"]', (e) => e.id);
-  await page.fill(`#${acs}`, '1000000'); await page.press(`#${acs}`, 'Tab');
+  // 口座ははじめから3つ（●●銀行①・②・●●証券）。編集ボタンは口座のカードの下にある
+  const acNames = await page.$$eval('#bkg-accounts .bkrow .nm', (els) => els.map((e) => e.firstChild.textContent));
+  check('家計簿：口座ははじめから3つあり、編集ボタンは区分ごとのカードの下にある', JSON.stringify(acNames) === '["●●銀行①","●●銀行②","●●証券"]' && (await page.locator('.bkgroup .grpedit').count()) >= 7 && (await page.locator('.bkedit').count()) === 0, `${acNames}`);
+  await page.locator('#bkg-accounts .grpedit .linkbtn').tap(); await page.waitForTimeout(100);
+  const acsIds = await page.$$eval('#bkg-accounts input[id^="f-bk-acs-"]', (els) => els.map((e) => e.id));
+  for (const [k, id] of acsIds.entries()) { await page.fill(`#${id}`, k ? '0' : '1000000'); await page.press(`#${id}`, 'Tab'); await page.waitForTimeout(60); }
   await page.evaluate(() => document.activeElement.blur());
-  await page.locator('.bkedit .btn').tap(); await page.waitForTimeout(100);
-  const ac = await page.$eval('#bkg-accounts input[id^="f-bk-ac-"]', (e) => e.id);
-  await page.fill(`#${ac}`, '1248000'); await page.press(`#${ac}`, 'Tab');
+  await page.locator('#bkg-accounts .grpedit .linkbtn').tap(); await page.waitForTimeout(100);
+  const acIds = await page.$$eval('#bkg-accounts input[id^="f-bk-ac-"]', (els) => els.map((e) => e.id));
+  for (const [k, id] of acIds.entries()) { await page.fill(`#${id}`, k ? '0' : '1248000'); await page.press(`#${id}`, 'Tab'); await page.waitForTimeout(60); }
   await page.evaluate(() => document.activeElement.blur()); await page.waitForTimeout(200);
   const diffOk = await page.textContent('.diffline').catch(() => '');
   const chipOk = await page.locator(`#bkm-${thisMonth} .ok`).count();
@@ -650,7 +653,7 @@ await fresh.close();
   }
 
   // 項目の編集：足して、外して、元に戻す
-  await page.locator('.bkedit .btn').tap(); await page.waitForTimeout(100);
+  await page.locator('#bkg-1 .grpedit .linkbtn').tap(); await page.waitForTimeout(100);
   const before = await page.$$eval('#bkg-1 .bkrow', (e) => e.length);
   await page.locator('#bkg-1 .addwrap .btn').tap(); await page.waitForTimeout(100);
   const added = await page.$$eval('#bkg-1 .bkrow', (e) => e.length);
@@ -658,7 +661,7 @@ await fresh.close();
   const removed = await page.$$eval('#bkg-1 .bkrow', (e) => e.length);
   await page.locator('#toast button').tap(); await page.waitForTimeout(100);
   const undone = await page.$$eval('#bkg-1 .bkrow', (e) => e.length);
-  await page.locator('.bkedit .btn').tap(); await page.waitForTimeout(100);
+  await page.locator('#bkg-1 .grpedit .linkbtn').tap(); await page.waitForTimeout(100);
   check('家計簿：項目を足し・外し・元に戻せる', added === before + 1 && removed === before && undone === before + 1, `${before}→${added}→${removed}→${undone}`);
 
   // 家計簿の入力欄にもすべて読み上げ用の名前がある
@@ -1068,6 +1071,63 @@ await dp.screenshot({ path: join(shots, '6-input-dark.png') });
   check('かんたん入力：家族を入れたあとは「残りは目安のままで、結果を見る」で結果が出る（最初のステップには無い）',
     skip0 === 0 && st.lump[0].amount === 1500 && st.lump[0].year === 2050 && st.carCost[0].amount === 15 && st.carBuy.fromYear === 2029 && st.invest[2].add[0].amount === 60 && st.invest[2].add[0].toYear === 2050,
     JSON.stringify([skip0, st.lump, st.carCost, st.carBuy, st.invest[2].add]));
+  await c.close();
+}
+
+// 家計簿の予算→実績：プランの金額から1年の予算を作り、月ごとに変え・ほかの月にもコピーし、実績を入れて月を確定する（取り消せる）
+{
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ja-JP' });
+  const bp = await c.newPage();
+  bp.on('pageerror', (e) => errors.push(e.message));
+  await bp.goto(url);
+  await bp.waitForSelector('.cover');
+  await bp.locator('.cvalt .btn', { hasText: '記入例' }).tap();
+  await bp.waitForSelector('#f-start');
+  await go(bp, '#seg-book');
+  await bp.locator('.bkempty .btn.big').tap(); await bp.waitForTimeout(200);
+  await go(bp, '.bkmodes button:has-text("予算")'); await bp.waitForTimeout(200);
+  await bp.locator('.bkbud .btn', { hasText: '金額から予算を入れる' }).tap(); await bp.waitForTimeout(300);
+  const budTotals = (await bp.textContent('.bkbud .yeartotals')).replace(/\s+/g, '');
+  const firstIn = await bp.inputValue('#bkg-1 .bkbrow input');
+  await bp.locator('#bkg-1 .bkbrow .linkbtn').first().tap(); await bp.waitForTimeout(150);
+  const cellId = await bp.$eval('#bkg-1 .bkbgrid input[id$="-6"]', (e) => e.id);
+  await bp.fill(`#${cellId}`, '200000'); await bp.press(`#${cellId}`, 'Tab'); await bp.waitForTimeout(150);
+  await bp.evaluate(() => document.activeElement.blur());
+  const copyLabel = await bp.textContent('#bkg-1 .bkbcopy');
+  await bp.locator('#bkg-1 .bkbcopy').tap(); await bp.waitForTimeout(150);
+  const allSame = await bp.$$eval('#bkg-1 .bkbgrid input', (els) => els.map((e) => e.value));
+  check('予算：プランの金額から1年の予算が入り、1つの月の金額を「ほかの月にも全部入れる」でコピーできる',
+    /収入の予算[\d,]+支出の予算[\d,]+収支/.test(budTotals) && /^[\d,]+$/.test(firstIn) && /7月の金額（200,000円）/.test(copyLabel) && allSame.length === 12 && allSame.every((v) => v === '200,000'), `${budTotals} / ${firstIn} / ${copyLabel} / ${allSame[0]}`);
+  // 月ごと：予算の金額を空いている欄に入れ、1つだけ予算より多くして、確定する
+  await go(bp, '.bkmodes button:has-text("月ごと")'); await bp.waitForTimeout(200);
+  const hint = await bp.textContent('#bkg-1 .bkrow small');
+  await bp.locator('.bkcopy', { hasText: '予算の金額' }).tap(); await bp.waitForTimeout(200);
+  const foodId = await bp.$eval('#bkg-1 .bkrow input', (e) => e.id);
+  await bp.fill(`#${foodId}`, '215000'); await bp.press(`#${foodId}`, 'Tab'); await bp.waitForTimeout(150);
+  await bp.evaluate(() => document.activeElement.blur());
+  await bp.locator('.bkclose .btn.block').tap(); await bp.waitForTimeout(300);
+  const closed = (await bp.textContent('.bkclosed')).replace(/\s+/g, '');
+  const ro = await bp.$eval(`#${foodId}`, (e) => e.readOnly);
+  const chip = await bp.locator('.bkmonths button.on .cl').count();
+  check('月の確定：予算とくらべたひとこと（予算より−15,000円、いちばん超えた項目）が出て、金額は変えられなくなる',
+    /予算/.test(hint) && /予算より−15,000円でした/.test(closed) && /いちばん予算を超えたのは「食費・日用品」（＋15,000円）/.test(closed) && ro && chip === 1, closed.slice(0, 120));
+  await bp.locator('.bkclosed .linkbtn', { hasText: '確定を取り消す' }).tap(); await bp.waitForTimeout(200);
+  const ro2 = await bp.$eval(`#${foodId}`, (e) => e.readOnly);
+  check('月の確定は取り消せる（また金額を直せる）', !ro2 && (await bp.locator('.bkclose').count()) === 1, String(ro2));
+  await go(bp, '.bkmodes button:has-text("1年の表")'); await bp.waitForTimeout(200);
+  const by = (await bp.textContent('.bkbudyear')).replace(/\s+/g, '');
+  check('1年の表に「予算と見込み」（予算の収支・見込み・差）が出る', /予算の収支（1年）/.test(by) && /見込みの収支（1年）/.test(by) && /予算との差−15,000円/.test(by), by.slice(0, 120));
+  // 毎月の記録の案内：先月が確定していなければ、未来の表の上に出る（閉じられる）
+  await go(bp, '#seg-cf');
+  await bp.waitForSelector('#chart');
+  const remind = await bp.textContent('.vbanner.remind').catch(() => '');
+  const pm = new Date().getMonth() === 0 ? 12 : new Date().getMonth();
+  await bp.locator('.vbanner.remind .btn', { hasText: '家計簿へ' }).tap(); await bp.waitForTimeout(200);
+  const onMonth = await bp.locator('.bkmonths button.on').textContent();
+  await go(bp, '#seg-cf');
+  await bp.locator('.vbanner.remind button.del').tap(); await bp.waitForTimeout(150);
+  check('毎月の記録の案内：先月が確定していなければ未来の表の上で知らせ、家計簿のその月へ行ける。閉じられる',
+    new RegExp(pm + '月の家計簿がまだ確定していません').test(remind) && onMonth.startsWith(pm + '月') && (await bp.locator('.vbanner.remind').count()) === 0, `${remind} / ${onMonth}`);
   await c.close();
 }
 

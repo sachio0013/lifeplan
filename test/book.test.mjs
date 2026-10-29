@@ -184,3 +184,55 @@ test('給与明細のふりかえり：6月の住民税、9月の社会保険料
   assert.match(B.payInsights(cur, 0, prev).map((t) => t.text).join('\n'), /去年の12月より ＋5,000円/);
   assert.match(B.payInsights(p, 12).map((t) => t.text).join('\n'), /住民税は賞与からは引かれません/);
 });
+
+test('予算：プランの金額から1年の予算を作る（区分の合計がプランと合い、基本生活費は家計調査の割合で項目に分かれる）', () => {
+  const book = { years: {}, nextId: 1 };
+  const y = B.newYear(book);
+  assert.deepEqual(y.accounts.map((a) => a.name), ['●●銀行①', '●●銀行②', '●●証券']);   // 口座ははじめから3つ
+  const missed = B.budgetFromPlan(y, { living: 330, housing: 144, housingLoan: 0, edu: 30, insurance: 24, car: 315, carBuy: 300, invest: 60, sal1: 448, sal2: 180 });
+  assert.deepEqual(missed, []);
+  const tot = (cat) => y.items.filter((it) => it.cat === cat).reduce((t, it) => t + it.b.reduce((a, v) => a + B.num(v), 0), 0);
+  assert.ok(Math.abs(tot(1) - 3300000) <= 8 * 12 * 50, tot(1));           // 100円単位に丸めた分だけずれる
+  assert.equal(tot(2), 1440000);
+  assert.equal(tot(5), 150000 + 3000000);                                 // 維持費は12等分、買い替えは4月に
+  assert.equal(y.items.find((it) => it.cat === 5).b[3], 12500 + 3000000);
+  const food = y.items.find((it) => /食費/.test(it.name)), other = y.items.find((it) => it.name === 'その他');
+  assert.ok(food.b[0] > other.b[0] && other.b[0] > 0);
+  const sal1 = y.incomes.find((r) => r.kind === 'sal1'), bonus1 = y.incomes.find((r) => r.kind === 'bonus1');
+  assert.equal(sal1.b[0], 320000);                                        // 448万円 ÷ 14
+  assert.deepEqual([bonus1.b[5], bonus1.b[11], bonus1.b[0]], [320000, 320000, '']);
+  assert.equal(y.incomes.find((r) => r.kind === 'sal2').b[0], 150000);
+  const s = B.summarize(y);
+  assert.ok(s.hasBudget && Math.abs(s.bIncome - 6280000) < 1000 && s.bBalance === s.bIncome - s.bExpense, JSON.stringify([s.bIncome, s.bExpense]));
+});
+
+test('予算：1つの月の金額をほかの月にも入れる・見込みは記録した月が実績でほかは予算・確定のひとこと', () => {
+  const book = { years: {}, nextId: 1 };
+  const y = B.newYear(book);
+  const food = y.items[0], sal = y.incomes[0];
+  food.b[6] = 50000; B.copyBudget(food, 6);
+  assert.deepEqual(food.b, Array(12).fill(50000));
+  sal.b = Array(12).fill(300000);
+  // 1月は実績：食費 62,000（予算より12,000多い）、給与 300,000
+  food.m[0] = 62000; sal.m[0] = 300000;
+  const s = B.summarize(y);
+  assert.equal(s.months[0].fBalance, 300000 - 62000);
+  assert.equal(s.months[1].fBalance, 300000 - 50000);
+  assert.equal(s.fBalance, 238000 + 11 * 250000);
+  const r = B.monthReview(y, 0);
+  assert.equal(r.balance, -12000);
+  assert.deepEqual([r.over.name, r.over.d], [food.name, 12000]);
+  // 確定
+  y.closed = Array(12).fill(false); y.closed[0] = true;
+  assert.equal(B.summarize(y).closed, 1);
+  // 前の年の予算は次の年に引き継ぐ
+  const y2 = B.newYear(book, y);
+  assert.deepEqual(y2.items[0].b, Array(12).fill(50000));
+  assert.deepEqual(y2.items[0].m, Array(12).fill(''));
+});
+
+test('家計調査（2024年）の年齢階級別の消費支出', () => {
+  assert.deepEqual(B.consumptionByAge(35), { label: '40歳未満', yen: 280451 });
+  assert.deepEqual(B.consumptionByAge(45), { label: '40〜49歳', yen: 331134 });
+  assert.equal(B.consumptionByAge(72).yen, 252781);
+});
