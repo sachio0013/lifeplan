@@ -231,8 +231,31 @@ test('予算：1つの月の金額をほかの月にも入れる・見込みは�
   assert.deepEqual(y2.items[0].m, Array(12).fill(''));
 });
 
-test('家計調査（2024年）の年齢階級別の消費支出', () => {
-  assert.deepEqual(B.consumptionByAge(35), { label: '40歳未満', yen: 280451 });
-  assert.deepEqual(B.consumptionByAge(45), { label: '40〜49歳', yen: 331134 });
-  assert.equal(B.consumptionByAge(72).yen, 252781);
+test('家計調査（2024年12月、excelcf.netの表）：世帯主の年齢と人数、世帯年収から基本生活費の平均', () => {
+  assert.deepEqual(B.refByAge(38, 4), { label: '世帯主35〜44歳・4人の世帯', basic: 339, housing: 12, edu: 16, insurance: 34, car: 25 });
+  assert.equal(B.refByAge(30, 3).basic, 283);
+  assert.equal(B.refByAge(70, 6).basic, 488);         // 5人以上
+  assert.equal(B.refByAge(40, 1), null);              // ひとり暮らしの表はない
+  assert.equal(B.refByIncome(620).basic, 346);
+  assert.equal(B.refByIncome(620).label, '世帯年収600〜650万円の世帯');
+  assert.equal(B.refByIncome(1600).basic, 624);
+  // 基本生活費の予算を平均（年339万円）にする
+  const y = B.newYear({ years: {}, nextId: 1 });
+  B.setBasicBudget(y, 339);
+  const t = y.items.filter((it) => it.cat === 1).reduce((a, it) => a + it.b.reduce((x, v) => x + B.num(v), 0), 0);
+  assert.ok(Math.abs(t - 3390000) <= 8 * 12 * 50, t);
+});
+
+test('記録と口座残高の差額を、使途不明金・不明収入として入れて0にする', () => {
+  const book = { years: {}, nextId: 1 };
+  const y = B.newYear(book);
+  const id = () => book.nextId++;
+  y.accounts.forEach((a, k) => { a.start = k ? 0 : 1000000; a.m[0] = k ? 0 : 1290000; });
+  y.incomes[0].m[0] = 300000;      // 記録の残高は 1,300,000、実際は 1,290,000 → 10,000円の使途不明金
+  assert.equal(B.summarize(y).months[0].diff, 10000);
+  assert.deepEqual(B.settleDiff(y, 0, id), { kind: 'item', name: '使途不明金', amount: 10000 });
+  assert.equal(B.summarize(y).months[0].diff, 0);
+  y.accounts[0].m[0] = 1300500;    // 記録は 1,290,000、実際の方が10,500円多い → 不明収入
+  assert.deepEqual(B.settleDiff(y, 0, id), { kind: 'income', name: '不明収入', amount: 10500 });
+  assert.equal(B.summarize(y).months[0].diff, 0);
 });

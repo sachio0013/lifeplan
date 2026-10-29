@@ -745,3 +745,16 @@ input.yen[readonly] { background: var(--surface-2); color: var(--text-muted); }
 .vbanner.remind .del { margin: 0 0 0 auto; }
 .bkmodes button { white-space: nowrap; padding-left: 2px; padding-right: 2px; font-size: 13px; }
 .bkclose .h3, .bkbudyear .h3 { margin: 0 0 4px; font-size: 15px; font-weight: 900; }
+
+/* 家計調査の平均（参考） */
+.bkref { margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.bkref .k { font-size: 13px; font-weight: 900; color: var(--text-muted); }
+.bkref .k small { display: block; font-size: 11.5px; font-weight: 500; }
+.bkref .bkrow { padding: 6px 0; border: none; }
+.bkref .bkrow .nm { font-size: 13px; }
+.bkref .bkrow b { margin-left: auto; text-align: right; font-size: 14px; }
+.bkref .bkrow b small { display: block; font-size: 11.5px; color: var(--text-muted); font-weight: 700; }
+.bkref .bkrow.mine { border-top: 1px dashed var(--line); }
+.bkref .btn { margin-top: 6px; font-size: 13px; padding: 8px 12px; min-height: 40px; }
+.wzref { margin-top: 6px; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); line-height: 1.7; }
+.wzref .linkbtn { display: block; padding: 2px 0; }

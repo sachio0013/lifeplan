@@ -290,11 +290,78 @@
     return { balance: m.balance - m.bBalance, income: m.income - m.bIncome, expense: m.expense - m.bExpense, over: over, under: under, hasBudget: s.hasBudget, diff: m.diff };
   }
 
-  // 総務省「家計調査」2024年（二人以上の世帯）、世帯主の年齢階級別の消費支出（1か月平均・円）
-  var CONSUMPTION_2024 = [[40, '40歳未満', 280451], [50, '40〜49歳', 331134], [60, '50〜59歳', 356946], [70, '60〜69歳', 311392], [999, '70歳以上', 252781]];
-  function consumptionByAge(age) {
-    for (var k = 0; k < CONSUMPTION_2024.length; k++) if (age < CONSUMPTION_2024[k][0]) return { label: CONSUMPTION_2024[k][1], yen: CONSUMPTION_2024[k][2] };
+  // 基本生活費などの平均（年・万円）。excelcf.net「年齢層別2人・3人・4人・5人以上家族の生活費と世帯年収別生活費」の表。
+  // もとは総務省「家計調査」2024年12月（二人以上の世帯。a313 世帯人員・世帯主の年齢階級別、a203 年間収入階級別）を、
+  // ライフプラン表の区分（1 基本生活費・2 住居費・3 教育費・4 保険料・5 自動車）に編集したもの。保険料は「生命保険に関する全国実態調査」（2024年度）。
+  // 値は [基本生活費, 住居費, 教育費, 保険料, 自動車]
+  var KAKEI = {
+    source: '総務省「家計調査」2024年12月（二人以上の世帯）をもとに編集',
+    all: { 2: [336, 33, 0, 33, 34], 3: [345, 24, 11, 33, 36], 4: [366, 25, 42, 33, 28], 5: [394, 15, 29, 33, 41] },
+    byAge: [
+      { max: 34, label: '34歳以下', v: { 2: [246, 68, 0, 31, 20], 3: [283, 36, 3, 31, 51], 4: [300, 19, 6, 31, 21], 5: [340, 10, 12, 31, 128] } },
+      { max: 44, label: '35〜44歳', v: { 2: [290, 50, 1, 34, 24], 3: [297, 26, 9, 34, 46], 4: [339, 12, 16, 34, 25], 5: [362, 14, 19, 34, 37] } },
+      { max: 54, label: '45〜54歳', v: { 2: [355, 68, 0, 38, 69], 3: [343, 21, 22, 38, 37], 4: [394, 38, 62, 38, 35], 5: [386, 15, 48, 38, 32] } },
+      { max: 64, label: '55〜64歳', v: { 2: [374, 29, 0, 38, 38], 3: [378, 26, 18, 38, 45], 4: [399, 12, 82, 38, 27], 5: [443, 22, 54, 38, 39] } },
+      { max: 999, label: '65歳以上', v: { 2: [328, 28, 0, 31, 29], 3: [352, 24, 0, 31, 23], 4: [339, 36, 7, 31, 16], 5: [488, 15, 7, 31, 27] } }
+    ],
+    // 世帯年収（税込・万円）の階級：[上限, 表示, 値]
+    byIncome: [
+      [200, '200万円未満', [213, 33, 0, 25, 8]], [250, '200〜250万円', [233, 12, 1, 24, 14]], [300, '250〜300万円', [243, 15, 0, 24, 17]],
+      [350, '300〜350万円', [283, 24, 0, 25, 15]], [400, '350〜400万円', [327, 34, 3, 25, 34]], [450, '400〜450万円', [322, 19, 2, 25, 20]],
+      [500, '450〜500万円', [325, 15, 2, 25, 64]], [550, '500〜550万円', [334, 42, 3, 32, 21]], [600, '550〜600万円', [323, 28, 4, 32, 26]],
+      [650, '600〜650万円', [346, 32, 7, 34, 49]], [700, '650〜700万円', [334, 33, 8, 34, 45]], [750, '700〜750万円', [337, 24, 18, 40, 31]],
+      [800, '750〜800万円', [354, 62, 14, 40, 28]], [900, '800〜900万円', [380, 24, 13, 40, 45]], [1000, '900〜1,000万円', [412, 42, 38, 40, 39]],
+      [1250, '1,000〜1,250万円', [430, 22, 46, 55, 40]], [1500, '1,250〜1,500万円', [497, 27, 53, 55, 68]], [Infinity, '1,500万円以上', [624, 27, 30, 55, 46]]
+    ]
+  };
+  // 世帯主の年齢と家族の人数（2人以上。5人以上は5）から
+  function refByAge(age, size) {
+    if (!(size >= 2)) return null;
+    var n = Math.min(5, Math.round(size));
+    for (var k = 0; k < KAKEI.byAge.length; k++) {
+      var g = KAKEI.byAge[k];
+      if (age <= g.max) { var v = g.v[n]; return { label: '世帯主' + g.label + '・' + (n === 5 ? '5人以上' : n + '人') + 'の世帯', basic: v[0], housing: v[1], edu: v[2], insurance: v[3], car: v[4] }; }
+    }
     return null;
+  }
+  // 世帯年収（税込・万円）から
+  function refByIncome(gross) {
+    if (!(gross > 0)) return null;
+    for (var k = 0; k < KAKEI.byIncome.length; k++) {
+      var r = KAKEI.byIncome[k];
+      if (gross < r[0]) return { label: '世帯年収' + r[1] + 'の世帯', basic: r[2][0], housing: r[2][1], edu: r[2][2], insurance: r[2][3], car: r[2][4] };
+    }
+    return null;
+  }
+  // 基本生活費の予算だけを、年の額（万円）で入れ直す（項目へは家計調査の費目の割合で分ける）
+  function setBasicBudget(y, man) {
+    var rows = y.items.filter(function (it) { return it.cat === 1; });
+    if (!rows.length) return false;
+    var w = rows.map(function (it) {
+      for (var k = 0; k < BASIC_SHARES.length; k++) if (BASIC_SHARES[k][0].test(it.name)) return { k: k, w: BASIC_SHARES[k][1] };
+      return { k: -1, w: 0.03 };
+    });
+    w.forEach(function (x) { if (x.k >= 0) x.w /= w.filter(function (z) { return z.k === x.k; }).length; });
+    var tw = w.reduce(function (a, x) { return a + x.w; }, 0);
+    rows.forEach(function (it, k) { setEven(it, num(man) * 10000 * w[k].w / tw); });
+    return true;
+  }
+
+  // 記録と口座残高の差額を0にする：記録の方が多ければ「使途不明金」（支出）、少なければ「不明収入」（収入）として、その月に入れる
+  function settleDiff(y, i, id) {
+    var m = summarize(y).months[i];
+    if (m.diff == null || Math.abs(m.diff) < 1) return null;
+    var amt = Math.round(Math.abs(m.diff));
+    if (m.diff > 0) {
+      var it = y.items.filter(function (x) { return x.name === '使途不明金'; })[0];
+      if (!it) { it = { id: id(), name: '使途不明金', cat: 1, pay: '現金', day: '', m: blank12(), b: blank12() }; y.items.push(it); }
+      it.m[i] = num(it.m[i]) + amt;
+      return { kind: 'item', name: it.name, amount: amt };
+    }
+    var r = y.incomes.filter(function (x) { return x.name === '不明収入'; })[0];
+    if (!r) { r = { id: id(), name: '不明収入', kind: 'other', m: blank12(), b: blank12() }; y.incomes.push(r); }
+    r.m[i] = num(r.m[i]) + amt;
+    return { kind: 'income', name: r.name, amount: amt };
   }
 
   // ---- ライフプランへ ----
@@ -500,6 +567,7 @@
     newPay: newPay, blankSlip: blankSlip, slipFilled: slipFilled, slipTotals: slipTotals, paySummary: paySummary, payInsights: payInsights, samplePay: samplePay,
     num: num, filled: filled, newYear: newYear, sampleYear: sampleYear,
     summarize: summarize, toPlan: toPlan, reliability: reliability, insights: insights,
-    budgetFromPlan: budgetFromPlan, copyBudget: copyBudget, monthReview: monthReview, hasBudget: hasBudget, consumptionByAge: consumptionByAge, BASIC_SHARES: BASIC_SHARES
+    budgetFromPlan: budgetFromPlan, copyBudget: copyBudget, monthReview: monthReview, hasBudget: hasBudget, BASIC_SHARES: BASIC_SHARES,
+    KAKEI: KAKEI, refByAge: refByAge, refByIncome: refByIncome, setBasicBudget: setBasicBudget, settleDiff: settleDiff
   };
 }));

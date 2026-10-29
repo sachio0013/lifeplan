@@ -925,7 +925,9 @@
     h += pubPensionCard(by);
 
     h += '<h2 class="sec" id="sec-expense">' + ic('expense', 20) + '支出</h2>';
-    h += groupCard('living', '基本生活費', { monthly: true, max: 5, requiredFirst: true, anchorFirst: true, inflation: true, dupCheck: true, memo: true, hint: '住宅費・教育費・保険料・自動車・その他を除いた、ふだんの支出。2行目以降は今の物価で入れれば、物価上昇を足して計算します。' });
+    var lref = BK.refByAge(state.startYear - by, state.family.length);
+    h += groupCard('living', '基本生活費', { monthly: true, max: 5, requiredFirst: true, anchorFirst: true, inflation: true, dupCheck: true, memo: true, hint: '住宅費・教育費・保険料・自動車・その他を除いた、ふだんの支出。2行目以降は今の物価で入れれば、物価上昇を足して計算します。' +
+      (lref ? '　参考：' + lref.label + 'の平均は年' + lref.basic + '万円（月' + (Math.round(lref.basic / 12 * 10) / 10) + '万円。' + BK.KAKEI.source + '）。' : '') });
     h += groupCard('housing', '住宅費', { monthly: true, max: 5, requiredFirst: true, anchorFirst: true, dupCheck: true, memo: true, dansin: true, hint: '家賃・ローン・修繕/管理費・固定資産税の合計。住宅ローンに団信があれば印を付けると、保障タブで「もしもの時は返済がなくなる」として計算します', extra: loanCalcHTML() });
     h += groupCard('housingLump', '住宅費一時金（頭金など）', { max: 3, lump: true, memo: true });
     E.children(state).forEach(function (c) { h += eduCard(c); });
@@ -2554,7 +2556,8 @@
     var off = m.diff != null && Math.abs(m.diff) >= 1;
     return '<div class="card bkclose"><h2 class="h3">' + MONTHS[i] + 'の締め（確定）</h2>' +
       '<p>' + MONTHS[i] + 'の記録が終わったら確定します。会社の月締めと同じで、確定すると金額を変えられなくなり（取り消せます）、予算とくらべたひとことが出ます。</p>' +
-      (off ? '<div class="vmsg warn">' + ic('warn', 15) + '<span>記録と口座の残高が' + yen(Math.abs(m.diff)) + '円ずれています。記録の漏れを見つけて、差額を0にしてから確定するのがおすすめです。</span></div>' : '') +
+      (off ? '<div class="vmsg warn">' + ic('warn', 15) + '<span>記録と口座の残高が' + yen(Math.abs(m.diff)) + '円ずれています。記録の漏れを見つけて直すか、見つからなければ' + (m.diff > 0 ? '「使途不明金」' : '「不明収入」') + 'として入れて、差額を0にしてから確定しましょう。</span></div>' +
+        '<button class="btn ghost" style="margin-top:8px" onclick="A.bkSettle()">差額' + yen(Math.abs(m.diff)) + '円を' + (m.diff > 0 ? '「使途不明金」' : '「不明収入」') + 'として入れる</button>' : '') +
       (!m.recorded ? '<div class="hint" style="padding:6px 0 0">まだこの月の記録がありません。</div>' : '') +
       (ui.book.closeAsk === i
         ? '<div class="plconfirm ok"><span>残高とずれたまま確定しますか？</span><button class="btn" onclick="A.bkClose(true)">確定する</button><button class="btn ghost" onclick="A.bkCloseNo()">やめる</button></div>'
@@ -2585,6 +2588,17 @@
       sal1: sal('家族１'), sal2: sal('家族２'), balance: y.balance, age: y.age
     };
   }
+  // 家計調査（excelcf.netの表）の基本生活費の平均：世帯主の年齢と人数、世帯年収（プランの手取りを額面に直して）から
+  function kakeiRefs(py, st) {
+    st = st || state;
+    var out = [];
+    var a = py ? BK.refByAge(py.age, st.family.length) : null;
+    if (a) out.push(a);
+    var gross = py ? E.grossFromNet(py.sal1) + E.grossFromNet(py.sal2) : 0;
+    var b = BK.refByIncome(Math.round(gross));
+    if (b) { b.label += '（' + esc(plan().name) + 'の額面 約' + man(gross) + '万円）'; out.push(b); }
+    return out;
+  }
   function bookBudgetRow(kind, row, edit) {
     if (edit) return kind === 'item' ? bookItemRow(row, 0, true) : bookIncomeRow(row, 0, true);
     var k = kind === 'item' ? 'i' : 'n';
@@ -2612,8 +2626,8 @@
     var py = planYearNums(state, ui.book.year);
     var prev = store.book.years[ui.book.year - 1];
     var prevOk = prev && BK.summarize(prev).recorded > 0;
-    var c = py && state.family.length >= 2 ? BK.consumptionByAge(py.age) : null;
-    var mine = (s.bExpense - y.items.reduce(function (t, it) { return t + (it.cat === 4 || it.cat === 6 ? (it.b || []).reduce(function (a, v) { return a + BK.num(v); }, 0) : 0); }, 0)) / 12;
+    var refs = kakeiRefs(py);
+    var myBasic = y.items.reduce(function (t, it) { return t + (it.cat === 1 ? (it.b || []).reduce(function (a, v) { return a + BK.num(v); }, 0) : 0); }, 0);
     var ask = ui.book.bAsk;
     var intro = '<div class="card bkbud">' +
       '<div class="gh">' + fpFace(36) + '<div class="t">1年の予算（予算→実績）</div></div>' +
@@ -2621,11 +2635,15 @@
       (s.hasBudget ? '<div class="yeartotals"><div><span>収入の予算</span><b>' + yen(s.bIncome) + '</b></div><div><span>支出の予算</span><b>' + yen(s.bExpense) + '</b></div>' +
         '<div><span>収支</span><b class="' + (s.bBalance < 0 ? 'neg' : 'pos') + '">' + (s.bBalance > 0 ? '＋' : '') + yen(s.bBalance) + '</b></div></div>' : '') +
       (py && s.hasBudget ? '<div class="hint" style="padding:6px 0 0">プラン「' + esc(plan().name) + '」の' + ui.book.year + '年の収支は ' + (py.balance >= 0 ? '＋' : '') + man(py.balance) + '万円、この予算の収支は ' + (s.bBalance >= 0 ? '＋' : '') + man(s.bBalance / 10000) + '万円です。</div>' : '') +
-      (c && s.hasBudget ? '<div class="hint" style="padding:6px 0 0">参考：総務省「家計調査」（2024年）で、世帯主が' + c.label + 'の二人以上の世帯の消費支出は月' + yen(c.yen) + '円。この予算は月' + yen(mine) + '円です（保険料と積立投資を除く）。</div>' : '') +
+      (refs.length ? '<div class="bkref"><div class="k">参考：基本生活費の平均<small>' + BK.KAKEI.source + '</small></div>' +
+        refs.map(function (r) { return '<div class="bkrow"><span class="nm">' + r.label + '</span><b>年' + r.basic + '万円<small>月' + (Math.round(r.basic / 12 * 10) / 10) + '万円</small></b></div>'; }).join('') +
+        (myBasic ? '<div class="bkrow mine"><span class="nm">この予算の基本生活費</span><b>年' + man(myBasic / 10000) + '万円<small>月' + (Math.round(myBasic / 120000 * 10) / 10) + '万円</small></b></div>' : '') +
+        '<button class="btn ghost" onclick="A.bkBBasic()">基本生活費の予算を平均（' + refs[0].label + '）にする</button></div>' : '') +
       (ask ? '<div class="plconfirm ok"><span>今の予算を置き換えます。よいですか？</span><button class="btn" onclick="A.' + (ask === 'plan' ? 'bkBPlan' : 'bkBPrev') + '(true)">置き換える</button><button class="btn ghost" onclick="A.bkBAskNo()">やめる</button></div>'
         : '<div class="row bkbbtns">' + (py ? '<button class="btn' + (s.hasBudget ? ' ghost' : '') + '" onclick="A.bkBPlan(false)">プラン「' + esc(plan().name) + '」の金額から予算を入れる</button>' : '') +
           (prevOk ? '<button class="btn ghost" onclick="A.bkBPrev(false)">' + (ui.book.year - 1) + '年の実績から入れる</button>' : '') + '</div>') +
-      '<div class="hint" style="padding:8px 0 0">プランの金額から入れると、基本生活費は家計調査（2024年）の費目の割合をもとに項目へ分け、' + esc(famLabel('家族１')) + 'の給与は毎月の手取りとボーナス（6月・12月）に分けます。どれも目安なので、自分の家計に合わせて直してください。</div>' +
+      '<div class="hint" style="padding:8px 0 0">予算は、収入を気持ち少なめに、支出をやや多めにしておくのがおすすめです。実績が予算よりよくなると、続ける励みになります。</div>' +
+      '<div class="hint" style="padding:6px 0 0">プランの金額から入れると、基本生活費は家計調査（2024年）の費目の割合をもとに項目へ分け、' + esc(famLabel('家族１')) + 'の給与は毎月の手取りとボーナス（6月・12月）に分けます。どれも目安なので、自分の家計に合わせて直してください。</div>' +
     '</div>';
     var groups = BK.CATS.map(function (cc) {
       var rows = y.items.filter(function (it) { return it.cat === cc.no; });
@@ -3223,6 +3241,20 @@
     commit();
   };
   A.bkBAskNo = function () { ui.book.bAsk = ''; commit(); };
+  A.bkBBasic = function () {
+    var y = bookYear(); if (!y) return;
+    var r = kakeiRefs(planYearNums(state, ui.book.year))[0]; if (!r) return;
+    snapshot('基本生活費の予算を、平均（年' + r.basic + '万円）にしました');
+    BK.setBasicBudget(y, r.basic);
+    commit();
+  };
+  A.bkSettle = function () {
+    var y = bookYear(), i = ui.book.month; if (!y) return;
+    snapshot('差額を入れて、記録と口座の残高を合わせました');
+    var r = BK.settleDiff(y, i, function () { return store.book.nextId++; });
+    commit();
+    if (r) toast((r.kind === 'item' ? '支出' : '収入') + 'に「' + r.name + '」' + yen(r.amount) + '円を入れて、差額を0にしました', true);
+  };
   A.bkFillBudget = function () {
     var y = bookYear(), i = ui.book.month; if (!y) return;
     snapshot('予算の金額を、空いている欄に入れました');
@@ -3777,7 +3809,10 @@
       var hl = d.home === 'rent' ? ['家賃', '管理費・駐車場代も入れます'] : d.home === 'loan' ? ['住宅ローンの返済など', 'ローン返済に、管理費・修繕積立金・固定資産税（月にならした額）を足します'] :
         d.home === 'owned' ? ['家の維持費', '管理費・修繕積立金・固定資産税など（月にならした額）'] : d.home === 'parents' ? ['住まいの費用', '実家に入れているお金・社宅の家賃など'] : ['住まいの費用', '家賃やローン返済、管理費・固定資産税など'];
       lead = '今の1か月の金額を入れます。1年分は自動で計算します。';
-      body = wzMoney('living', '生活費', { hint: '食費・日用品・電気ガス水道・スマホ・おこづかいなど。家賃・教育費・保険料・車の費用は入れません' }) +
+      var wref = BK.refByAge(toNum(d.startYear) - E.parseDate(d.birth1).y, 1 + (d.has2 ? 1 : 0) + d.kids.length);
+      body = wzMoney('living', '生活費', { hint: '食費・日用品・電気ガス水道・スマホ・おこづかいなど。家賃・教育費・保険料・車の費用は入れません' +
+          (wref ? '<div class="wzref">参考：' + wref.label + 'の平均は<b>月' + (Math.round(wref.basic / 12 * 10) / 10) + '万円</b>（年' + wref.basic + '万円、' + BK.KAKEI.source + '）' +
+            (Math.abs(toNum(d.living) - wref.basic) >= 0.5 ? '<button class="linkbtn sm" onclick="A.wzLiving(' + wref.basic + ')">平均にする</button>' : '') + '</div>' : '') }) +
         wzMoney('housing', hl[0], { hint: hl[1] }) +
         wzMoney('insurance', '保険料', { optional: true, hint: '生命保険・医療保険など。なければ0' }) +
         '<button class="check' + (d.car ? ' on' : '') + '" role="switch" aria-checked="' + !!d.car + '" onclick="A.wz(\'car\',' + !d.car + ')" style="margin-top:14px"><span class="box"></span>車を持っている（持つ予定）</button>' +
@@ -3833,6 +3868,7 @@
     if (el && document.activeElement === el) { pendingRender = true; return; }
     commit();
   };
+  A.wzLiving = function (v) { var d = ui.wz.d; d.living = String(v); delete ui.wz.err.living; if (d._ref) delete d._ref.living; commit(); };
   A.wzM = function (key, part, v) {
     var d = ui.wz.d, t = String(v).trim();
     var m = part === 'm' ? t : String(wzMonthOf(key)), b = part === 'b' ? t : String(wzBonusOf(key));
@@ -3856,9 +3892,15 @@
     var w = ui.wz;
     w.err = wzErrors(w.step, w.d);
     if (Object.keys(w.err).length) { commit(); return; }
-    if (w.step < wzSteps().length - 1) { w.step++; commit(); document.getElementById('scroll').scrollTop = 0; return; }
+    if (w.step < wzSteps().length - 1) { w.step++; if (w.step === 5) wzLivingRef(w.d); commit(); document.getElementById('scroll').scrollTop = 0; return; }
     wzFinish();
   };
+  // 生活費が目安のままなら、世帯主の年齢と人数の平均（家計調査）にする
+  function wzLivingRef(d) {
+    if (!d._ref || !d._ref.living) return;
+    var r = BK.refByAge(toNum(d.startYear) - E.parseDate(d.birth1).y, 1 + (d.has2 ? 1 : 0) + d.kids.length);
+    if (r) d.living = String(r.basic);
+  }
   // 残りのステップは目安のままで、結果を見る（家族のステップを終えてから）
   A.wzSkip = function () {
     var w = ui.wz;
@@ -3871,6 +3913,7 @@
   // 完成：新しいプランとして加え、そのプランのCF表を開く
   function wzFinish() {
     var w = ui.wz;
+    wzLivingRef(w.d);
     var st = window.LifePlanSample.applyNeeds(window.LifePlanSample.fromAnswers(w.d), w.needs);
     // 最初から入っている記入例は、書き換えていなければ外す（自分のプランと見知らぬ家族を比べないように。表紙からいつでも開ける）
     var pristine = JSON.stringify(window.LifePlanSample.sample());
